@@ -13,6 +13,8 @@ Faire essayer le parcours à des utilisateurs non techniques avant de développe
 5. Ouvrir la facture et utiliser **Imprimer / PDF** pour l’enregistrer en PDF depuis le navigateur.
 6. En fin de période, clôturer le mois afin de bloquer les nouvelles émissions pour cette période.
 
+7. Dans **Mon modèle**, ajouter une bannière, choisir l’un des trois styles, changer le titre, le libellé du règlement, la couleur ou le texte de pied de page ; l’aperçu de la facture se met à jour immédiatement.
+
 L’interface privilégie les actions nommées, les champs visibles et les informations reprises automatiquement. Les données de la photo servent de référence pour les rubriques du document : contrat, désignation, destination, volume, prix unitaire, montant, total HT, TVA, total TTC et mode de règlement.
 
 ## Modèle prévu pour la version desktop
@@ -20,6 +22,7 @@ L’interface privilégie les actions nommées, les champs visibles et les infor
 - **Entreprise** : coordonnées et logo éditables.
 - **Client** : fiche réutilisable, avec nom, contact, adresse, téléphone, e-mail, NIU et RCCM.
 - **Facture** : date, période, numéro, client et entreprise figés au moment de l’émission, lignes, TVA, avance, paiement et notes.
+- **Modèle de facture** : bannière, textes, couleur et style sélectionnés ; chaque facture émise conserve une copie de ces réglages.
 - **Période mensuelle** : état ouvert ou clôturé.
 - **Numérotation** : compteur par période, réservé dans une transaction avec l’enregistrement de la facture. Un brouillon ne consomme aucun numéro. Une facture émise reste dans l’historique, même si elle doit ensuite être annulée, pour éviter une rupture de séquence.
 - **Archivage** : base locale sauvegardable et PDF de chaque facture. Une restauration doit préserver l’historique et les numéros.

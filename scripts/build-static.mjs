@@ -1,6 +1,7 @@
 import { build } from "esbuild";
 import { readFile, writeFile, mkdir, copyFile } from "node:fs/promises";
 import path from "node:path";
+import { createHash } from "node:crypto";
 
 const root = process.cwd();
 const dist = path.join(root, "dist");
@@ -33,6 +34,8 @@ const modalCss = `
 const editorialCss = await readFile(path.join(root, "app", "editorial.css"), "utf8");
 const simpleCss = await readFile(path.join(root, "app", "simple.css"), "utf8");
 const formatCreditCss = await readFile(path.join(root, "app", "format-credit.css"), "utf8");
-await writeFile(path.join(dist, "styles.css"), baseCss + modalCss + editorialCss + simpleCss + formatCreditCss);
-await writeFile(path.join(dist, "index.html"), `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#12364d"><meta name="description" content="Prototype de facturation simple en français pour CAPSED."><title>CAPSED Facturation — Prototype V1</title><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/styles.css"></head><body><div id="root"></div><script type="module" src="/app.js"></script></body></html>`);
+const polishCss = await readFile(path.join(root, "app", "polish.css"), "utf8");
+await writeFile(path.join(dist, "styles.css"), baseCss + modalCss + editorialCss + simpleCss + formatCreditCss + polishCss);
+const assetVersion = createHash("sha256").update(await readFile(path.join(dist, "app.js"))).update(await readFile(path.join(dist, "styles.css"))).digest("hex").slice(0, 12);
+await writeFile(path.join(dist, "index.html"), `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#23685f"><meta name="description" content="Prototype de facturation simple en français pour CAPSED."><title>CAPSED Facturation — Prototype V1</title><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/styles.css?v=${assetVersion}"></head><body><div id="root"></div><script type="module" src="/app.js?v=${assetVersion}"></script></body></html>`);
 await copyFile(path.join(root, "public", "favicon.svg"), path.join(dist, "favicon.svg"));

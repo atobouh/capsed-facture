@@ -1,4 +1,5 @@
 import type { DocumentBlock, DocumentModel } from "./document-model";
+import { useLayoutEffect, useRef, useState } from "react";
 import { formatMoney as money, interpolate, PAGE_W, PAGE_H } from "./document-model";
 
 export function BlockContent({ block: b, invoice: i, rows, words }: { block: DocumentBlock; invoice: any; rows?: any[]; words: (n: number) => string }) {
@@ -24,21 +25,28 @@ export function BlockContent({ block: b, invoice: i, rows, words }: { block: Doc
 export function blockStyle(b: DocumentBlock) { return { left: b.x, top: b.y, width: b.w, height: b.h, fontSize: b.fontSize, color: b.color, fontWeight: b.bold ? 700 : 400, textAlign: b.align, "--block-color": b.color } as React.CSSProperties; }
 export function DocumentPages({ model, invoice, words }: { model: DocumentModel; invoice: any; words: (n: number) => string }) {
   const lineBlock = model.blocks.find(b => b.kind === "lines");
+  const measurement = useRef<HTMLDivElement>(null);
+  const [metrics, setMetrics] = useState<{ header: number; rows: number[] }>({ header: 40, rows: [] });
+  useLayoutEffect(() => {
+    const table = measurement.current?.querySelector("table"); if (!table) return;
+    const next = { header: table.tHead?.offsetHeight ?? 40, rows: Array.from(table.tBodies[0]?.rows ?? []).map(row => row.offsetHeight + 2) };
+    setMetrics(previous => previous.header === next.header && JSON.stringify(previous.rows) === JSON.stringify(next.rows) ? previous : next);
+  }, [invoice.lines, lineBlock?.w, lineBlock?.fontSize, lineBlock?.headers]);
   const groups: any[][] = [[]];
   if (lineBlock) {
     const font = lineBlock.fontSize;
     const fractions = [.14, .27, .15, .12, .13, .19];
-    let used = 40;
-    for (const row of invoice.lines) {
+    let used = metrics.header;
+    for (const [index, row] of invoice.lines.entries()) {
       const values = [row.contract || "—", row.designation, row.destination || "—", String(row.quantity), money(row.unitPrice), money(row.quantity * row.unitPrice)];
       const wrap = Math.max(...values.map((value, index) => Math.ceil(String(value).length / Math.max(1, Math.floor((lineBlock.w * fractions[index] - 12) / (font * .64))))));
-      const height = Math.max(40, 20 + wrap * font * 1.35);
-      if (used + height > lineBlock.h && groups[groups.length - 1].length) { groups.push([]); used = 40; }
+      const height = metrics.rows[index] ?? Math.max(40, 20 + wrap * font * 1.35);
+      if (used + height > lineBlock.h - 2 && groups[groups.length - 1].length) { groups.push([]); used = metrics.header; }
       groups[groups.length - 1].push(row); used += height;
     }
   } else groups[0] = invoice.lines;
   const pages = groups.length;
-  return <div className="document-pages">{Array.from({ length: pages }, (_, page) => <article key={page} className="document-page" style={{ width: PAGE_W, height: PAGE_H }} aria-label={`Facture ${invoice.number}, page ${page + 1}`}>
+  return <div className="document-pages">{lineBlock && <div ref={measurement} aria-hidden="true" className="document-measurement" style={{ width: lineBlock.w, fontSize: lineBlock.fontSize, color: lineBlock.color, "--block-color": lineBlock.color } as React.CSSProperties}><BlockContent block={lineBlock} invoice={invoice} words={words} /></div>}{Array.from({ length: pages }, (_, page) => <article key={page} className="document-page" style={{ width: PAGE_W, height: PAGE_H }} aria-label={`Facture ${invoice.number}, page ${page + 1}`}>
     {model.blocks.filter(b => pages === 1 || page === pages - 1 || !["totals", "words", "payment", "signature"].includes(b.kind)).map(b => <div key={b.id} className={`document-block kind-${b.kind}`} style={blockStyle(b)}><BlockContent block={b} invoice={invoice} rows={groups[page]} words={words} /></div>)}
     {pages > 1 && <span className="doc-page-number">Page {page + 1} / {pages}</span>}
   </article>)}</div>;

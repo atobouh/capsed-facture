@@ -66,3 +66,11 @@ Les nouveaux modes de règlement sont Banque, Espèces, MTN Mobile Money et Oran
 Depuis une facture ou le compte client, **Créer un avoir** demande un montant TTC, un motif et une date. L’avoir reçoit un numéro distinct `AV-AAAA-MM-001`, référence le numéro et la date de la facture d’origine, conserve les coordonnées et le format, et peut être imprimé en PDF. Le montant HT et la TVA sont ventilés d’après la taxe de la facture ; le cumul ne peut dépasser les montants d’origine. Les avoirs figurent dans le compte client, la liste mensuelle et les sauvegardes.
 
 Le solde est `total TTC − avoirs − avances − paiements`. Un solde positif est à recevoir ; un excédent de paiement est affiché comme montant à restituer. La facture originale reste inchangée. Ce prototype affiche le montant à restituer mais ne gère pas encore l’enregistrement des remboursements ni le report de cet excédent vers une autre facture.
+
+## Finition de la navigation et des aperçus
+
+La rubrique **Factures & avoirs** propose deux onglets toujours visibles, avec leurs compteurs. Seule la liste sélectionnée apparaît. L’onglet Avoirs permet de choisir la facture d’origine, y compris dans un autre mois. Sur téléphone, les listes deviennent des fiches lisibles sans défilement horizontal.
+
+Le format, les factures et les avoirs disposent de commandes de zoom, d’ajustement à la largeur et d’agrandissement. Le zoom concerne uniquement l’écran ; l’impression conserve les dimensions A4. Les tableaux sont répartis sur plusieurs pages selon la hauteur mesurée des lignes, avec les totaux sur la dernière page.
+
+Vérification navigateur : navigation et zoom sur ordinateur et téléphone, émission locale d’une facture de douze lignes avec une désignation longue (quatre pages, douze lignes conservées), absence de débordement de tableau, remise à zéro du zoom en mode impression et création d’un avoir depuis le nouvel onglet. Aucun message d’erreur JavaScript relevé. Les données utilisées pour ces essais ont été restaurées ensuite.

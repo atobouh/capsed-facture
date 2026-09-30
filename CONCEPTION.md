@@ -55,3 +55,14 @@ La page **Clients & paiements** permet d’ouvrir le compte de chaque client. Le
 Les statuts sont calculés : **À payer**, **Partiellement payée**, **Payée**. Les avances saisies à l’émission sont comptées une seule fois. Une saisie de paiement erronée peut être annulée ; l’entrée reste dans l’historique et le solde se recalcule. Clôturer le mois interdit de nouvelles émissions pour ce mois, mais permet de recevoir des paiements sur ses factures. Le document original de la facture reste inchangé ; le solde courant est présenté dans le compte et au-dessus de l’aperçu. Les paiements sont conservés dans le stockage local et dans les sauvegardes JSON.
 
 Le redesign privilégie trois entrées : Factures, Clients & paiements, Modèles. Les réglages et sauvegardes sont regroupés dans Réglages. L’atelier affiche les éléments usuels en premier ; les autres éléments et les réglages avancés restent disponibles à la demande.
+
+
+## Simplification : format unique et avoirs
+
+La configuration actuelle remplace l’atelier de modèles par **Format de facture** : une mise en page A4 fixe, une bannière personnelle et un pied de page en texte ou en image. Aucun choix de modèle à l’émission et aucun logo à saisir dans les coordonnées de l’entreprise. Les anciens documents conservent leur copie de présentation. Les anciennes configurations sont lues pour récupérer la bannière et le pied de page. Le menu se replie sur ordinateur et reste accessible via le menu mobile.
+
+Les nouveaux modes de règlement sont Banque, Espèces, MTN Mobile Money et Orange Money. Les modes déjà enregistrés sur les documents historiques ne sont pas réécrits.
+
+Depuis une facture ou le compte client, **Créer un avoir** demande un montant TTC, un motif et une date. L’avoir reçoit un numéro distinct `AV-AAAA-MM-001`, référence le numéro et la date de la facture d’origine, conserve les coordonnées et le format, et peut être imprimé en PDF. Le montant HT et la TVA sont ventilés d’après la taxe de la facture ; le cumul ne peut dépasser les montants d’origine. Les avoirs figurent dans le compte client, la liste mensuelle et les sauvegardes.
+
+Le solde est `total TTC − avoirs − avances − paiements`. Un solde positif est à recevoir ; un excédent de paiement est affiché comme montant à restituer. La facture originale reste inchangée. Ce prototype affiche le montant à restituer mais ne gère pas encore l’enregistrement des remboursements ni le report de cet excédent vers une autre facture.

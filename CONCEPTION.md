@@ -96,3 +96,9 @@ Le responsable peut valider et verrouiller un versement connu sur un poste simul
 Une remise de document peut être simulée depuis l’aperçu. Elle apparaît dans le contrôle après synchronisation comme « remise déclarée », sans prétendre confirmer une réception par le client.
 
 L’architecture de la connexion réelle, la numérotation hors ligne, l’authentification, les conflits et les accusés de réception sont décrits dans `ARCHITECTURE-SYNC.md`. Aucune application de bureau, API partagée ou connexion Cloudflare du client n’est livrée à cette étape. La compilation et la syntaxe du paquet web sont vérifiées ; aucun nouveau test navigateur n’est exécuté pour cette étape.
+
+## Contrôle mobile et navigation entre espaces
+
+La barre supérieure propose Facturation, Gestion et Contrôle, avec une cloche de notifications au même niveau. Le contrôle quitte le menu de bureau pour un espace dédié : liste de clients, ouverture d’une fiche, retour explicite à la liste. Aucun client n’est ouvert par défaut. Les tableaux et statistiques globales sont remplacés par des fiches lisibles sur téléphone ; les factures et demandes se déplient. L’action principale est Signaler un paiement et les versements connus peuvent être validés individuellement. La date de l’état reçu et l’avertissement hors ligne restent visibles. Les commandes de simulation sont regroupées dans Connexion et essai.
+
+Les notifications ouvrent un panneau superposé depuis la cloche, sans navigation latérale ni changement de l’espace sous-jacent. Les règles de synchronisation et de verrouillage de la simulation sont conservées. La génération du site et la syntaxe JavaScript sont vérifiées ; aucune nouvelle vérification navigateur n’est exécutée à cette étape.

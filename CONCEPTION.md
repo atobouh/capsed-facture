@@ -78,3 +78,7 @@ Vérification navigateur : navigation et zoom sur ordinateur et téléphone, ém
 ## Redesign en espace de travail de bureau
 
 Le site adopte une navigation graphite compacte, une barre supérieure de 48 px, des contrôles cohérents, des tableaux et un panneau de détails contextuel. Le registre sélectionne une facture d’un clic et expose ses actions dans le panneau : ouverture, compte client, paiement et avoir. Les vues clients, saisie, format et réglages utilisent la même échelle. Sur ordinateur, seule la zone de travail défile ; le menu et la barre d’état restent visibles. Le système visuel et les références de recherche sont documentés dans `DESIGN.md`. La génération du site a abouti ; aucune nouvelle vérification navigateur n’a été exécutée pour cette étape.
+
+## Allègement et lisibilité
+
+Les vues ont moins de textes répétés. Une aide contextuelle accessible dans la barre supérieure présente trois gestes essentiels. Contrat et destination sont des champs facultatifs à déplier dans chaque prestation ; leurs valeurs sont conservées. L’échelle de l’interface augmente modérément : titres de 24 px, contrôles de 38 px, lignes de registre de 56 px. Les documents A4 conservent leurs dimensions. La génération du site a abouti ; aucun nouveau test navigateur n’a été exécuté pour cette étape.

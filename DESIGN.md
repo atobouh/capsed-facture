@@ -15,14 +15,14 @@ Un espace de travail de facturation, avec navigation permanente, commandes court
 
 | Élément | Règle |
 | --- | --- |
-| Police | Segoe UI, puis Inter/Arial ; texte courant 13 px |
-| Titres de vues | 22 px, graisse 600, hauteur 28 px |
-| Libellés et texte secondaire | 11–12 px ; métadonnées 10 px |
+| Police | Segoe UI, puis Inter/Arial ; texte courant 13 px, données de tableaux 12 px |
+| Titres de vues | 24 px, graisse 600, hauteur 32 px |
+| Libellés et texte secondaire | 12–13 px ; métadonnées 11 px |
 | Espacements | 4, 8, 12, 16, 20, 24, 32 px |
-| Navigation | 216 px ; repliée 64 px ; entrées 36 px |
-| Barre supérieure / état | 48 px / 28 px |
-| Champs / boutons | 34 px sur bureau ; 40 px pour les principaux contrôles mobiles |
-| Registre | Lignes 52 px ; barre de recherche 60 px ; détails 264 px |
+| Navigation | 216 px ; repliée 64 px ; entrées 40 px |
+| Barre supérieure / état | 52 px / 28 px |
+| Champs / boutons | 38 px sur bureau ; 40 px pour les principaux contrôles mobiles |
+| Registre | Lignes 56 px ; barre de recherche 60 px ; détails 280 px |
 | Arrondis | 5–6 px sur contrôles et panneaux ; 8 px sur dialogues |
 | Couleurs | Graphite pour la navigation, gris neutres pour les surfaces, bleu pour les actions et la sélection |
 | Statuts | Vert : soldé ; ambre : partiel ; gris : à payer ; libellé toujours visible |
@@ -38,3 +38,7 @@ Les dimensions et la typographie des documents A4 sont indépendantes de l’int
 5. Le format conserve une configuration unique, présentée comme un panneau de réglages à côté de la page A4 avec zoom.
 
 Sur une fenêtre plus étroite, le panneau de détails se masque et les commandes d’ouverture restent accessibles. Sur téléphone, les lignes deviennent des fiches. Aucun contrôle de fenêtre factice n’est ajouté : le produit demeure un site web.
+
+## Apprentissage et confort quotidien
+
+Les instructions répétées sont retirées des vues. Le bouton Aide ouvre trois gestes adaptés à l’écran courant, sans tutoriel obligatoire. La saisie montre d’abord désignation, quantité et prix ; contrat et destination se déplient au besoin. Les titres, données, contrôles et libellés gagnent un cran de taille, avec une hiérarchie et une structure identiques. Les explications comptables importantes restent présentes au moment d’émettre un avoir ou de clôturer un mois.

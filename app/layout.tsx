@@ -5,6 +5,7 @@ import "./simple.css";
 import "./format-credit.css";
 import "./polish.css";
 import "./desktop.css";
+import "./control-center.css";
 
 export const metadata: Metadata = {
   title: "CAPSED Facturation — Prototype V1",

@@ -82,3 +82,17 @@ Le site adopte une navigation graphite compacte, une barre supérieure de 48 px,
 ## Allègement et lisibilité
 
 Les vues ont moins de textes répétés. Une aide contextuelle accessible dans la barre supérieure présente trois gestes essentiels. Contrat et destination sont des champs facultatifs à déplier dans chaque prestation ; leurs valeurs sont conservées. L’échelle de l’interface augmente modérément : titres de 24 px, contrôles de 38 px, lignes de registre de 56 px. Les documents A4 conservent leurs dimensions. La génération du site a abouti ; aucun nouveau test navigateur n’a été exécuté pour cette étape.
+
+## Supervision et notifications — parcours de démonstration
+
+Le livrable choisi est la validation du tableau de contrôle et des notifications sur le site, avant leur connexion à l’application desktop. Les deux nouvelles rubriques partagent une simulation explicite, sans serveur distant ni authentification. Les demandes, réponses, verrous et déclarations de remise durent uniquement pendant la session et disparaissent au rechargement.
+
+Le contrôle présente une copie séparée des clients, factures et paiements. Modifier une facture ou enregistrer un paiement côté équipe ne change cette copie qu’après une synchronisation simulée. Le poste peut être déclaré connecté ou hors ligne dans la simulation. Un état ancien n’est jamais présenté comme preuve que l’équipe a oublié un paiement.
+
+Le responsable crée une demande liée au client et à la facture, avec montant, date, mode et référence. Elle attend la synchronisation avant d’apparaître dans les notifications de l’équipe. La lecture et la réponse restent locales jusqu’à une nouvelle synchronisation. Traiter une demande ne crée aucune écriture de paiement ; le traitement demande un résultat explicite, puis son historique est visible côté responsable.
+
+Le responsable peut valider et verrouiller un versement connu sur un poste simulé connecté, à condition que l’écriture corresponde encore à celle du poste. Ce geste transmet immédiatement le verrou dans la simulation et empêche l’annulation via l’interface ainsi que via l’action de confirmation. Un verrou n’est pas un statut de solde : une facture partiellement payée peut comporter un paiement verrouillé. Les avances sont déjà intégrées aux factures émises ; elles ne sont pas présentées comme de nouveaux versements à valider.
+
+Une remise de document peut être simulée depuis l’aperçu. Elle apparaît dans le contrôle après synchronisation comme « remise déclarée », sans prétendre confirmer une réception par le client.
+
+L’architecture de la connexion réelle, la numérotation hors ligne, l’authentification, les conflits et les accusés de réception sont décrits dans `ARCHITECTURE-SYNC.md`. Aucune application de bureau, API partagée ou connexion Cloudflare du client n’est livrée à cette étape. La compilation et la syntaxe du paquet web sont vérifiées ; aucun nouveau test navigateur n’est exécuté pour cette étape.

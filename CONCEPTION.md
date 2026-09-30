@@ -46,3 +46,12 @@ Le paquet web partageable est généré avec `node scripts/build-static.mjs` dan
 ## Limites du prototype de composition
 
 Les données restent dans le stockage de ce navigateur, sans compte ni synchronisation. Les sauvegardes JSON servent au transfert ou à la restauration. Les images sont réduites avant enregistrement. Les longues factures répartissent les prestations sur plusieurs pages en fonction des dimensions du bloc ; une désignation exceptionnellement longue ou un bloc volontairement trop petit demande d’adapter la mise en page et de vérifier l’aperçu avant impression. Les placements sont libres : un modèle vide n’ajoute aucun élément implicitement. Les factures de démonstration existantes conservent leur présentation précédente.
+
+
+## Suivi client et paiements
+
+La page **Clients & paiements** permet d’ouvrir le compte de chaque client. Le compte additionne toutes ses factures, indépendamment du mois : total TTC, avances et paiements reçus, reste à payer. Chaque paiement comporte un montant entier en FCFA, une date, un mode et une référence facultative. Le montant est rattaché à une facture précise et ne peut dépasser son solde.
+
+Les statuts sont calculés : **À payer**, **Partiellement payée**, **Payée**. Les avances saisies à l’émission sont comptées une seule fois. Une saisie de paiement erronée peut être annulée ; l’entrée reste dans l’historique et le solde se recalcule. Clôturer le mois interdit de nouvelles émissions pour ce mois, mais permet de recevoir des paiements sur ses factures. Le document original de la facture reste inchangé ; le solde courant est présenté dans le compte et au-dessus de l’aperçu. Les paiements sont conservés dans le stockage local et dans les sauvegardes JSON.
+
+Le redesign privilégie trois entrées : Factures, Clients & paiements, Modèles. Les réglages et sauvegardes sont regroupés dans Réglages. L’atelier affiche les éléments usuels en premier ; les autres éléments et les réglages avancés restent disponibles à la demande.

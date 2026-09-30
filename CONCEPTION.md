@@ -74,3 +74,7 @@ La rubrique **Factures & avoirs** propose deux onglets toujours visibles, avec l
 Le format, les factures et les avoirs disposent de commandes de zoom, d’ajustement à la largeur et d’agrandissement. Le zoom concerne uniquement l’écran ; l’impression conserve les dimensions A4. Les tableaux sont répartis sur plusieurs pages selon la hauteur mesurée des lignes, avec les totaux sur la dernière page.
 
 Vérification navigateur : navigation et zoom sur ordinateur et téléphone, émission locale d’une facture de douze lignes avec une désignation longue (quatre pages, douze lignes conservées), absence de débordement de tableau, remise à zéro du zoom en mode impression et création d’un avoir depuis le nouvel onglet. Aucun message d’erreur JavaScript relevé. Les données utilisées pour ces essais ont été restaurées ensuite.
+
+## Redesign en espace de travail de bureau
+
+Le site adopte une navigation graphite compacte, une barre supérieure de 48 px, des contrôles cohérents, des tableaux et un panneau de détails contextuel. Le registre sélectionne une facture d’un clic et expose ses actions dans le panneau : ouverture, compte client, paiement et avoir. Les vues clients, saisie, format et réglages utilisent la même échelle. Sur ordinateur, seule la zone de travail défile ; le menu et la barre d’état restent visibles. Le système visuel et les références de recherche sont documentés dans `DESIGN.md`. La génération du site a abouti ; aucune nouvelle vérification navigateur n’a été exécutée pour cette étape.

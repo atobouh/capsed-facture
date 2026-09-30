@@ -1,5 +1,10 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./editorial.css";
+import "./simple.css";
+import "./format-credit.css";
+import "./polish.css";
+import "./desktop.css";
 
 export const metadata: Metadata = {
   title: "CAPSED Facturation — Prototype V1",

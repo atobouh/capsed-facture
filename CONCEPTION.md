@@ -119,3 +119,10 @@ Un avoir peut porter sur certains articles et quantités, ou sur un montant libr
 Clients et paiements propose Situation globale ; chaque compte propose Imprimer la situation. Ces vues A4 incluent un export CSV et l'impression/enregistrement PDF du navigateur. La situation individuelle détaille factures, avances, avoirs et paiements non annulés, avec solde chronologique. Les états couvrent toutes les factures, indépendamment du mois ouvert. Les montants à restituer sont distingués des sommes encore dues.
 
 Cette livraison reste le prototype web avec sauvegarde dans le navigateur et export JSON. Elle ne crée pas de serveur partagé ni de synchronisation réelle entre les trois ordinateurs. Le paquet statique compile ; le contrôle TypeScript ne relève aucune erreur dans les nouveaux composants, mais les déclarations Next.js préexistantes du projet sont incomplètes. Aucun test ou contrôle interactif du navigateur n'a été ajouté.
+
+
+## Coordonnées facultatives et alignements
+
+Les sélecteurs ont une seule flèche positionnée dans le champ, avec une géométrie CSS explicite compatible avec la version statique. Les boutons, champs et mentions facultatives sont alignés dans le formulaire.
+
+Seul le nom du client est nécessaire pour créer sa fiche. Les coordonnées absentes ou composées d'espaces sont retirées du document sans paragraphe vide ni préfixe NIU/RCCM isolé, dans les factures et avoirs. La situation individuelle omet également sa ligne de coordonnées si elle est vide. Modifier les coordonnées est accessible pendant la création/modification d'une facture. Lors d'un enregistrement explicite, la facture prend les coordonnées actuelles ; la version précédente reste dans l'historique. Modifier une fiche seule ne réécrit pas les factures déjà émises.

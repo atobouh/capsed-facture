@@ -53,9 +53,16 @@ export function creditSelection(invoice: any, credits: any[], quantities: Record
 }
 
 export const printedAmount=(n:number)=>new Intl.NumberFormat("fr-FR",{maximumFractionDigits:0}).format(Math.round(n));
-export function printedQuantity(value:number):string {
- if(Number.isInteger(value))return printedAmount(value);
- const precision=String(Number(value.toFixed(8))).split(".")[1]?.length||0,den=Math.pow(10,precision),num=Math.round(value*den);
- const gcd=(a:number,b:number):number=>b?gcd(b,a%b):a,d=gcd(num,den);
- const whole=Math.floor(value),fraction=Number((value-whole).toFixed(8));if(fraction===0.5)return (whole?printedAmount(whole):"")+"½";if(fraction===0.25)return (whole?printedAmount(whole):"")+"¼";if(fraction===0.75)return (whole?printedAmount(whole):"")+"¾";return printedAmount(num/d)+"/"+printedAmount(den/d);
+export function printedQuantity(value:number):string {return printedAmount(Math.trunc(value));}
+
+export function correctLegacyQuantities(invoices:any[],credits:any[],closedMonths:string[]) {
+ const stamp=new Date().toISOString(),changed:string[]=[];
+ const items=invoices.map(invoice=>{
+  if(!invoice.lines.some((l:any)=>!Number.isInteger(l.quantity)))return invoice;
+  if(closedMonths.includes(invoice.date.slice(0,7))||credits.some(c=>c.invoiceId===invoice.id)||invoice.lines.some((l:any)=>!Number.isFinite(l.quantity)||l.quantity<1))return invoice;
+  const {history,...previous}=invoice;
+  changed.push(invoice.number);
+  return {...invoice,lines:invoice.lines.map((line:any)=>({...line,quantity:Math.trunc(line.quantity)})),revisedAt:stamp,history:[...(history??[]),{...previous,savedAt:stamp,correctionReason:"Correction autorisée : quantités entières et recalcul des montants",preserveOriginalQuantities:true}]};
+ });
+ return {items,changed};
 }

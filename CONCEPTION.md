@@ -141,3 +141,18 @@ Imprimer la situation globale ou individuelle ouvre un choix Du / Au. Le titre r
 Le choix de date de facture permet la saisie historique dans les mois encore ouverts, avec numéro propre au mois daté. Les mois clôturés ne sont pas rouverts automatiquement. Après émission, l'aperçu remonte vers les boutons Imprimer / Enregistrer en PDF et Exporter en Excel. Les exports Excel sont de vrais fichiers XLSX, produits localement sans serveur ni nouvelle dépendance ; ils contiennent les articles, coordonnées, références et totaux. Les situations proposent aussi XLSX et conservent CSV.
 
 Validation : compilation statique et contrôle de typage ; aucun test ou contrôle interactif du navigateur ajouté.
+
+
+## Ajustement de la zone de signature et des quantités affichées
+
+Le corps du tableau utilise une graisse normale (400), avec les seuls en-têtes renforcés. La Direction. est centrée dans la colonne de 345 px des totaux, à droite, conformément à l'annotation fournie, plutôt qu'au centre de la page.
+
+L'utilisateur a confirmé le recalcul de l'ancienne facture : la quantité 12,5 devient 12, sa ligne à 8 000 devient 96 000 et le total HT passe de 190 000 à 186 000. Les factures ouvertes sans avoir et avec quantités au moins égales à 1 sont régularisées au chargement, avec une version précédente conservée dans l'historique. Les états clients utilisent ensuite les mêmes quantités corrigées et montants recalculés. Les factures clôturées ou avec avoir restent protégées et affichent leurs valeurs exactes, plutôt qu'une quantité tronquée incohérente avec le montant.
+
+## Excel et nettoyage du pied de page
+
+L'export XLSX reprend toutes les informations de la facture sur une feuille mise en forme : titre et références, coordonnées et BC, colonnes dimensionnées, descriptions avec retours à la ligne, lignes alternées sobres, tableau à en-tête bleu, valeurs numériques, totaux renforcés, signature soulignée et mentions légales bleues. La zone d'impression A4 est définie, ajustée à la largeur, sans grille ; les en-têtes se répètent sur les pages. Les situations bénéficient du même thème, en paysage. Le fichier exporté reste un document de données, sans le filigrane bitmap du PDF.
+
+Le pied de page imprimé est bleu, sans fragments violets de l'ancien décor : le fond blanc couvre toute la largeur et descend jusqu'au bas de la page. Une seule séparation fine bleu clair précède les mentions légales. Les fonds rectangulaires des totaux et de la signature sont retirés. Le corps du tableau reste de graisse normale.
+
+Validation : compilation et contrôle TypeScript ; aucun test automatisé ni contrôle interactif ajouté.

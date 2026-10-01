@@ -346,3 +346,22 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .statement-period-dialog .dialog-actions{margin-top:22px}
 .statement-page .receipt-signature{font-size:14px;min-height:40px}
 @media print{.receipt-content,.receipt-table td,.receipt-info p,.receipt-words,.receipt-payment,.receipt-legal-footer p{color:#111!important}.receipt-official-footer{display:block!important}.receipt-signature{background:transparent!important}}
+
+
+/* Body rows are regular weight; the signing area follows the totals column. */
+.receipt-table td,.receipt-table td small{font-weight:400}
+.receipt-table th{font-weight:600}
+.receipt-totals p{font-weight:400}
+.receipt-totals strong{font-weight:600}
+.receipt-payment .receipt-signature{width:345px;max-width:100%;margin:14px 0 0 auto!important;text-align:center;background:transparent}
+.statement-table td{font-weight:400}
+
+
+/* A single clean footer area masks remnants of the source letterhead artwork. */
+.receipt-official-footer{bottom:0;left:0;right:0;padding:12px 24px 40px;background:#fff}
+.receipt-legal-footer{border-top:1px solid #c8d5e9;padding-top:9px}
+.receipt-legal-footer p{color:#244a87!important;font-weight:400}
+.receipt-thanks{color:#244a87;font-weight:500}
+.receipt-totals .receipt-total{background:transparent;padding:7px 0;border-top:1px solid #b8c7db}
+.receipt-signature,.receipt-payment .receipt-signature{background:transparent}
+@media print{.receipt-legal-footer p{color:#244a87!important}}

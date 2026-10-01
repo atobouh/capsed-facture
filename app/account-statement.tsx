@@ -1,3 +1,4 @@
+import { OFFICIAL_FOOTER } from "./invoice-brand";
 import { downloadExcel } from "./receipt-export";
 import { periodData,periodTotals,periodTitle } from "./statement-period";
 import type { StatementPeriod } from "./statement-period";
@@ -33,5 +34,5 @@ export function exportStatementExcel(clients:any[],invoices:any[],payments:any[]
  const rows=statementRows(clients,invoices,payments,credits,clientId,period);
  const header=clientId?["Date","Écriture","Détail","Facturé","Paiement ou avoir","Solde"]:["Client","Facturé (période)","Avoirs (période)","Avances (période)","Reçu (période)","Reste à payer au "+period.to,"À restituer"];
  const values=rows.map((r:any)=>clientId?[r.date,r.label,r.detail,r.debit,r.credit,r.running]:[r.client.name,r.total,r.credited,r.advance,r.received,r.due,r.refund]);
- downloadExcel([[periodTitle(period)],header,...values],"situation-"+(clientId?"client":"globale")+"-"+period.from+"-"+period.to+".xlsx");
+ downloadExcel([[(invoices[0]?.company?.name||"CAPSED SUARL")+" · "+periodTitle(period)],header,...values,[],["La Direction."],["Merci pour votre confiance."],...OFFICIAL_FOOTER.map(line=>[line])],"situation-"+(clientId?"client":"globale")+"-"+period.from+"-"+period.to+".xlsx");
 }

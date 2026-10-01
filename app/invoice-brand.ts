@@ -1,0 +1,1 @@
+export const OFFICIAL_FOOTER = ["Suarl au capital de 1 000 000Fcfa B.P: 3463 Douala - Cameroun Tél: (237) 243 55 31 56 / 674 55 73 73 / 699 92 80 02 Email: capsedsarl@gmail.com", "RCCM N° : RC/DLA/2016B599 NIU: M021612485549 S N° : Employeur CNPS: 351-0122533-000-B CPTE Bancaire SGBC N°: 10003 01900 05190629651 50"];

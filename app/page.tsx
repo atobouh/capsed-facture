@@ -23,7 +23,7 @@ import type { DocumentModel } from "./document-model";
 import CreditPaper from "./credit-note";
 import type { CreditNote } from "./credit-note";
 import { DocumentPages } from "./document-renderer";
-import { invoiceTotals, paymentMethods, normalizePayment, creditSelection } from "./invoice-math";
+import { invoiceTotals, paymentMethods, normalizePayment, creditSelection, correctLegacyQuantities } from "./invoice-math";
 import type { TaxMode } from "./invoice-math";
 import InvoiceComposer from "./invoice-composer";
 import type { InvoiceDraft } from "./invoice-composer";
@@ -115,6 +115,7 @@ export default function Home() {
   function simulateSync() { if (!controlConnected) return; const stamp = new Date().toISOString(); const merged = controlRequests.map(r=>{ const local=teamRequests.find(t=>t.id===r.id); return {...r,receivedAt:r.receivedAt??stamp,readAt:local?.readAt??r.readAt,resolvedAt:local?.resolvedAt??r.resolvedAt,response:local?.response??r.response}; }); setControlSnapshot(structuredClone({clients,invoices,payments:payments.map(p=>teamLockedPaymentIds.includes(p.id)?{...p,lockedAt:controlSnapshot?.payments.find(k=>k.id===p.id)?.lockedAt??stamp}:p),credits,deliveries:invoiceDeliveries,receivedAt:stamp})); setControlRequests(merged); setTeamRequests(structuredClone(merged)); setNotice("Synchronisation simulée : données, demandes et réponses actualisées."); }
   useEffect(() => { if (notice) { const id = window.setTimeout(() => setNotice(""), 4500); return () => window.clearTimeout(id); } }, [notice]);
   useEffect(()=>{window.scrollTo({top:0,behavior:"auto"});},[view]);
+  useEffect(()=>{if(!loaded)return;const correction=correctLegacyQuantities(invoices,credits,closedMonths);if(correction.changed.length){setInvoices(correction.items);setNotice("Quantités corrigées et montants recalculés : "+correction.changed.join(", ")+". Les anciennes versions sont conservées.");}},[loaded,invoices,credits,closedMonths]);
   const selected = invoices.find(i => i.id === selectedId) ?? invoices[0], chosen = clients.find(c => c.id === draftClientId);
   const nextNumber = (period: string) => `${period}-${String(Math.max(0, ...invoices.filter(i => i.number.startsWith(period + "-")).map(i => Number(i.number.split("-")[2]) || 0)) + 1).padStart(3, "0")}`;
   const draft:InvoiceDraft={clientId:draftClientId,date:draftDate,lines:draftLines,taxRate:draftTax,taxMode:draftTaxMode,discountRate:draftDiscount,advance:draftAdvance,payment:draftPayment,note:draftNote,purchaseOrder:draftPurchaseOrder};

@@ -1,8 +1,8 @@
 export type TaxMode = "ht" | "ttc";
 export type FinancialLine = { id?: string; quantity: number; unitPrice: number };
 export type FinancialInvoice = { lines: FinancialLine[]; taxRate: number; advance: number; taxMode?: TaxMode; discountRate?: number };
-export const paymentMethods = ["Chèque", "OM", "MoMo", "Espèces"];
-export const normalizePayment = (value: string) => value === "Orange Money" ? "OM" : value === "MTN Mobile Money" ? "MoMo" : value || "Espèces";
+export const paymentMethods = ["Chèque", "Virement", "OM", "MoMo", "Espèces"];
+export const normalizePayment = (value: string) => value === "Banque" || value === "Virement bancaire" ? "Virement" : value === "Orange Money" ? "OM" : value === "MTN Mobile Money" ? "MoMo" : value || "Espèces";
 export const moneyRound = (value: number) => Math.round((Number(value) || 0) + Number.EPSILON);
 export const lineAmount = (line: FinancialLine) => moneyRound(Number(line.quantity) * Number(line.unitPrice));
 export const quantityLabel = (value: number) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 8 }).format(value);
@@ -50,4 +50,12 @@ export function creditSelection(invoice: any, credits: any[], quantities: Record
     return { ...line, remaining };
   });
   return { available, lines, ht: lines.reduce((n,l)=>n+l.ht,0), tax: lines.reduce((n,l)=>n+l.tax,0), amount: lines.reduce((n,l)=>n+l.amount,0) };
+}
+
+export const printedAmount=(n:number)=>new Intl.NumberFormat("fr-FR",{maximumFractionDigits:0}).format(Math.round(n));
+export function printedQuantity(value:number):string {
+ if(Number.isInteger(value))return printedAmount(value);
+ const precision=String(Number(value.toFixed(8))).split(".")[1]?.length||0,den=Math.pow(10,precision),num=Math.round(value*den);
+ const gcd=(a:number,b:number):number=>b?gcd(b,a%b):a,d=gcd(num,den);
+ const whole=Math.floor(value),fraction=Number((value-whole).toFixed(8));if(fraction===0.5)return (whole?printedAmount(whole):"")+"½";if(fraction===0.25)return (whole?printedAmount(whole):"")+"¼";if(fraction===0.75)return (whole?printedAmount(whole):"")+"¾";return printedAmount(num/d)+"/"+printedAmount(den/d);
 }

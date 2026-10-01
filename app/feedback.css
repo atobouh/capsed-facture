@@ -22,3 +22,32 @@
 .compose .chosen>div{flex:1;min-width:0}
 .client-details-edit{border:0;background:transparent;color:#355fd4;font-size:12px;line-height:1.4;padding:6px 0;white-space:nowrap;text-decoration:underline;text-underline-offset:3px}
 @media(max-width:650px){.compose .select-row{flex-wrap:wrap}.compose .select-row>.field{flex-basis:100%}.compose .select-row>button{margin-left:auto}.compose .chosen{flex-wrap:wrap}.client-details-edit{margin-left:48px}}
+
+
+/* CAPSED print typography and fixed official legal footer. */
+.receipt-content{color:#151515}
+.receipt-info p{font-size:12px;font-weight:500;line-height:1.45}
+.receipt-info>div>strong{font-size:15px;font-weight:700}
+.receipt-reference>div>strong{font-size:13px;font-weight:650}
+.receipt-table td{font-size:12px;font-weight:550;padding:10px 7px}
+.receipt-table td:nth-child(n+2){text-align:center;vertical-align:middle}
+.receipt-table th{font-size:11px;font-weight:700}
+.receipt-totals p{font-size:12px;font-weight:600;color:#151515;border-color:#a8abb1}
+.receipt-totals strong{font-weight:750}
+.receipt-words{text-align:center;font-size:12px!important;line-height:1.65;font-weight:650;margin:18px 0 0!important}
+.receipt-words strong{font-weight:750}
+.receipt-payment{font-size:12px;font-weight:550;margin-top:17px}
+.receipt-payment u{font-weight:750;text-decoration-thickness:1.5px}
+.receipt-signature{width:240px;min-height:48px;margin:14px auto 0!important;text-align:center;font-size:16px;font-weight:800;text-decoration:underline;text-underline-offset:4px;text-decoration-thickness:1.5px;padding:7px 14px;background:#fff9}
+.receipt-official-footer{position:absolute;z-index:4;bottom:42px;left:20px;right:20px;background:#fff;padding:0 0 5px;text-align:center}
+.receipt-thanks{font-size:12px;font-weight:650;line-height:1.5;margin:0 0 12px}
+.receipt-legal-footer{border-top:1px solid #555;padding-top:9px}
+.receipt-legal-footer p{font-size:8.5px;line-height:1.6;color:#181818;font-weight:600;margin:0;white-space:normal}
+.statement-identification{flex-wrap:wrap}
+.statement-identification>span{white-space:normal;font-weight:650}
+.statement-global th:first-child{width:22%}
+.statement-global th:nth-child(n+2){width:auto}
+.statement-table td{font-size:10px;font-weight:550}
+.statement-period-dialog .dialog-actions{margin-top:22px}
+.statement-page .receipt-signature{font-size:14px;min-height:40px}
+@media print{.receipt-content,.receipt-table td,.receipt-info p,.receipt-words,.receipt-payment,.receipt-legal-footer p{color:#111!important}.receipt-official-footer{display:block!important}.receipt-signature{background:transparent!important}}

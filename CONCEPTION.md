@@ -126,3 +126,18 @@ Cette livraison reste le prototype web avec sauvegarde dans le navigateur et exp
 Les sélecteurs ont une seule flèche positionnée dans le champ, avec une géométrie CSS explicite compatible avec la version statique. Les boutons, champs et mentions facultatives sont alignés dans le formulaire.
 
 Seul le nom du client est nécessaire pour créer sa fiche. Les coordonnées absentes ou composées d'espaces sont retirées du document sans paragraphe vide ni préfixe NIU/RCCM isolé, dans les factures et avoirs. La situation individuelle omet également sa ligne de coordonnées si elle est vide. Modifier les coordonnées est accessible pendant la création/modification d'une facture. Lors d'un enregistrement explicite, la facture prend les coordonnées actuelles ; la version précédente reste dans l'historique. Modifier une fiche seule ne réécrit pas les factures déjà émises.
+
+
+## Présentation imprimée, périodes et Excel
+
+Les valeurs numériques imprimées sont sans suffixe FCFA et sans décimales ; la devise reste dans la phrase du montant en lettres. Aucune conversion monétaire n'est appliquée. Les taux décimaux restent utilisés pour les calculs, sans imprimer leur pourcentage. Les nouvelles factures imposent des quantités entières. Les anciennes quantités fractionnaires restent exactes et sont imprimées sans notation décimale (par exemple 12½) ; elles ne sont jamais recalculées silencieusement. Les modifier impose une quantité entière, un nouveau calcul explicite et conserve la version précédente. Le choix concernant la modification des anciennes quantités a été demandé à l'utilisateur.
+
+Le pied de page est fixe, reprenant les deux lignes légales du PDF fourni (capital, BP, téléphone, email, RCCM, NIU, CNPS et compte bancaire). La formule Merci pour votre confiance est centrée juste au-dessus. La mention Fcfa figurant dans le capital du pied de page original est conservée. La Direction. est centrée, soulignée et renforcée ; le montant en lettres et le mode de règlement sont également renforcés. Destination, quantité, prix unitaire et montant de ligne sont centrés. Le bon de commande est facultatif, présenté BC : sous la référence.
+
+Les modes de paiement incluent désormais Chèque, Virement, OM, MoMo et Espèces. Les anciens libellés Banque et Virement bancaire sont normalisés en Virement lors de la présentation/saisie ; les archives restent conservées.
+
+Imprimer la situation globale ou individuelle ouvre un choix Du / Au. Le titre reprend exactement la période sélectionnée. Les écritures après la date de fin sont exclues. Les factures antérieures sont détaillées dans le report d'ouverture de la situation individuelle ; les factures et versements de la période portent leurs références. La situation globale conserve une ligne par client, ajoute les avances, montre les mouvements de la période et le reste dû à sa fin. Les avances sont incluses dans Reçu, et ne doivent pas être additionnées à nouveau. Les soldes antérieurs sont inclus pour ne pas faire disparaître les dettes lors d'un filtre de période.
+
+Le choix de date de facture permet la saisie historique dans les mois encore ouverts, avec numéro propre au mois daté. Les mois clôturés ne sont pas rouverts automatiquement. Après émission, l'aperçu remonte vers les boutons Imprimer / Enregistrer en PDF et Exporter en Excel. Les exports Excel sont de vrais fichiers XLSX, produits localement sans serveur ni nouvelle dépendance ; ils contiennent les articles, coordonnées, références et totaux. Les situations proposent aussi XLSX et conservent CSV.
+
+Validation : compilation statique et contrôle de typage ; aucun test ou contrôle interactif du navigateur ajouté.

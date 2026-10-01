@@ -54,4 +54,4 @@ function LegacyDocumentPages({ model, invoice, words }: { model: DocumentModel; 
   </article>)}</div>;
 }
 
-export function DocumentPages(props:{model:DocumentModel;invoice:any;words:(n:number)=>string}) { return props.model.id==="format-unique" ? <InvoicePaper {...props}/> : <LegacyDocumentPages {...props}/>; }
+export function DocumentPages(props:{model:DocumentModel;invoice:any;words:(n:number)=>string}) { return <InvoicePaper {...props}/>; }

@@ -156,3 +156,11 @@ L'export XLSX reprend toutes les informations de la facture sur une feuille mise
 Le pied de page imprimé est bleu, sans fragments violets de l'ancien décor : le fond blanc couvre toute la largeur et descend jusqu'au bas de la page. Une seule séparation fine bleu clair précède les mentions légales. Les fonds rectangulaires des totaux et de la signature sont retirés. Le corps du tableau reste de graisse normale.
 
 Validation : compilation et contrôle TypeScript ; aucun test automatisé ni contrôle interactif ajouté.
+
+
+## Corrections clients, règlements et remise du document
+
+- Bon de commande : le format imprimé affiche « B C N° : » suivi du numéro, uniquement si renseigné ; le libellé Excel est cohérent.
+- Depuis une fiche client, suppression avec confirmation des clients sans documents ; archivage des clients liés à une facture ou un avoir pour conserver leurs comptes et la numérotation. Filtre des archives et réactivation disponibles.
+- Les paiements non verrouillés peuvent être corrigés : montant, date, mode et référence. Le paiement garde son identifiant, ses anciennes valeurs sont conservées et les soldes se recalculent. Les paiements validés et verrouillés restent protégés, y compris après rechargement. Les avances se corrigent depuis la facture.
+- « Marquer comme remise au client » enregistre une remise manuelle, datée et annulable ; cela ne transmet pas automatiquement le document. Ces informations sont conservées localement et dans la sauvegarde JSON.

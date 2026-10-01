@@ -1,10 +1,11 @@
 import type { DocumentBlock, DocumentModel } from "./document-model";
+import InvoicePaper from "./invoice-paper";
+import { invoiceTotals } from "./invoice-math";
 import { useLayoutEffect, useRef, useState } from "react";
 import { formatMoney as money, interpolate, PAGE_W, PAGE_H } from "./document-model";
 
 export function BlockContent({ block: b, invoice: i, rows, words }: { block: DocumentBlock; invoice: any; rows?: any[]; words: (n: number) => string }) {
-  const ht = i.lines.reduce((s: number, l: any) => s + l.quantity * l.unitPrice, 0);
-  const tax = Math.round(ht * i.taxRate / 100), ttc = Math.round(ht + tax);
+  const t = invoiceTotals(i), {ht,tax,ttc} = t;
   const company = i.company, client = i.client;
   switch (b.kind) {
     case "text": return <div className="doc-text">{interpolate(b.text, i)}</div>;
@@ -13,7 +14,7 @@ export function BlockContent({ block: b, invoice: i, rows, words }: { block: Doc
     case "client": return <div className="doc-party"><small>FACTURÉ À</small><strong>{client.name}</strong><p>{client.address}</p><p>{client.contact}</p><p>{client.phone} · {client.email}</p><p>NIU : {client.niu}</p><p>RCCM : {client.rc}</p></div>;
     case "reference": return <div className="doc-reference"><strong>N° {i.number}</strong><p>Le {new Date(i.date + "T12:00:00").toLocaleDateString("fr-FR")}</p><p>Référence : {i.number}</p></div>;
     case "lines": return <table className="doc-table"><thead><tr>{(b.headers ?? ["Contrat", "Désignation", "Destination", "Volume / Qté", "P.U.", "Montant"]).map((t, index) => <th key={index}>{t}</th>)}</tr></thead><tbody>{(rows ?? i.lines).map((l: any) => <tr key={l.id}><td>{l.contract || "—"}</td><td>{l.designation}</td><td>{l.destination || "—"}</td><td>{new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 3 }).format(l.quantity)}</td><td>{money(l.unitPrice)}</td><td>{money(l.quantity * l.unitPrice)}</td></tr>)}</tbody></table>;
-    case "totals": return <div className="doc-totals">{[["Total HT", ht], [`TVA (${i.taxRate} %)`, tax], ["Total TTC", ttc], ["Avance reçue", i.advance], ["Reste à payer", Math.max(0, ttc - i.advance)]].map(([label, value]) => <p key={label}><span>{label}</span><strong>{money(Number(value))}</strong></p>)}</div>;
+    case "totals": return <div className="doc-totals">{[...(t.discount > 0 ? [["Montant de départ",t.subtotal],["Remise", -t.discount]] : []),["Montant HT", ht], ...(t.taxMode === "ttc" ? [[`TVA (${i.taxRate} %)`, tax], ["Total TTC", ttc]] : []), ...(i.advance > 0 ? [["Avance reçue", i.advance], ["Reste à payer", t.due]] : [])].map(([label, value]) => <p key={label}><span>{label}</span><strong>{money(Number(value))}</strong></p>)}</div>;
     case "payment": return <div className="doc-party"><small>{b.text || "MODE DE RÈGLEMENT"}</small><strong>{i.payment}</strong><p>{i.note}</p></div>;
     case "words": return <div>Arrêtée la présente facture à la somme de <strong>{words(ttc).toUpperCase()} FRANCS CFA.</strong></div>;
     case "footer": return <div>{b.text ? interpolate(b.text, i) : <>{company.name} · NIU : {company.niu} · RCCM : {company.rc}<br />{company.website} · {company.email}</>}</div>;
@@ -23,7 +24,7 @@ export function BlockContent({ block: b, invoice: i, rows, words }: { block: Doc
   }
 }
 export function blockStyle(b: DocumentBlock) { return { left: b.x, top: b.y, width: b.w, height: b.h, fontSize: b.fontSize, color: b.color, fontWeight: b.bold ? 700 : 400, textAlign: b.align, "--block-color": b.color } as React.CSSProperties; }
-export function DocumentPages({ model, invoice, words }: { model: DocumentModel; invoice: any; words: (n: number) => string }) {
+function LegacyDocumentPages({ model, invoice, words }: { model: DocumentModel; invoice: any; words: (n: number) => string }) {
   const lineBlock = model.blocks.find(b => b.kind === "lines");
   const measurement = useRef<HTMLDivElement>(null);
   const [metrics, setMetrics] = useState<{ header: number; rows: number[] }>({ header: 40, rows: [] });
@@ -51,3 +52,5 @@ export function DocumentPages({ model, invoice, words }: { model: DocumentModel;
     {pages > 1 && <span className="doc-page-number">Page {page + 1} / {pages}</span>}
   </article>)}</div>;
 }
+
+export function DocumentPages(props:{model:DocumentModel;invoice:any;words:(n:number)=>string}) { return props.model.id==="format-unique" ? <InvoicePaper {...props}/> : <LegacyDocumentPages {...props}/>; }

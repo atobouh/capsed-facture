@@ -4,7 +4,7 @@ export type DocumentBlock = {
   text: string; fontSize: number; color: string; bold: boolean;
   align: "left" | "center" | "right"; image?: string; imageFit?: "contain" | "cover"; cells?: string[][]; headers?: string[];
 };
-export type DocumentModel = { id: string; name: string; blocks: DocumentBlock[] };
+export type DocumentModel = { id: string; name: string; stationery?: string | false; blocks: DocumentBlock[] };
 export const PAGE_W = 794, PAGE_H = 1123;
 export const BLOCKS: { kind: BlockKind; label: string; hint: string }[] = [
   { kind: "text", label: "Texte libre", hint: "Titre, mention, paragraphe" },

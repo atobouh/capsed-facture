@@ -102,3 +102,20 @@ L’architecture de la connexion réelle, la numérotation hors ligne, l’authe
 La barre supérieure propose Facturation, Gestion et Contrôle, avec une cloche de notifications au même niveau. Le contrôle quitte le menu de bureau pour un espace dédié : liste de clients, ouverture d’une fiche, retour explicite à la liste. Aucun client n’est ouvert par défaut. Les tableaux et statistiques globales sont remplacés par des fiches lisibles sur téléphone ; les factures et demandes se déplient. L’action principale est Signaler un paiement et les versements connus peuvent être validés individuellement. La date de l’état reçu et l’avertissement hors ligne restent visibles. Les commandes de simulation sont regroupées dans Connexion et essai.
 
 Les notifications ouvrent un panneau superposé depuis la cloche, sans navigation latérale ni changement de l’espace sous-jacent. Les règles de synchronisation et de verrouillage de la simulation sont conservées. La génération du site et la syntaxe JavaScript sont vérifiées ; aucune nouvelle vérification navigateur n’est exécutée à cette étape.
+
+
+## Retour de séance : facture CAPSED et situations clients
+
+Le PDF fourni sert de papier à en-tête officiel (bannière, filigrane, pied de page). Il est intégré en WebP de 86 Ko. Une bannière et un pied de page personnalisés restent possibles ; chaque facture conserve son format au moment de son émission.
+
+La saisie propose explicitement une facture hors taxe, sans ligne TVA, ou TTC. Les prix unitaires sont hors taxe. Les quantités et taux acceptent des décimales ; les montants FCFA sont arrondis à l'unité. Les articles sont arrondis individuellement, la remise globale est calculée sur leur somme, puis la TVA sur le montant après remise. Tous les écrans utilisent le même calcul. Les modes proposés sont Chèque, OM, MoMo et Espèces. Les anciens versements bancaires restent décrits avec leur mode historique.
+
+Désignation et destination acceptent plusieurs lignes dans un même article, avec une quantité et un prix communs. Le bon de commande est facultatif et imprimé sous son intitulé complet. Les lignes de TVA, remise et avance sont conditionnelles. Le mode de règlement souligné et La Direction apparaissent à la fin. Le montant en lettres suit la phrase, avec retour naturel à la ligne si nécessaire.
+
+Modifier est accessible depuis le registre et l'aperçu. Le numéro et les versions précédentes sont conservés ; la date reste dans le mois du numéro. Un mois clôturé reste immuable. Les factures avec paiements ou avoirs gardent leur client. Une facture ayant des avoirs par article conserve ses données financières pour préserver la répartition de remise et TVA ; ses textes peuvent être modifiés.
+
+Un avoir peut porter sur certains articles et quantités, ou sur un montant libre. Le motif et la facture d'origine sont enregistrés et imprimés. Les quantités déjà créditées sont déduites des disponibilités. Remise et taxe sont réparties entre articles avec arrondis cumulés pour conserver exactement les totaux. L'avoir ne peut pas dépasser le montant encore facturé.
+
+Clients et paiements propose Situation globale ; chaque compte propose Imprimer la situation. Ces vues A4 incluent un export CSV et l'impression/enregistrement PDF du navigateur. La situation individuelle détaille factures, avances, avoirs et paiements non annulés, avec solde chronologique. Les états couvrent toutes les factures, indépendamment du mois ouvert. Les montants à restituer sont distingués des sommes encore dues.
+
+Cette livraison reste le prototype web avec sauvegarde dans le navigateur et export JSON. Elle ne crée pas de serveur partagé ni de synchronisation réelle entre les trois ordinateurs. Le paquet statique compile ; le contrôle TypeScript ne relève aucune erreur dans les nouveaux composants, mais les déclarations Next.js préexistantes du projet sont incomplètes. Aucun test ou contrôle interactif du navigateur n'a été ajouté.

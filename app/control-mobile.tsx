@@ -6,7 +6,7 @@ import { formatMoney as money } from "./document-model";
 import { RequestStatus } from "./control-center";
 import type { ControlRequest, ControlSnapshot } from "./control-center";
 
-const methods=["Banque","Espèces","MTN Mobile Money","Orange Money"];
+const methods=["Chèque","OM","MoMo","Espèces"];
 const localDate=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;};
 const when=(s:string)=>new Date(s).toLocaleString("fr-FR",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
 export default function ControlCenter({snapshot,requests,connected,onSend,onSync,onConnection,onLock}:{snapshot:ControlSnapshot;requests:ControlRequest[];connected:boolean;onSend:(r:ControlRequest)=>void;onSync:()=>void;onConnection:()=>void;onLock:(id:string)=>void}){

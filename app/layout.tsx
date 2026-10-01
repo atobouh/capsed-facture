@@ -30,3 +30,5 @@ export default function RootLayout({
     </html>
   );
 }
+
+import "./feedback.css";

@@ -365,3 +365,5 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .receipt-totals .receipt-total{background:transparent;padding:7px 0;border-top:1px solid #b8c7db}
 .receipt-signature,.receipt-payment .receipt-signature{background:transparent}
 @media print{.receipt-legal-footer p{color:#244a87!important}}
+
+@media print{.receipt-page-number,.doc-page-number{display:none!important}}

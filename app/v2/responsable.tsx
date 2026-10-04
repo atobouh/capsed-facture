@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { AlertTriangle, Check, Copy, KeyRound, Lock, Phone, Send, UserPlus, WifiOff } from "lucide-react";
-import { Button, Choice, Confirm, DateInput, Empty, Field, Modal, MoneyInput, MoreMenu, Notice, PageHead, Paper, SearchBox, StatusChip, TextArea, TextInput, Timeline, matches, toast } from "./ui";
+import { AlertTriangle, Check, ChevronRight, Copy, KeyRound, Lock, Phone, Send, UserPlus, WifiOff } from "lucide-react";
+import { Button, Choice, Confirm, DateInput, Empty, Field, Modal, Monogram, MoneyInput, MoreMenu, Notice, PageHead, Paper, SearchBox, StatusChip, TextArea, TextInput, Timeline, matches, toast } from "./ui";
 import { RequestState, Situation } from "./office";
 import { BackupSettings, CompanySettings, FormatSettings } from "./settings";
 import { METHODS, REQUEST_LABEL, ROLE_LABEL, accountName, accountTotals, balance, commit, dateFr, daysSince, delivery, generateLogin, generatePassword, getData, money, nowIso, resetDemo, setOnline, timeFr, todayIso, uid, useData } from "./store";
@@ -45,20 +45,20 @@ function Overview({ nav, by }: { nav: Nav; by: string }) {
   const hits = q.trim().length >= 3 ? s.invoices.filter(i => matches(q, i.number)) : [];
   const list = rows.filter(r => matches(q, r.c.name, r.c.phone, r.c.contact) && (!onlyLate || r.oldest > 60)).sort((a, b) => b.a.due - a.a.due || a.c.name.localeCompare(b.c.name));
   return <div className="cx-page">
-    <PageHead title="Où en sont vos clients ?" actions={<Button icon={<UserPlus size={17} aria-hidden="true" />} onClick={() => setAsk(true)}>Demander un nouveau client</Button>} />
-    <SearchBox value={q} onChange={setQ} placeholder="Nom d’un client ou numéro de facture…" />
+    <PageHead title="Où en sont vos clients ?" />
+    <SearchBox value={q} onChange={setQ} placeholder="Client ou n° de facture…" />
     {!q && <>
-      <p className="cx-total"><span>Il reste à recevoir</span><strong>{money(total)}</strong></p>
-      {(toLock.length > 0 || over60.length > 0) && <div className="cx-panel cx-list">
-        {toLock.length > 0 && <button type="button" className="cx-list-row" onClick={() => nav({ name: "valider" })}><span className="cx-list-main"><strong><Lock size={16} aria-hidden="true" />{toLock.length} paiement{toLock.length > 1 ? "s" : ""} à valider</strong><small>{money(toLock.reduce((n, p) => n + p.amount, 0))} saisis par l’encaissement</small></span><span className="cx-list-go">Voir</span></button>}
-        {over60.length > 0 && <button type="button" className="cx-list-row" onClick={() => setOnlyLate(v => !v)}><span className="cx-list-main"><strong className="cx-bad-text"><AlertTriangle size={16} aria-hidden="true" />{over60.length} client{over60.length > 1 ? "s" : ""} en retard de plus de 60 jours</strong><small>{onlyLate ? "Afficher tous les clients" : "Afficher seulement ces clients"}</small></span></button>}
+      <section className="cx-hero" aria-label="Total à recevoir"><span>Il reste à recevoir</span><strong>{money(total)}</strong><small>{rows.filter(r => r.a.due > 0).length} client{rows.filter(r => r.a.due > 0).length > 1 ? "s" : ""} sur {rows.length} ont un reste à payer</small></section>
+      {(toLock.length > 0 || over60.length > 0) && <div className="cx-alerts">
+        {toLock.length > 0 && <button type="button" className="cx-alert cx-alert-warn" onClick={() => nav({ name: "valider" })}><span className="cx-alert-icon"><Lock size={24} aria-hidden="true" /></span><span className="cx-alert-text"><strong>{toLock.length} paiement{toLock.length > 1 ? "s" : ""} à valider</strong><small>{money(toLock.reduce((n, p) => n + p.amount, 0))} saisis par l’encaissement</small></span><ChevronRight size={24} aria-hidden="true" /></button>}
+        {over60.length > 0 && <button type="button" className={`cx-alert cx-alert-bad${onlyLate ? " cx-pressed" : ""}`} aria-pressed={onlyLate} onClick={() => setOnlyLate(v => !v)}><span className="cx-alert-icon"><AlertTriangle size={24} aria-hidden="true" /></span><span className="cx-alert-text"><strong>{over60.length} client{over60.length > 1 ? "s" : ""} en retard de plus de 60 jours</strong><small>{onlyLate ? "Touchez pour afficher tous les clients" : "Touchez pour voir seulement ces clients"}</small></span></button>}
       </div>}
     </>}
-    {hits.length > 0 && <section className="cx-section"><div className="cx-section-head"><h2>Factures</h2></div><div className="cx-panel cx-list">{hits.map(i => { const b = balance(i, s.payments, s.credits); return <button type="button" className="cx-list-row" key={i.id} onClick={() => nav({ name: "facture", id: i.id })}><span className="cx-list-main"><strong>Facture {i.number}</strong><small>{i.client.name}, {dateFr(i.date)}</small></span><span className="cx-list-amount"><small>Reste à payer</small><strong>{money(b.due)}</strong></span></button>; })}</div></section>}
-    <section className="cx-section"><div className="cx-section-head"><h2>{onlyLate ? "Clients en retard" : "Clients"}</h2></div>
+    {hits.length > 0 && <section className="cx-section"><div className="cx-section-head"><h2>Factures</h2></div><div className="cx-panel cx-list">{hits.map(i => { const b = balance(i, s.payments, s.credits); return <button type="button" className="cx-list-row" key={i.id} onClick={() => nav({ name: "facture", id: i.id })}><span className="cx-list-main"><strong>Facture <span className="cx-nowrap">{i.number}</span></strong><small>{i.client.name}, {dateFr(i.date)}</small></span><span className="cx-list-amount"><small>Reste à payer</small><strong>{money(b.due)}</strong></span></button>; })}</div></section>}
+    <section className="cx-section"><div className="cx-section-head cx-section-head-row"><h2>{onlyLate ? "Clients en retard" : "Clients"}</h2><Button size="sm" icon={<UserPlus size={18} aria-hidden="true" />} onClick={() => setAsk(true)}>Demander un client</Button></div>
       <div className="cx-panel cx-list">{list.map(({ c, a, count, oldest }) => <button type="button" className="cx-list-row" key={c.id} onClick={() => nav({ name: "client", id: c.id })}>
-        <span className="cx-list-main"><strong>{c.name}</strong><small>{count ? `${count} facture${count > 1 ? "s" : ""}` : "Aucune facture"} {late(oldest)}</small></span>
-        <span className="cx-list-amount">{a.due ? <><small>Reste à payer</small><strong>{money(a.due)}</strong></> : a.refund ? <><small>À rendre</small><strong>{money(a.refund)}</strong></> : <small className="cx-good-text">Tout est payé</small>}</span>
+        <Monogram name={c.name} /><span className="cx-list-main"><strong>{c.name}</strong><small>{count ? `${count} facture${count > 1 ? "s" : ""}` : "Aucune facture"} {late(oldest)}</small></span>
+        <span className="cx-list-amount">{a.due ? <><small>Reste à payer</small><strong>{money(a.due)}</strong></> : a.refund ? <><small>À rendre</small><strong>{money(a.refund)}</strong></> : <small className="cx-good-text"><Check size={16} aria-hidden="true" />Tout est payé</small>}</span><ChevronRight className="cx-go" size={22} aria-hidden="true" />
       </button>)}{!list.length && <Empty title="Aucun client trouvé." />}</div>
     </section>
     {ask && <RequestForm kind="client" by={by} onClose={() => setAsk(false)} />}
@@ -81,7 +81,7 @@ function ClientStory({ id, nav, by }: { id: string; nav: Nav; by: string }) {
     </dl>
     <section className="cx-section"><div className="cx-section-head"><h2>Factures</h2></div>
       <div className="cx-panel cx-list">{items.map(i => { const b = balance(i, s.payments, s.credits), dv = delivery(s, i.id); return <button type="button" className="cx-list-row" key={i.id} onClick={() => nav({ name: "facture", id: i.id })}>
-        <span className="cx-list-main"><strong>Facture {i.number}</strong><small>{dateFr(i.date)}. {dv ? "Remise au client" : "Pas encore remise au client"} {b.due > 0 && late(daysSince(i.date))}</small></span>
+        <span className="cx-list-main"><strong>Facture <span className="cx-nowrap">{i.number}</span></strong><small>{dateFr(i.date)}. {dv ? "Remise au client" : "Pas encore remise au client"} {b.due > 0 && late(daysSince(i.date))}</small></span>
         <span className="cx-list-amount">{b.due ? <><small>Reste à payer</small><strong>{money(b.due)}</strong></> : <StatusChip status={b.status} />}</span>
       </button>; })}{!items.length && <Empty title="Aucune facture." />}</div>
     </section>

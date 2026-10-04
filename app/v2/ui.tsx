@@ -100,6 +100,9 @@ export function Timeline({ events, empty = "Rien pour l’instant." }: { events:
   if (!events.length) return <p className="cx-muted">{empty}</p>;
   return <ol className="cx-timeline">{events.map(e => <li key={e.id}><span className="cx-dot" /><div><p>{e.text}</p><small>{accountName(e.by)}, {timeFr(e.at)}</small></div></li>)}</ol>;
 }
+const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
+/** Round initials for a client: gives each row a quick visual anchor. */
+export function Monogram({ name }: { name: string }) { let h = 0; for (const c of name) h = (h * 31 + c.charCodeAt(0)) % 3; return <span className={`cx-mono cx-mono-${h}`} aria-hidden="true">{initials(name)}</span>; }
 export function Stat({ label, value, tone, sub, big }: { label: string; value: string; tone?: Tone; sub?: ReactNode; big?: boolean }) {
   return <div className={`cx-stat${tone ? ` cx-stat-${tone}` : ""}${big ? " cx-stat-big" : ""}`}><span>{label}</span><strong>{value}</strong>{sub && <small>{sub}</small>}</div>;
 }

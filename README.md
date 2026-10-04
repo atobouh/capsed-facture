@@ -115,3 +115,11 @@ Like the Sites package, `npm run build` runs `vinext build` directly; it does no
 
 - [vinext Documentation](https://github.com/cloudflare/vinext)
 - [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+
+
+## Dépôts et architecture
+
+- GitHub : https://github.com/atobouh/capsed-facture (remote github).
+- Publication ChatGPT Sites : remote origin, conservé pour les déploiements.
+- Plan desktop et Cloudflare : [architecture pour trois ordinateurs et un réseau instable](docs/Architecture_facturation_reseau_instable.md).
+- Le prototype utilise le stockage local du navigateur ; les données saisies ne sont pas enregistrées dans Git.

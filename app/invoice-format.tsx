@@ -5,7 +5,7 @@ import { DocumentPages } from "./document-renderer";
 import DocumentPreview from "./document-preview";
 
 export type InvoiceFormat = { banner: string; footerText: string; footerImage: string; stationery?: string | false };
-export const defaultFormat: InvoiceFormat = { banner: "", footerText: "", footerImage: "", stationery: "/capsed-letterhead.webp" };
+export const defaultFormat: InvoiceFormat = { banner: "", footerText: "", footerImage: "", stationery: "capsed-letterhead.webp" };
 export function restoreFormat(data: any): InvoiceFormat {
   if (data.format) return { ...defaultFormat, ...data.format, footerText: data.format.footerText?.startsWith("Pied de page provisoire") ? "" : data.format.footerText || "" };
   const model = data.models?.find((m: any) => m.id === data.activeModelId) ?? data.models?.[0];

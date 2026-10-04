@@ -1,5 +1,6 @@
 import { build } from "esbuild";
 import { readFile, writeFile, mkdir, copyFile, readdir } from "node:fs/promises";
+import postcss from "postcss";
 import path from "node:path";
 import { createHash } from "node:crypto";
 
@@ -37,7 +38,15 @@ const formatCreditCss = await readFile(path.join(root, "app", "format-credit.css
 const polishCss = await readFile(path.join(root, "app", "polish.css"), "utf8");
 const desktopCss = await readFile(path.join(root, "app", "desktop.css"), "utf8");
 const controlCss = await readFile(path.join(root, "app", "control-center.css"), "utf8");
-await writeFile(path.join(dist, "styles.css"), baseCss + modalCss + editorialCss + simpleCss + formatCreditCss + polishCss + desktopCss + controlCss + await readFile(path.join(root, "app", "feedback.css"), "utf8") + await readFile(path.join(root, "app", "v2", "fonts.css"), "utf8") + await readFile(path.join(root, "app", "v2", "v2.css"), "utf8"));
+// The first prototype's CSS styles whole pages (and locks html/body scrolling on wide screens). It ships
+// separately and only loads at #ancien. The new app keeps just the rules that draw the A4 documents.
+const legacyCss = baseCss + modalCss + editorialCss + simpleCss + formatCreditCss + polishCss + desktopCss + controlCss + await readFile(path.join(root, "app", "feedback.css"), "utf8");
+await writeFile(path.join(dist, "legacy.css"), legacyCss);
+const paperCss = postcss.parse(legacyCss);
+paperCss.walkRules(rule => { if (rule.parent?.type === "atrule" && /keyframes/.test(rule.parent.name)) return; const keep = rule.selectors.filter(sel => /\.(doc-|document-|free-table|kind-|credit-items|credit-motif|field-note|receipt-|statement-)/.test(sel) && !/\b(html|body|#root)\b/.test(sel)); if (!keep.length) rule.remove(); else rule.selectors = keep; });
+paperCss.walkAtRules(at => { if (at.name !== "font-face" && !at.nodes?.length) at.remove(); });
+paperCss.walkAtRules(at => { if (at.name === "media" && !at.nodes?.some(n => n.type === "rule" || n.type === "atrule")) at.remove(); });
+await writeFile(path.join(dist, "styles.css"), paperCss.toString() + "\n" + await readFile(path.join(root, "app", "v2", "fonts.css"), "utf8") + await readFile(path.join(root, "app", "v2", "v2.css"), "utf8"));
 const assetVersion = createHash("sha256").update(await readFile(path.join(dist, "app.js"))).update(await readFile(path.join(dist, "styles.css"))).digest("hex").slice(0, 12);
 await writeFile(path.join(dist, "index.html"), `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f7f6f9"><meta name="description" content="CAPSED : facturation, encaissement et contrôle des clients, un espace par rôle."><title>CAPSED Facture</title><link rel="preload" href="fonts/Lexend-latin.woff2" as="font" type="font/woff2" crossorigin><link rel="icon" href="favicon.svg"><link rel="stylesheet" href="styles.css?v=${assetVersion}"></head><body><div id="root"></div><script type="module" src="app.js?v=${assetVersion}"></script></body></html>`);
 await copyFile(path.join(root, "public", "favicon.svg"), path.join(dist, "favicon.svg"));

@@ -2,16 +2,21 @@
 
 Product truth lives in `PRODUCT.md`. This file records the visual system the app now uses. Mode: **Operate** (people complete tasks). Built with the installed skills in `.claude/skills/` (impeccable, frontend-design, web-design-guidelines, ui-ux-pro-max); run `/impeccable critique` or `/web-design-guidelines app/v2` before shipping UI changes.
 
+## Two surfaces
+
+- **Office (Facturation, Encaissement): a desktop window** (future Tauri app). Fixed frame: plum left pane with labelled destinations, one scrolling work area, a status bar (sync state, shortcuts, help). Shortcuts: F1 help, Ctrl+F search on this page, Ctrl+N new invoice. From 1180 px the lists sit beside their detail (list/details, Microsoft Fluent pattern): click a row on the left, the invoice, credit note, client account or request appears whole on the right. Narrower windows stack the same pages. Base 16 px, controls 46 px.
+- **Direction: a website, phone first.** Normal page scroll (never `overflow:hidden` on html/body), sticky plum header, large bottom bar on phones, two columns from 1024 px. Base 17 px, controls 52 px, bottom sheets for forms on phones.
+
 ## Principles
 
-1. One primary button per screen, top right of the page header (first on phones). Rare actions go in « Autres actions ».
-2. Each role only sees its own menu: Facturation (Factures, Clients, Demandes), Encaissement (Clients et paiements, Demandes), Direction (Clients, À valider, Situation, Réglages).
-3. Big and bold: body 17 px, labels 17 px bold, page titles 36 px (30 px on phones), amounts 21 to 52 px. Nothing under 14 px. Tap targets 52 px or more.
-4. Surfaces have depth: white cards with a soft plum shadow on a lavender ground; the amount still due is the one plum card in a row of facts.
-5. Direction is phone first: one column, a plum hero with the total, alert cards, client rows with initials, a large bottom bar. Tables become one card per line under 700 px.
-6. The A4 document is always shown whole, scaled to the width (`FitPaper`), never cropped or scrolled inside a box.
-7. Serious actions confirm with their exact effect. Nothing is deleted.
-8. Colour carries meaning: plum for the primary action and selection, green / amber / red pills for status, always with a word.
+1. No tab strips. One page per question, with subheadings; rare or finished things collapse at the bottom (archived clients, handled requests). Research basis: NN/g lower-literacy users read word by word and miss options; tabs only when users never compare groups.
+2. One primary button per screen, top right of the toolbar (first on phones). Rare actions in « Autres actions ».
+3. Each role only sees its own menu: Facturation (Factures, Clients, Demandes), Encaissement (Clients et paiements, Demandes), Direction (Clients, À valider, Situation, Réglages).
+4. Final states are stamped like an office cachet (`Stamp`): Payée, Tout payé, Traitée in green ink; Annulé in red; Validé and Remise in plum. States still moving are soft pills (À payer, Partiellement réglée, Nouvelle). The stamp lands with one short ease-out in headings; lists show it still.
+5. The A4 document is always shown whole, scaled to the width (`FitPaper`), never cropped or scrolled inside a box.
+6. Serious actions confirm with their exact effect. Nothing is deleted.
+7. The month is chosen with two arrows (`MonthStepper`), never a browser calendar that speaks the system language.
+8. Tables turn into one card per line when their panel is narrower than 760 px (container query), on phones and in detail panes alike.
 
 ## Tokens (`app/v2/v2.css`)
 
@@ -33,4 +38,4 @@ Signature: the letterhead's double rule (plum over azure) under the brand, on th
 
 ## Components
 
-Button (primary / secondary / quiet / link, 52 px), text button, field with visible label and inline error, money input with live spacing, choice (radio cards; compact without dot for 5 options), search, segmented tabs, hero card, alert cards, client initials, bottom bar (phone), panel + table, list row (main text left, amount right), facts row, notice, disclosure, modal (focused tasks only: payment, credit note, confirmation, request), toast (bottom centre).
+Window frame and status bar (office), list/details split, `Row` (list pane row with current state), `Stamp`, `MonthStepper`, button (primary / secondary / quiet / link), text button, field with visible label and inline error, money input with live spacing, choice (radio cards; compact without dot for 5 options), search, segmented tabs, hero card, alert cards, client initials, bottom bar (phone), panel + table, list row (main text left, amount right), facts row, notice, disclosure, modal (focused tasks only: payment, credit note, confirmation, request), toast (bottom centre).

@@ -16,9 +16,10 @@ const readSession = () => { try { return localStorage.getItem(SESSION) ?? ""; } 
 export default function App() {
   const d = useData(), [sid, setSid] = useState(readSession), me = d.accounts.find(a => a.id === sid && a.active);
   const [route, setRoute] = useState<OfficeRoute>(() => HOME[me?.role ?? "facturation"]), [help, setHelp] = useState(false);
-  const nav = useCallback((r: OfficeRoute) => { setRoute(r); window.scrollTo(0, 0); }, []);
+  // The office window scrolls inside its work area; the Direction site scrolls the page.
+  const nav = useCallback((r: OfficeRoute) => { setRoute(r); window.scrollTo(0, 0); document.getElementById("contenu")?.scrollTo(0, 0); }, []);
   useEffect(() => { document.title = me ? `CAPSED, ${ROLE_LABEL[me.role]}` : "CAPSED, Connexion"; }, [me]);
-  function signIn(a: Account) { try { localStorage.setItem(SESSION, a.id); } catch { /* session non conservée */ } setSid(a.id); setRoute(HOME[a.role]); }
+  function signIn(a: Account) { try { localStorage.setItem(SESSION, a.id); } catch { /* session non conservée */ } setSid(a.id); setRoute(HOME[a.role]); window.scrollTo(0, 0); }
   function signOut() { try { localStorage.removeItem(SESSION); } catch { /* rien */ } setSid(""); }
   if (!me) return <div className="cx-app"><SignIn onSignIn={signIn} /><ToastHost /></div>;
   return <div className={`cx-app cx-role-${me.role}`}>
@@ -73,17 +74,30 @@ function OfficeShell({ me, route, nav, onHelp, onSignOut, children }: { me: Acco
     ? [{ key: "register", label: "Factures", icon: <FileText size={20} aria-hidden="true" /> }, { key: "clients", label: "Clients", icon: <Users size={20} aria-hidden="true" /> }, { key: "inbox", label: "Demandes", icon: <Inbox size={20} aria-hidden="true" />, count: inbox }]
     : [{ key: "clients", label: "Clients et paiements", icon: <Wallet size={20} aria-hidden="true" /> }, { key: "inbox", label: "Demandes", icon: <Inbox size={20} aria-hidden="true" />, count: inbox }];
   const section = ["compose", "invoice", "credit"].includes(route.name) ? (me.role === "facturation" ? "register" : "clients") : ["client", "situation"].includes(route.name) ? "clients" : route.name;
+  // Desktop shortcuts: F1 help, Ctrl+F search on this page, Ctrl+N new invoice (Facturation).
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      if (document.querySelector(".cx-overlay")) return;
+      if (e.key === "F1") { e.preventDefault(); onHelp(); }
+      else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") { const box = document.querySelector<HTMLInputElement>("#contenu .cx-search input"); if (box) { e.preventDefault(); box.focus(); box.select(); } }
+      else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "n" && me.role === "facturation" && route.name !== "compose") { e.preventDefault(); nav({ name: "compose" }); }
+    };
+    window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k);
+  }, [me.role, nav, onHelp, route.name]);
   return <div className="cx-office">
     <aside className="cx-sidebar cx-noprint">
-      <div className="cx-brand"><img src="capsed-logo.png" alt="" width="40" height="40" className="cx-brand-logo" /><div><strong>CAPSED</strong><small>{ROLE_LABEL[me.role]}</small></div></div>
+      <div className="cx-brand"><img src="capsed-logo.png" alt="" width="44" height="44" className="cx-brand-logo" /><div><strong>CAPSED</strong><small>{ROLE_LABEL[me.role]}</small></div></div>
       <nav aria-label="Navigation principale">{items.map(i => <button type="button" key={i.key} aria-current={section === i.key ? "page" : undefined} className={section === i.key ? "cx-on" : ""} onClick={() => nav({ name: i.key })}>{i.icon}<span>{i.label}</span>{!!i.count && <b className="cx-count" aria-label={`${i.count} à traiter`}>{i.count}</b>}</button>)}</nav>
       <div className="cx-sidebar-foot">
-        <p className={`cx-sync${d.officeOnline ? "" : " cx-sync-off"}`}>{d.officeOnline ? <><span className="cx-sync-dot" aria-hidden="true" />Connecté à la Direction</> : <><WifiOff size={15} aria-hidden="true" />Hors ligne, saisies gardées ici</>}</p>
-        <button type="button" onClick={onHelp}><CircleHelp size={18} aria-hidden="true" /><span>Aide sur cette page</span></button>
         <div className="cx-user"><span className="cx-avatar" aria-hidden="true">{me.name.slice(0, 1)}</span><div><strong>{me.name}</strong><button type="button" onClick={onSignOut}>Se déconnecter</button></div></div>
       </div>
     </aside>
-    <main className="cx-content" id="contenu">{children}</main>
+    <main className="cx-content" id="contenu" tabIndex={-1}>{children}</main>
+    <footer className="cx-statusbar cx-noprint">
+      <span className={`cx-sync${d.officeOnline ? "" : " cx-sync-off"}`}>{d.officeOnline ? <><span className="cx-sync-dot" aria-hidden="true" />Connecté à la Direction</> : <><WifiOff size={15} aria-hidden="true" />Hors ligne : vos saisies sont gardées sur ce poste</>}</span>
+      <span className="cx-status-keys" aria-hidden="true">{me.role === "facturation" && <span><kbd>Ctrl</kbd> <kbd>N</kbd> nouvelle facture</span>}<span><kbd>Ctrl</kbd> <kbd>F</kbd> chercher</span></span>
+      <button type="button" onClick={onHelp}><CircleHelp size={16} aria-hidden="true" />Aide <kbd>F1</kbd></button>
+    </footer>
   </div>;
 }
 

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronLeft, FileText, Pencil, Plus, Trash2, UserPlus } from "lucide-react";
+import { Check, ChevronLeft, FileText, Pencil, Plus, Trash2, UserPlus } from "lucide-react";
 import { invoiceTotals, lineAmount, normalizePayment } from "../invoice-math";
 import type { TaxMode } from "../invoice-math";
 import { fixedModel } from "../invoice-format";
@@ -79,7 +79,7 @@ export default function Composer({ editId, clientId, requestId, by, onDone, onCa
       <div><h1>{editing ? `Modifier la facture ${editing.number}` : "Nouvelle facture"}</h1><p>Étape {step + 1} sur 4 : {STEPS[step]}</p></div>
       <Button kind="quiet" onClick={onCancel}>Quitter sans enregistrer</Button>
     </header>
-    <ol className="cx-steps cx-noprint">{STEPS.map((s, i) => <li key={s} className={i < step ? "cx-done" : i === step ? "cx-now" : ""}><button type="button" disabled={i > step} onClick={() => { setStep(i); setError(""); }}><span>{i < step ? "✓" : i + 1}</span>{s}</button></li>)}</ol>
+    <ol className="cx-steps cx-noprint">{STEPS.map((s, i) => <li key={s} className={i < step ? "cx-done" : i === step ? "cx-now" : ""}><button type="button" disabled={i > step} onClick={() => { setStep(i); setError(""); }}><span>{i < step ? <Check size={18} strokeWidth={3} aria-label="fait" /> : i + 1}</span>{s}</button></li>)}</ol>
     {request && <Notice title="Demande du responsable">{request.message || "Créer une facture pour ce client."}{request.amount ? ` Montant indiqué : ${money(request.amount)}.` : ""}</Notice>}
     {error && <Notice tone="bad" title="À corriger avant de continuer">{error}</Notice>}
     <div className={step < 3 ? "cx-compose" : ""}>

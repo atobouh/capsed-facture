@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
-import { Check, ChevronDown, ChevronLeft, CircleAlert, Info, MoreHorizontal, Search, X } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, Info, MoreHorizontal, Search, X } from "lucide-react";
 import { DocumentPages } from "../document-renderer";
 import { fixedModel } from "../invoice-format";
 import CreditPaper from "../credit-note";
@@ -8,7 +8,7 @@ import AccountStatement from "../account-statement";
 import type { StatementPeriod } from "../statement-period";
 import type { DocumentModel } from "../document-model";
 import { words } from "./words";
-import { STATUS_TONE, num, timeFr, accountName, getData } from "./store";
+import { STATUS_TONE, num, timeFr, accountName, getData, monthLabel } from "./store";
 import type { CreditNote, Data, Event, Invoice } from "./store";
 
 export type Tone = "neutral" | "info" | "warn" | "good" | "bad";
@@ -17,7 +17,22 @@ export function Button({ kind = "secondary", icon, children, onClick, disabled, 
   return <button type={type} className={`cx-btn cx-btn-${kind}${wide ? " cx-wide" : ""}${size ? " cx-btn-sm" : ""}`} onClick={onClick} disabled={disabled} title={title}>{icon}<span>{children}</span></button>;
 }
 export function Chip({ tone = "neutral", children, icon }: { tone?: Tone; children: ReactNode; icon?: ReactNode }) { return <span className={`cx-chip cx-tone-${tone}`}>{icon}{children}</span>; }
-export function StatusChip({ status }: { status: string }) { return <Chip tone={STATUS_TONE[status] ?? "neutral"}>{status === "Payée" || status === "Soldée avec avoir" ? <Check size={12} /> : null}{status}</Chip>; }
+/** Final states are stamped like the office cachet; states still moving are a soft pill. */
+export function Stamp({ tone, children }: { tone: "good" | "bad" | "plum"; children: ReactNode }) { return <span className={`cx-stamp cx-stamp-${tone}`}>{children}</span>; }
+export function StatusChip({ status }: { status: string }) {
+  if (status === "Payée" || status === "Soldée avec avoir") return <Stamp tone="good">{status}</Stamp>;
+  return <Chip tone={STATUS_TONE[status] ?? "neutral"}>{status}</Chip>;
+}
+/** Month chosen with two arrows: no calendar widget, no browser-language month names. */
+export function MonthStepper({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const shift = (n: number) => { const [y, m] = value.split("-").map(Number), d = new Date(y, m - 1 + n, 1); onChange(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`); };
+  return <div className="cx-monthstep" role="group" aria-label="Mois affiché"><button type="button" onClick={() => shift(-1)} aria-label="Mois précédent"><ChevronLeft size={20} /></button><strong aria-live="polite">{monthLabel(value)}</strong><button type="button" onClick={() => shift(1)} aria-label="Mois suivant"><ChevronRight size={20} /></button></div>;
+}
+/** True when the window is wide enough to show a list and its detail side by side. */
+const WIDE = "(min-width: 1180px)";
+export function useWide() {
+  return useSyncExternalStore(cb => { const m = window.matchMedia(WIDE); m.addEventListener("change", cb); return () => m.removeEventListener("change", cb); }, () => window.matchMedia(WIDE).matches, () => true);
+}
 
 export function Field({ label, hint, error, children, required, optional, wide }: { label: string; hint?: ReactNode; error?: string; children: ReactNode; required?: boolean; optional?: boolean; wide?: boolean }) {
   return <label className={`cx-field${error ? " cx-has-error" : ""}${wide ? " cx-span2" : ""}`}>
@@ -109,12 +124,17 @@ export function Stat({ label, value, tone, sub, big }: { label: string; value: s
 export function Empty({ title, children, action, icon }: { title: string; children?: ReactNode; action?: ReactNode; icon?: ReactNode }) {
   return <div className="cx-empty">{icon}<strong>{title}</strong>{children && <p>{children}</p>}{action}</div>;
 }
-export function PageHead({ title, sub, actions, back }: { kicker?: string; title: ReactNode; sub?: ReactNode; actions?: ReactNode; back?: { label: string; onClick: () => void } }) {
-  return <header className="cx-page-head cx-noprint">
+export function PageHead({ title, sub, actions, back, pane }: { kicker?: string; title: ReactNode; sub?: ReactNode; actions?: ReactNode; back?: { label: string; onClick: () => void }; pane?: boolean }) {
+  return <header className={`cx-page-head cx-noprint${pane ? " cx-pane-head" : ""}`}>
     {back && <button type="button" className="cx-back" onClick={back.onClick}><ChevronLeft size={18} aria-hidden="true" />{back.label}</button>}
-    <div className="cx-page-head-row"><div className="cx-page-title"><h1>{title}</h1>{sub && <p>{sub}</p>}</div>{actions && <div className="cx-head-actions">{actions}</div>}</div>
+    <div className="cx-page-head-row"><div className="cx-page-title">{pane ? <h2>{title}</h2> : <h1>{title}</h1>}{sub && <p>{sub}</p>}</div>{actions && <div className="cx-head-actions">{actions}</div>}</div>
   </header>;
 }
+/** A row in a list pane: who and what on the left, the amount and its state on the right. */
+export function Row({ title, sub, amount, state, current, onClick, lead, todo }: { title: ReactNode; sub?: ReactNode; amount?: ReactNode; state?: ReactNode; current?: boolean; onClick: () => void; lead?: ReactNode; todo?: string }) {
+  return <button type="button" className="cx-row" aria-current={current || undefined} onClick={onClick}>{lead}<span className="cx-row-main"><strong>{title}</strong>{sub && <small>{sub}</small>}{todo && <em className="cx-todo">{todo}</em>}</span>{(amount || state) && <span className="cx-row-end">{amount && <strong>{amount}</strong>}{state}</span>}</button>;
+}
+
 /** Shows A4 pages whole, scaled to the available width: no inner scroll, nothing cropped. Prints at full size. */
 export function FitPaper({ children, label }: { children: ReactNode; label: string }) {
   const outer = useRef<HTMLDivElement>(null), inner = useRef<HTMLDivElement>(null), [box, setBox] = useState({ scale: 1, height: 0 });

@@ -3,7 +3,7 @@ import { clientDetailLines, optionalText } from "./client-details";
 import { useLayoutEffect, useRef, useState } from "react";
 import { invoiceTotals, lineAmount, printedQuantity, quantityLabel, normalizePayment } from "./invoice-math";
 import { printedAmount as money } from "./invoice-math";
-export const CAPSED_STATIONERY="/capsed-letterhead.webp";
+export const CAPSED_STATIONERY="capsed-letterhead.webp";
 export function DocumentBackground({format}:{format:any}) {return <img className="receipt-stationery" src={CAPSED_STATIONERY} alt=""/>;}
 export function DocumentFooter({format}:{format:any}) {return <footer className="receipt-official-footer"><p className="receipt-thanks">Merci pour votre confiance.</p><div className="receipt-legal-footer">{OFFICIAL_FOOTER.map((line,index)=><p key={index}>{line}</p>)}</div></footer>;}
 export function modelFormat(model:any) {return {stationery:model.stationery??CAPSED_STATIONERY,banner:model.blocks?.find((b:any)=>b.kind==="image"&&b.y<200)?.image||"",footerText:model.blocks?.find((b:any)=>b.kind==="footer")?.text?.startsWith("Pied de page provisoire")?"":model.blocks?.find((b:any)=>b.kind==="footer")?.text?.trim()||"",footerImage:model.blocks?.find((b:any)=>b.kind==="image"&&b.y>1000)?.image||""};}

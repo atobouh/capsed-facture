@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { FilePlus2, Lock, Pencil, Plus, UserPlus } from "lucide-react";
-import { Button, Confirm, Empty, Field, Modal, MoreMenu, PageHead, SearchBox, StatusChip, TextInput, matches, toast } from "./ui";
+import { Button, Confirm, Empty, Field, Modal, MoreMenu, Monogram, PageHead, SearchBox, StatusChip, TextInput, matches, toast } from "./ui";
 import { CancelPayment, CreditModal, PaymentModal } from "./payments";
 import { accountName, accountTotals, balance, commit, dateFr, getData, money, nowIso, uid, useData } from "./store";
 import type { Client, Role } from "./store";
@@ -52,7 +52,7 @@ export function ClientsDirectory({ role, by, nav }: { role: Role; by: string; na
       </div>
     </div>
     <section className="cx-panel cx-list">{rows.map(({ c, items, a }) => <button type="button" className="cx-list-row" key={c.id} onClick={() => nav({ name: "client", id: c.id })}>
-      <span className="cx-list-main"><strong>{c.name}</strong><small>{items.length} facture{items.length > 1 ? "s" : ""}{c.phone ? `, ${c.phone}` : ""}</small></span>
+      <Monogram name={c.name} /><span className="cx-list-main"><strong>{c.name}</strong><small>{items.length} facture{items.length > 1 ? "s" : ""}{c.phone ? `, ${c.phone}` : ""}</small></span>
       <span className="cx-list-amount">{a.refund > 0 && !a.due ? <><small>À rendre</small><strong>{money(a.refund)}</strong></> : a.due ? <><small>Reste à payer</small><strong>{money(a.due)}</strong></> : <small className="cx-good-text">{items.length ? "Tout est payé" : "Aucune facture"}</small>}</span>
     </button>)}{!rows.length && <Empty title="Aucun client trouvé.">{q ? "Vérifiez l’orthographe du nom." : null}</Empty>}</section>
     {form && <ClientForm client={form} by={by} onClose={() => setForm(null)} onSaved={c => { setForm(null); nav({ name: "client", id: c.id }); }} />}
@@ -91,7 +91,7 @@ export function ClientAccount({ id, role, by, nav }: { id: string; role: Role; b
     <section className="cx-section"><div className="cx-section-head"><h2>Factures</h2></div>
       <div className="cx-panel">{items.length ? <table className="cx-table"><thead><tr><th>Facture</th><th>Date</th><th className="cx-num">Montant</th><th className="cx-num">Reste à payer</th><th>Paiement</th>{cashier && <th><span className="cx-sr">Action</span></th>}</tr></thead><tbody>
         {items.map(i => { const b = balance(i, d.payments, d.credits); return <tr key={i.id} className="cx-clickable" onClick={() => nav({ name: "invoice", id: i.id })}>
-          <td><button type="button" className="cx-doc-link" onClick={e => { e.stopPropagation(); nav({ name: "invoice", id: i.id }); }}>{i.number}</button></td><td>{dateFr(i.date)}</td><td className="cx-num">{money(b.total)}</td><td className="cx-num">{money(b.due)}</td><td><StatusChip status={b.status} /></td>
+          <td className="t-n"><button type="button" className="cx-doc-link" onClick={e => { e.stopPropagation(); nav({ name: "invoice", id: i.id }); }}>{i.number}</button></td><td data-label="Date" className="t-d">{dateFr(i.date)}</td><td data-label="Montant" className="cx-num t-x">{money(b.total)}</td><td data-label="Reste à payer" className="cx-num cx-t-amount t-a">{money(b.due)}</td><td data-label="Paiement" className="t-s"><StatusChip status={b.status} /></td>
           {cashier && <td className="cx-num">{b.due > 0 && <Button size="sm" onClick={() => setPay({ invoiceId: i.id })}>Encaisser</Button>}</td>}</tr>; })}
       </tbody></table> : <Empty title="Aucune facture pour ce client." action={biller ? <Button kind="primary" onClick={() => nav({ name: "compose", extra: client.id })}>Créer sa première facture</Button> : undefined} />}</div>
     </section>

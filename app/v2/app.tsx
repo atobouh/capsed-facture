@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { CircleHelp, ClipboardCheck, Eye, EyeOff, FileText, Inbox, Printer, Settings, Users, Wallet, WifiOff } from "lucide-react";
+import { CircleHelp, ClipboardCheck, Eye, EyeOff, FileText, Inbox, LogOut, Printer, Settings, Users, Wallet, WifiOff } from "lucide-react";
 import { Button, Modal, ToastHost, Field, Notice } from "./ui";
 import { OfficeScreen } from "./office";
 import type { OfficeRoute } from "./clients";
@@ -97,12 +97,12 @@ function SiteShell({ me, route, nav, onHelp, onSignOut, children }: { me: Accoun
       <div className="cx-site-bar">
         <div className="cx-brand"><img src="capsed-logo.png" alt="" width="36" height="36" className="cx-brand-logo" /><div><strong>CAPSED</strong><small>Direction</small></div></div>
         <nav className="cx-site-tabs" aria-label="Navigation principale">{tabs.map(t => <button type="button" key={t.key} aria-current={section === t.key ? "page" : undefined} className={section === t.key ? "cx-on" : ""} onClick={() => nav({ name: t.key })}>{t.label}{!!t.count && <b className="cx-count">{t.count}</b>}</button>)}</nav>
-        <div className="cx-site-user"><button type="button" className="cx-icon-btn" onClick={onHelp} aria-label="Aide sur cette page"><CircleHelp size={21} /></button><button type="button" className="cx-text-btn" onClick={onSignOut} title={me.name}>Se déconnecter</button></div>
+        <div className="cx-site-user"><button type="button" className="cx-icon-btn" onClick={onHelp} aria-label="Aide sur cette page"><CircleHelp size={22} /></button><button type="button" className="cx-signout" onClick={onSignOut} title={me.name} aria-label="Se déconnecter"><LogOut size={20} aria-hidden="true" /><span>Se déconnecter</span></button></div>
       </div>
       <div className="cx-rule" aria-hidden="true" />
     </header>
     <main className="cx-site-main" id="contenu">
-      <p className={`cx-fresh${stale ? " cx-fresh-stale" : ""}`}>{!d.officeOnline ? <><WifiOff size={15} aria-hidden="true" />Bureau hors ligne. Dernières nouvelles : {timeFr(d.snapshot.receivedAt)}.</> : <><span className="cx-sync-dot" aria-hidden="true" />Données du bureau reçues {ago(d.snapshot.receivedAt)}</>}</p>
+      <p className={`cx-fresh${stale ? " cx-fresh-stale" : ""}`}>{!d.officeOnline ? <><WifiOff size={15} aria-hidden="true" />Bureau hors ligne. Dernières nouvelles {timeFr(d.snapshot.receivedAt)}</> : <><span className="cx-sync-dot" aria-hidden="true" />Mis à jour {ago(d.snapshot.receivedAt)}</>}</p>
       {children}
     </main>
     <nav className="cx-bottom-nav cx-noprint" aria-label="Navigation principale">{tabs.map(t => <button type="button" key={t.key} aria-current={section === t.key ? "page" : undefined} className={section === t.key ? "cx-on" : ""} onClick={() => nav({ name: t.key })}>{t.icon}<span>{t.label}</span>{!!t.count && <b className="cx-count">{t.count}</b>}</button>)}</nav>

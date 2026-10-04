@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { Check, ChevronDown, CircleAlert, Info, MoreHorizontal, Search, X } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, CircleAlert, Info, MoreHorizontal, Search, X } from "lucide-react";
 import { DocumentPages } from "../document-renderer";
-import DocumentPreview from "../document-preview";
 import { fixedModel } from "../invoice-format";
 import CreditPaper from "../credit-note";
 import AccountStatement from "../account-statement";
@@ -22,7 +21,7 @@ export function StatusChip({ status }: { status: string }) { return <Chip tone={
 
 export function Field({ label, hint, error, children, required, optional, wide }: { label: string; hint?: ReactNode; error?: string; children: ReactNode; required?: boolean; optional?: boolean; wide?: boolean }) {
   return <label className={`cx-field${error ? " cx-has-error" : ""}${wide ? " cx-span2" : ""}`}>
-    <span className="cx-label">{label}{required && <b aria-hidden> *</b>}{optional && <em> · facultatif</em>}</span>
+    <span className="cx-label">{label}{required && <b aria-hidden> *</b>}{optional && <em>, facultatif</em>}</span>
     {children}
     {error ? <span className="cx-error" role="alert"><CircleAlert size={15} />{error}</span> : hint ? <span className="cx-hint">{hint}</span> : null}
   </label>;
@@ -45,7 +44,7 @@ export function NumberInput({ value, onChange, placeholder = "0", decimals, unit
   return <div className="cx-money"><input className="cx-input" inputMode={decimals ? "decimal" : "numeric"} value={shown} placeholder={placeholder} onBlur={() => setText(null)} onChange={e => { const raw = decimals ? e.target.value.replace(/[^\d,.]/g, "") : e.target.value.replace(/\D/g, ""); setText(raw); onChange(Number(raw.replace(",", ".")) || 0); }} />{unit && <span>{unit}</span>}</div>;
 }
 export function Choice<T extends string>({ options, value, onChange, columns = 2 }: { options: { value: T; label: string; sub?: string }[]; value: T | ""; onChange: (v: T) => void; columns?: number }) {
-  return <div className="cx-choice" role="radiogroup" style={{ gridTemplateColumns: `repeat(auto-fit, minmax(${columns >= 5 ? 108 : columns >= 3 ? 140 : 190}px, 1fr))` }}>
+  return <div className={`cx-choice${columns >= 5 ? " cx-choice-compact" : ""}`} role="radiogroup" style={{ gridTemplateColumns: `repeat(auto-fit, minmax(${columns >= 5 ? 108 : columns >= 3 ? 140 : 190}px, 1fr))` }}>
     {options.map(o => <button type="button" role="radio" aria-checked={value === o.value} key={o.value} className={`cx-choice-item${value === o.value ? " cx-on" : ""}`} onClick={() => onChange(o.value)}>
       <span className="cx-choice-dot">{value === o.value && <Check size={13} strokeWidth={3} />}</span><span><strong>{o.label}</strong>{o.sub && <small>{o.sub}</small>}</span>
     </button>)}
@@ -99,7 +98,7 @@ export function ToastHost() {
 
 export function Timeline({ events, empty = "Rien pour l’instant." }: { events: Event[]; empty?: string }) {
   if (!events.length) return <p className="cx-muted">{empty}</p>;
-  return <ol className="cx-timeline">{events.map(e => <li key={e.id}><span className="cx-dot" /><div><p>{e.text}</p><small>{accountName(e.by)} · {timeFr(e.at)}</small></div></li>)}</ol>;
+  return <ol className="cx-timeline">{events.map(e => <li key={e.id}><span className="cx-dot" /><div><p>{e.text}</p><small>{accountName(e.by)}, {timeFr(e.at)}</small></div></li>)}</ol>;
 }
 export function Stat({ label, value, tone, sub, big }: { label: string; value: string; tone?: Tone; sub?: ReactNode; big?: boolean }) {
   return <div className={`cx-stat${tone ? ` cx-stat-${tone}` : ""}${big ? " cx-stat-big" : ""}`}><span>{label}</span><strong>{value}</strong>{sub && <small>{sub}</small>}</div>;
@@ -107,19 +106,31 @@ export function Stat({ label, value, tone, sub, big }: { label: string; value: s
 export function Empty({ title, children, action, icon }: { title: string; children?: ReactNode; action?: ReactNode; icon?: ReactNode }) {
   return <div className="cx-empty">{icon}<strong>{title}</strong>{children && <p>{children}</p>}{action}</div>;
 }
-export function PageHead({ kicker, title, sub, actions, back }: { kicker?: string; title: ReactNode; sub?: ReactNode; actions?: ReactNode; back?: { label: string; onClick: () => void } }) {
+export function PageHead({ title, sub, actions, back }: { kicker?: string; title: ReactNode; sub?: ReactNode; actions?: ReactNode; back?: { label: string; onClick: () => void } }) {
   return <header className="cx-page-head cx-noprint">
-    <div>{back && <button type="button" className="cx-back" onClick={back.onClick}>← {back.label}</button>}{kicker && <small className="cx-kicker">{kicker}</small>}<h1>{title}</h1>{sub && <p>{sub}</p>}</div>
-    {actions && <div className="cx-head-actions">{actions}</div>}
+    {back && <button type="button" className="cx-back" onClick={back.onClick}><ChevronLeft size={18} aria-hidden="true" />{back.label}</button>}
+    <div className="cx-page-head-row"><div className="cx-page-title"><h1>{title}</h1>{sub && <p>{sub}</p>}</div>{actions && <div className="cx-head-actions">{actions}</div>}</div>
   </header>;
+}
+/** Shows A4 pages whole, scaled to the available width: no inner scroll, nothing cropped. Prints at full size. */
+export function FitPaper({ children, label }: { children: ReactNode; label: string }) {
+  const outer = useRef<HTMLDivElement>(null), inner = useRef<HTMLDivElement>(null), [box, setBox] = useState({ scale: 1, height: 0 });
+  useEffect(() => {
+    const o = outer.current, i = inner.current; if (!o || !i) return;
+    const measure = () => { const scale = Math.min(1, o.clientWidth / 794); setBox(b => b.scale === scale && b.height === i.offsetHeight ? b : { scale, height: i.offsetHeight }); };
+    const ro = new ResizeObserver(measure); ro.observe(o); ro.observe(i); measure(); return () => ro.disconnect();
+  }, []);
+  return <figure className="cx-paper" aria-label={label} ref={outer} style={{ height: box.height ? box.height * box.scale : undefined }}>
+    <div className="cx-paper-sheet" ref={inner} style={{ transform: `scale(${box.scale})`, marginLeft: box.scale < 1 ? 0 : "auto", marginRight: box.scale < 1 ? 0 : "auto" }}>{children}</div>
+  </figure>;
 }
 export function Paper({ invoice, title }: { invoice: Invoice; title?: string }) {
   const d = getData();
-  return <div className="cx-paper"><DocumentPreview title={title ?? `Facture ${invoice.number}`}><DocumentPages model={(invoice.template as { document?: DocumentModel } | undefined)?.document ?? fixedModel(d.format)} invoice={invoice} words={words} /></DocumentPreview></div>;
+  return <FitPaper label={title ?? `Facture ${invoice.number}`}><DocumentPages model={(invoice.template as { document?: DocumentModel } | undefined)?.document ?? fixedModel(d.format)} invoice={invoice} words={words} /></FitPaper>;
 }
 export function CreditPaperView({ credit }: { credit: CreditNote }) {
-  return <div className="cx-paper"><DocumentPreview title={`Avoir ${credit.number}`}><CreditPaper credit={credit} /></DocumentPreview></div>;
+  return <FitPaper label={`Avoir ${credit.number}`}><CreditPaper credit={credit} /></FitPaper>;
 }
 export function StatementPaper({ d, clientId, period }: { d: Pick<Data, "clients" | "invoices" | "payments" | "credits" | "format">; clientId: string; period: StatementPeriod }) {
-  return <div className="cx-paper"><DocumentPreview title={clientId ? "Situation du client" : "Situation des clients"}><AccountStatement clients={d.clients} invoices={d.invoices} payments={d.payments} credits={d.credits} clientId={clientId} format={d.format} period={period} /></DocumentPreview></div>;
+  return <FitPaper label={clientId ? "Situation du client" : "Situation des clients"}><AccountStatement clients={d.clients} invoices={d.invoices} payments={d.payments} credits={d.credits} clientId={clientId} format={d.format} period={period} /></FitPaper>;
 }

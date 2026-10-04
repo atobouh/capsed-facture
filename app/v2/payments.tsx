@@ -35,7 +35,7 @@ export function PaymentModal({ invoiceId, paymentId, requestId, by, onClose }: {
     toast(`${prev ? "Paiement corrigé" : "Paiement enregistré"}. Reste à payer sur ${invoice.number} : ${money(balance(invoice, getData().payments, getData().credits).due)}.`);
     onClose();
   }
-  return <Modal title={previous ? "Modifier le paiement" : "Enregistrer un paiement"} subtitle={`${invoice.client.name} · facture ${invoice.number}`} onClose={onClose}
+  return <Modal title={previous ? "Modifier le paiement" : "Enregistrer un paiement"} subtitle={`${invoice.client.name}, facture ${invoice.number}`} onClose={onClose}
     actions={<><Button kind="quiet" onClick={onClose}>Annuler</Button><Button kind="primary" onClick={save}>{previous ? "Enregistrer la correction" : amount ? `Enregistrer le paiement de ${money(amount)}` : "Enregistrer le paiement"}</Button></>}>
     <form onSubmit={e => { e.preventDefault(); save(); }}>
       {req && <Notice title="Demande du responsable">{req.message || "Paiement signalé."} Les champs reprennent ce qu’il a signalé : vérifiez-les avec le relevé.</Notice>}
@@ -62,11 +62,11 @@ export function CancelPayment({ payment, by, onClose }: { payment: Payment; by: 
   const d = getData(), i = d.invoices.find(x => x.id === payment.invoiceId);
   return <Confirm title="Annuler ce paiement saisi par erreur ?" confirm="Annuler ce paiement" cancel="Garder le paiement" onClose={onClose} onConfirm={() => {
     if (getData().payments.find(p => p.id === payment.id)?.lockedAt) { toast("Ce paiement est validé et verrouillé.", "warn"); onClose(); return; }
-    commit(by, x => ({ payments: x.payments.map(p => p.id === payment.id ? { ...p, cancelledAt: nowIso(), cancelledBy: by } : p) }), { text: `Paiement de ${money(payment.amount)} annulé (saisie erronée) · reste visible`, clientId: i?.client.id, invoiceId: payment.invoiceId });
+    commit(by, x => ({ payments: x.payments.map(p => p.id === payment.id ? { ...p, cancelledAt: nowIso(), cancelledBy: by } : p) }), { text: `Paiement de ${money(payment.amount)} annulé (saisie erronée), reste visible`, clientId: i?.client.id, invoiceId: payment.invoiceId });
     toast("Paiement annulé. Le compte client a été mis à jour."); onClose();
-  }}><p>{money(payment.amount)} · {payment.method} · {dateFr(payment.date)} · facture {i?.number}.</p><p className="cx-muted">Le montant sera retiré des paiements reçus et le reste à payer recalculé. L’entrée restera visible comme annulée.</p></Confirm>;
+  }}><p>{money(payment.amount)}, {payment.method}, {dateFr(payment.date)}, facture {i?.number}.</p><p className="cx-muted">Le montant sera retiré des paiements reçus et le reste à payer recalculé. L’entrée restera visible comme annulée.</p></Confirm>;
 }
-export function LockBadge() { return <span className="cx-chip cx-tone-good"><Lock size={12} /> Validé · verrouillé</span>; }
+export function LockBadge() { return <span className="cx-chip cx-tone-good"><Lock size={12} /> Validé, verrouillé</span>; }
 
 /** Credit note on an invoice, by articles or by amount (first prototype rules). */
 export function CreditModal({ invoiceId, by, onClose, onIssued }: { invoiceId: string; by: string; onClose: () => void; onIssued: (creditId: string) => void }) {
@@ -82,10 +82,10 @@ export function CreditModal({ invoiceId, by, onClose, onIssued }: { invoiceId: s
     const original = invoiceTotalsOf(invoice), previous = d.credits.filter(c => c.invoiceId === invoice.id), remainingHt = original.ht - previous.reduce((n, c) => n + c.ht, 0), remainingTax = original.tax - previous.reduce((n, c) => n + c.tax, 0);
     const ht = mode === "articles" ? selected.ht : Math.max(0, value - remainingTax, Math.min(remainingHt, Math.round(value / (1 + (original.taxMode === "ttc" ? invoice.taxRate : 0) / 100))));
     const credit: CreditNote = { id: uid(), invoiceId: invoice.id, number: nextCreditNumber(getData(), period), date, amount: value, ht, tax: value - ht, taxRate: invoice.taxRate, taxMode: original.taxMode, lines: mode === "articles" ? selected.lines : undefined, reason: reason.trim(), invoiceNumber: invoice.number, invoiceDate: invoice.date, client: { ...invoice.client }, company: { ...invoice.company, logo: "" }, format: modelFormat((invoice.template as { document?: unknown } | undefined)?.document ?? fixedModel(d.format)) };
-    commit(by, x => ({ credits: [...x.credits, credit], month: period }), { text: `Avoir ${credit.number} de ${money(value)} sur ${invoice.number} · ${credit.reason}`, clientId: invoice.client.id, invoiceId: invoice.id });
+    commit(by, x => ({ credits: [...x.credits, credit], month: period }), { text: `Avoir ${credit.number} de ${money(value)} sur ${invoice.number}, ${credit.reason}`, clientId: invoice.client.id, invoiceId: invoice.id });
     toast("Avoir enregistré. Le compte client a été mis à jour."); onIssued(credit.id);
   }
-  return <Modal wide title="Créer une facture d’avoir" subtitle={`${invoice.client.name} · facture ${invoice.number}`} onClose={onClose} actions={<><Button kind="quiet" onClick={onClose}>Annuler</Button><Button kind="primary" onClick={issue}>Émettre l’avoir{value ? ` de ${money(value)}` : ""}</Button></>}>
+  return <Modal wide title="Créer une facture d’avoir" subtitle={`${invoice.client.name}, facture ${invoice.number}`} onClose={onClose} actions={<><Button kind="quiet" onClick={onClose}>Annuler</Button><Button kind="primary" onClick={issue}>Émettre l’avoir{value ? ` de ${money(value)}` : ""}</Button></>}>
     <div className="cx-due-box"><span>Facture de référence : {invoice.number}</span><strong>{money(b.total - b.credited)} encore facturés</strong></div>
     <Field label="Que souhaitez-vous déduire ?"><Choice value={mode} onChange={v => { setMode(v); setError(""); }} options={[{ value: "articles", label: "Des articles", sub: "Choisir les lignes et quantités" }, { value: "amount", label: "Un montant", sub: "Saisir une somme" }]} /></Field>
     {mode === "articles" ? <div className="cx-credit-lines">{selected.available.map((l: { id: string; remaining: number; designation?: string }) => { const line = invoice.lines.find(x => x.id === l.id)!; const on = Object.hasOwn(quantities, l.id); return <div key={l.id} className={`cx-credit-line${on ? " cx-on" : ""}`}>
@@ -104,7 +104,7 @@ export function CreditPicker({ onPick, onClose }: { onPick: (invoiceId: string) 
   const eligible = d.invoices.filter(i => { const b = balance(i, d.payments, d.credits); return b.credited < b.total; }).filter(i => matches(q, i.number, i.client.name)).sort((a, b) => b.date.localeCompare(a.date));
   return <Modal title="Quelle facture voulez-vous corriger ?" subtitle="Choisissez la facture d’origine." onClose={onClose}>
     <SearchBox value={q} onChange={setQ} placeholder="Nom du client ou numéro…" autoFocus />
-    <div className="cx-pick-list">{eligible.map(i => { const b = balance(i, d.payments, d.credits); return <button type="button" key={i.id} onClick={() => onPick(i.id)}><span><strong>{i.client.name}</strong><small>{i.number} · {dateFr(i.date)}</small></span><span className="cx-pick-amount"><strong>{money(b.total - b.credited)}</strong><small>encore facturé</small></span></button>; })}
+    <div className="cx-pick-list">{eligible.map(i => { const b = balance(i, d.payments, d.credits); return <button type="button" key={i.id} onClick={() => onPick(i.id)}><span><strong>{i.client.name}</strong><small>{i.number}, {dateFr(i.date)}</small></span><span className="cx-pick-amount"><strong>{money(b.total - b.credited)}</strong><small>encore facturé</small></span></button>; })}
       {!eligible.length && <p className="cx-muted">Aucune facture trouvée. Essayez un autre nom ou numéro.</p>}</div>
   </Modal>;
 }

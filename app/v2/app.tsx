@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { Bell, CircleHelp, ClipboardCheck, Download, Eye, EyeOff, FileText, LogOut, PanelLeftClose, PanelLeftOpen, Printer, Settings, Users, Wallet, WifiOff } from "lucide-react";
+import { CircleHelp, ClipboardCheck, Eye, EyeOff, FileText, Inbox, Printer, Settings, Users, Wallet, WifiOff } from "lucide-react";
 import { Button, Modal, ToastHost, Field, Notice } from "./ui";
-import { OfficeScreen, downloadBackup } from "./office";
+import { OfficeScreen } from "./office";
 import type { OfficeRoute } from "./clients";
 import { ResponsableScreen, pendingCount } from "./responsable";
 import type { RRoute } from "./responsable";
@@ -17,7 +17,7 @@ export default function App() {
   const d = useData(), [sid, setSid] = useState(readSession), me = d.accounts.find(a => a.id === sid && a.active);
   const [route, setRoute] = useState<OfficeRoute>(() => HOME[me?.role ?? "facturation"]), [help, setHelp] = useState(false);
   const nav = useCallback((r: OfficeRoute) => { setRoute(r); window.scrollTo(0, 0); }, []);
-  useEffect(() => { document.title = me ? `CAPSED · ${ROLE_LABEL[me.role]}` : "CAPSED · Connexion"; }, [me]);
+  useEffect(() => { document.title = me ? `CAPSED, ${ROLE_LABEL[me.role]}` : "CAPSED, Connexion"; }, [me]);
   function signIn(a: Account) { try { localStorage.setItem(SESSION, a.id); } catch { /* session non conservée */ } setSid(a.id); setRoute(HOME[a.role]); }
   function signOut() { try { localStorage.removeItem(SESSION); } catch { /* rien */ } setSid(""); }
   if (!me) return <div className="cx-app"><SignIn onSignIn={signIn} /><ToastHost /></div>;
@@ -59,59 +59,53 @@ function SignIn({ onSignIn }: { onSignIn: (a: Account) => void }) {
         <Button kind="primary" type="submit" wide>Se connecter</Button>
       </form>
       <div className="cx-demo-access">
-        <p><strong>Démonstration</strong> · données fictives dans ce navigateur. Essayez un espace :</p>
-        <div className="cx-demo-cards">{demo.map(a => <button type="button" key={a.id} className={`cx-demo-card cx-demo-${a.role}`} onClick={() => onSignIn(a)}><span className="cx-demo-icon">{icon(a.role)}</span><span><strong>{ROLE_LABEL[a.role]}</strong><small>{a.name} · {a.role === "responsable" ? "site de contrôle" : "application de bureau"}</small></span></button>)}</div>
-        <p className="cx-hint">Identifiants de démonstration : awa / CAP-7421 · paul / CAP-5308 · direction / CAP-9160</p>
+        <p><strong>Démonstration</strong>, données fictives dans ce navigateur. Essayez un espace :</p>
+        <div className="cx-demo-cards">{demo.map(a => <button type="button" key={a.id} className={`cx-demo-card cx-demo-${a.role}`} onClick={() => onSignIn(a)}><span className="cx-demo-icon">{icon(a.role)}</span><span><strong>{ROLE_LABEL[a.role]}</strong><small>{a.name}, {a.role === "responsable" ? "site de contrôle" : "application de bureau"}</small></span></button>)}</div>
+        <p className="cx-hint">Identifiants de démonstration : awa / CAP-7421, paul / CAP-5308, direction / CAP-9160</p>
       </div>
     </section>
   </main>;
 }
 
 function OfficeShell({ me, route, nav, onHelp, onSignOut, children }: { me: Account; route: OfficeRoute; nav: (r: OfficeRoute) => void; onHelp: () => void; onSignOut: () => void; children: ReactNode }) {
-  const d = useData(), [collapsed, setCollapsed] = useState(false), inbox = d.requests.filter(r => r.to === me.role && r.receivedAt && !r.resolvedAt).length, unread = d.requests.filter(r => r.to === me.role && r.receivedAt && !r.readAt).length;
+  const d = useData(), inbox = d.requests.filter(r => r.to === me.role && r.receivedAt && !r.resolvedAt).length;
   const items: { key: string; label: string; icon: ReactNode; count?: number }[] = me.role === "facturation"
-    ? [{ key: "register", label: "Factures & avoirs", icon: <FileText size={20} /> }, { key: "clients", label: "Clients", icon: <Users size={20} /> }, { key: "inbox", label: "Demandes", icon: <Bell size={20} />, count: inbox }, { key: "settings", label: "Réglages", icon: <Settings size={20} /> }]
-    : [{ key: "clients", label: "Clients & paiements", icon: <Wallet size={20} /> }, { key: "situation", label: "Situation globale", icon: <Printer size={20} /> }, { key: "inbox", label: "Demandes", icon: <Bell size={20} />, count: inbox }];
-  const section = ["compose", "invoice", "credit"].includes(route.name) ? (me.role === "facturation" ? "register" : "clients") : route.name === "client" ? "clients" : route.name === "situation" && route.id ? "clients" : route.name;
-  return <div className={`cx-office${collapsed ? " cx-collapsed" : ""}`}>
+    ? [{ key: "register", label: "Factures", icon: <FileText size={20} aria-hidden="true" /> }, { key: "clients", label: "Clients", icon: <Users size={20} aria-hidden="true" /> }, { key: "inbox", label: "Demandes", icon: <Inbox size={20} aria-hidden="true" />, count: inbox }]
+    : [{ key: "clients", label: "Clients et paiements", icon: <Wallet size={20} aria-hidden="true" /> }, { key: "inbox", label: "Demandes", icon: <Inbox size={20} aria-hidden="true" />, count: inbox }];
+  const section = ["compose", "invoice", "credit"].includes(route.name) ? (me.role === "facturation" ? "register" : "clients") : ["client", "situation"].includes(route.name) ? "clients" : route.name;
+  return <div className="cx-office">
     <aside className="cx-sidebar cx-noprint">
-      <div className="cx-brand"><img src="capsed-logo.png" alt="" className="cx-brand-logo" /><div><strong>CAPSED</strong><small>{d.company.name}</small></div></div>
-      <div className="cx-space-badge"><span className={`cx-role-dot cx-dot-${me.role}`} />Espace {ROLE_LABEL[me.role]}</div>
-      <nav>{items.map(i => <button type="button" key={i.key} title={i.label} className={section === i.key ? "cx-on" : ""} onClick={() => nav({ name: i.key })}>{i.icon}<span>{i.label}</span>{!!i.count && <b className="cx-count">{i.count}</b>}</button>)}</nav>
+      <div className="cx-brand"><img src="capsed-logo.png" alt="" width="40" height="40" className="cx-brand-logo" /><div><strong>CAPSED</strong><small>{ROLE_LABEL[me.role]}</small></div></div>
+      <nav aria-label="Navigation principale">{items.map(i => <button type="button" key={i.key} aria-current={section === i.key ? "page" : undefined} className={section === i.key ? "cx-on" : ""} onClick={() => nav({ name: i.key })}>{i.icon}<span>{i.label}</span>{!!i.count && <b className="cx-count" aria-label={`${i.count} à traiter`}>{i.count}</b>}</button>)}</nav>
       <div className="cx-sidebar-foot">
-        <button type="button" onClick={downloadBackup} title="Télécharger une sauvegarde"><Download size={17} /><span>Sauvegarder les données</span></button>
-        <button type="button" onClick={() => setCollapsed(c => !c)} title={collapsed ? "Déplier le menu" : "Replier le menu"}>{collapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}<span>Replier le menu</span></button>
+        <p className={`cx-sync${d.officeOnline ? "" : " cx-sync-off"}`}>{d.officeOnline ? <><span className="cx-sync-dot" aria-hidden="true" />Connecté à la Direction</> : <><WifiOff size={15} aria-hidden="true" />Hors ligne, saisies gardées ici</>}</p>
+        <button type="button" onClick={onHelp}><CircleHelp size={18} aria-hidden="true" /><span>Aide sur cette page</span></button>
+        <div className="cx-user"><span className="cx-avatar" aria-hidden="true">{me.name.slice(0, 1)}</span><div><strong>{me.name}</strong><button type="button" onClick={onSignOut}>Se déconnecter</button></div></div>
       </div>
     </aside>
-    <div className="cx-main">
-      <header className="cx-topbar cx-noprint">
-        <span className="cx-demo-pill">Démonstration</span>
-        <span className={`cx-sync${d.officeOnline ? "" : " cx-sync-off"}`}>{d.officeOnline ? <><span className="cx-sync-dot" />En ligne · responsable à jour {timeFr(d.snapshot.receivedAt).slice(-5)}</> : <><WifiOff size={15} />Hors ligne · vos saisies restent sur ce poste</>}</span>
-        <button type="button" className="cx-top-btn" onClick={() => nav({ name: "inbox" })} aria-label={`Demandes${unread ? ` · ${unread} non lues` : ""}`}><Bell size={19} />{unread > 0 && <b className="cx-dot-count">{unread}</b>}</button>
-        <button type="button" className="cx-top-btn cx-top-help" onClick={onHelp}><CircleHelp size={18} /><span>Aide</span></button>
-        <div className="cx-user"><span className="cx-avatar">{me.name.slice(0, 1)}</span><div><strong>{me.name}</strong><button type="button" onClick={onSignOut}><LogOut size={13} /> Se déconnecter</button></div></div>
-      </header>
-      <main className="cx-content">{children}</main>
-    </div>
+    <main className="cx-content" id="contenu">{children}</main>
   </div>;
 }
 
 function SiteShell({ me, route, nav, onHelp, onSignOut, children }: { me: Account; route: OfficeRoute; nav: (r: OfficeRoute) => void; onHelp: () => void; onSignOut: () => void; children: ReactNode }) {
   const d = useData(), hours = hoursSince(d.snapshot.receivedAt), n = pendingCount(d);
-  const tone = !d.officeOnline || hours > 24 ? "bad" : hours > 4 ? "warn" : "ok";
+  const stale = !d.officeOnline || hours > 4;
   const section = route.name === "client" || route.name === "facture" ? "clients" : route.name;
-  const tabs = [{ key: "clients", label: "Clients", icon: <Users size={21} /> }, { key: "valider", label: "À valider", icon: <ClipboardCheck size={21} />, count: n }, { key: "reglages", label: "Réglages", icon: <Settings size={21} /> }];
+  const tabs = [{ key: "clients", label: "Clients", icon: <Users size={21} aria-hidden="true" /> }, { key: "valider", label: "À valider", icon: <ClipboardCheck size={21} aria-hidden="true" />, count: n }, { key: "situation", label: "Situation", icon: <Printer size={21} aria-hidden="true" /> }, { key: "reglages", label: "Réglages", icon: <Settings size={21} aria-hidden="true" /> }];
   return <div className="cx-site">
     <header className="cx-site-head cx-noprint">
       <div className="cx-site-bar">
-        <div className="cx-brand"><img src="capsed-logo.png" alt="" className="cx-brand-logo" /><div><strong>CAPSED</strong><small>Contrôle</small></div></div>
-        <nav className="cx-site-tabs">{tabs.map(t => <button type="button" key={t.key} className={section === t.key ? "cx-on" : ""} onClick={() => nav({ name: t.key })}>{t.label}{!!t.count && <b className="cx-count">{t.count}</b>}</button>)}</nav>
-        <div className="cx-site-user"><button type="button" className="cx-icon-btn" onClick={onHelp} aria-label="Aide"><CircleHelp size={21} /></button><span className="cx-avatar" title={me.name}>{me.name.slice(0, 1)}</span><button type="button" className="cx-icon-btn" onClick={onSignOut} aria-label="Se déconnecter" title="Se déconnecter"><LogOut size={19} /></button></div>
+        <div className="cx-brand"><img src="capsed-logo.png" alt="" width="36" height="36" className="cx-brand-logo" /><div><strong>CAPSED</strong><small>Direction</small></div></div>
+        <nav className="cx-site-tabs" aria-label="Navigation principale">{tabs.map(t => <button type="button" key={t.key} aria-current={section === t.key ? "page" : undefined} className={section === t.key ? "cx-on" : ""} onClick={() => nav({ name: t.key })}>{t.label}{!!t.count && <b className="cx-count">{t.count}</b>}</button>)}</nav>
+        <div className="cx-site-user"><button type="button" className="cx-icon-btn" onClick={onHelp} aria-label="Aide sur cette page"><CircleHelp size={21} /></button><button type="button" className="cx-text-btn" onClick={onSignOut} title={me.name}>Se déconnecter</button></div>
       </div>
-      <div className={`cx-fresh cx-fresh-${tone}`}><span className="cx-sync-dot" />{!d.officeOnline ? <>Poste du bureau hors ligne · état connu du {timeFr(d.snapshot.receivedAt)}</> : tone === "bad" ? <>Pas de nouvelles du bureau depuis {timeFr(d.snapshot.receivedAt)}</> : <>Données du bureau reçues {ago(d.snapshot.receivedAt)}</>}</div>
+      <div className="cx-rule" aria-hidden="true" />
     </header>
-    <main className="cx-site-main">{children}</main>
-    <nav className="cx-bottom-nav cx-noprint">{tabs.map(t => <button type="button" key={t.key} className={section === t.key ? "cx-on" : ""} onClick={() => nav({ name: t.key })}>{t.icon}<span>{t.label}</span>{!!t.count && <b className="cx-count">{t.count}</b>}</button>)}</nav>
+    <main className="cx-site-main" id="contenu">
+      <p className={`cx-fresh${stale ? " cx-fresh-stale" : ""}`}>{!d.officeOnline ? <><WifiOff size={15} aria-hidden="true" />Bureau hors ligne. Dernières nouvelles : {timeFr(d.snapshot.receivedAt)}.</> : <><span className="cx-sync-dot" aria-hidden="true" />Données du bureau reçues {ago(d.snapshot.receivedAt)}</>}</p>
+      {children}
+    </main>
+    <nav className="cx-bottom-nav cx-noprint" aria-label="Navigation principale">{tabs.map(t => <button type="button" key={t.key} aria-current={section === t.key ? "page" : undefined} className={section === t.key ? "cx-on" : ""} onClick={() => nav({ name: t.key })}>{t.icon}<span>{t.label}</span>{!!t.count && <b className="cx-count">{t.count}</b>}</button>)}</nav>
   </div>;
 }
 
@@ -123,16 +117,16 @@ const HELP: Record<string, [string, [string, string][]]> = {
   "facturation:clients": ["Clients", [["Chercher", "Tapez le nom du client. Les filtres montrent les clients avec un reste à payer ou archivés."], ["Ajouter", "« Ajouter un client » : seul le nom est obligatoire."], ["Ouvrir", "Le compte du client réunit toutes ses factures, avoirs et paiements."]]],
   "facturation:client": ["Compte client", [["Factures", "« Nouvelle facture » facture directement ce client."], ["Avoirs", "« Créer un avoir » sur la ligne de la facture concernée."], ["Archiver", "Un client archivé quitte la liste active ; rien n’est supprimé et il peut être réactivé."]]],
   "facturation:inbox": ["Demandes du responsable", [["Recevoir", "Le responsable demande une facture ou un nouveau client."], ["Créer", "Ouvrez la demande puis « Créer la facture » ou « Créer le client » : la demande est marquée traitée."], ["Répondre", "Si rien n’est à créer, écrivez le résultat et marquez la demande comme traitée."]]],
-  "facturation:settings": ["Réglages", [["Format", "Remplacez la bannière si besoin. Le pied de page officiel est conservé."], ["Coordonnées", "Elles apparaissent sur les prochaines factures."], ["Sauvegarde", "Téléchargez régulièrement une sauvegarde ; elle peut être restaurée sur un autre poste."]]],
   "encaissement:clients": ["Clients & paiements", [["Choisir un client", "Ouvrez son compte pour retrouver toutes ses factures, même celles des mois clôturés."], ["Recevoir un paiement", "« Enregistrer un paiement » : choisissez la facture, le montant et le mode."], ["Suivre le solde", "Le reste à payer se recalcule. Une saisie erronée peut être annulée ; elle reste visible."]]],
   "encaissement:client": ["Compte client", [["Encaisser", "« Ajouter un paiement » sur la ligne de la facture payée."], ["Corriger", "« Modifier » garde l’ancienne valeur dans l’historique. « Annuler une erreur » laisse l’entrée visible, barrée."], ["Verrou", "Un paiement validé par le responsable ne peut plus être modifié."]]],
-  "encaissement:situation": ["Situation", [["Période", "Choisissez les dates du relevé."], ["Exporter", "Excel ou CSV pour la comptabilité."], ["Imprimer", "« Imprimer / PDF » sort le relevé au format CAPSED."]]],
+  "encaissement:situation": ["Relevé du client", [["Période", "Choisissez les dates du relevé."], ["Exporter", "Excel ou CSV si le client le demande."], ["Imprimer", "« Imprimer » sort le relevé sur le papier CAPSED."]]],
   "encaissement:inbox": ["Demandes du responsable", [["Recevoir", "Le responsable signale un paiement dont le client parle."], ["Vérifier", "Ouvrez la facture. Si le paiement est déjà saisi, répondez-le ; sinon « Vérifier / enregistrer le paiement »."], ["Répondre", "Le solde change uniquement lors d’une écriture de paiement, jamais par la demande."]]],
   "responsable:clients": ["Vos clients", [["Consulter", "Le chiffre du haut : tout ce qui reste à recevoir, selon le dernier état reçu du bureau."], ["Alertes", "Paiements à valider, factures en retard, demandes en cours."], ["Demander", "« Demander un nouveau client » ou, depuis un client, « Demander une facture » / « Signaler un paiement »."]]],
   "responsable:client": ["Un client", [["Solde", "Reste à recevoir, facturé et reçu."], ["Factures", "Touchez une facture pour voir son total, ses paiements et si elle a été remise."], ["Paiements", "« Valider » verrouille un paiement : l’équipe ne peut plus le modifier."]]],
   "responsable:facture": ["Une facture", [["Remise", "Vous voyez si l’équipe a déclaré la facture remise au client."], ["Paiements", "Chaque paiement indique qui l’a saisi et s’il est validé."], ["Signaler", "Le client dit avoir payé ? « Signaler un paiement » : l’encaissement vérifie."]]],
   "responsable:valider": ["À valider", [["Cocher", "Cochez les paiements que vous avez contrôlés."], ["Valider", "Ils sont alors verrouillés ; l’équipe ne peut plus les modifier ni les annuler."], ["Suivre", "Vos demandes à l’équipe et leurs réponses sont listées en dessous."]]],
-  "responsable:reglages": ["Réglages", [["Équipe", "Ajoutez un membre : identifiant et mot de passe sont générés. Remettez la fiche en main propre."], ["Oubli", "« Nouveau mot de passe » remplace l’ancien. Un compte se désactive, il n’est jamais supprimé."], ["Connexion", "La simulation de coupure montre ce que vous voyez quand le bureau est hors ligne."]]],
+  "responsable:reglages": ["Réglages", [["Équipe", "Ajoutez un membre : l’identifiant et le mot de passe sont créés pour vous. Remettez la fiche en main propre."], ["Entreprise et facture", "Modifiez les coordonnées ou la bannière, puis « Enregistrer ». Cela vaut pour les prochaines factures."], ["Sauvegarde", "Téléchargez une sauvegarde chaque semaine. Elle se restaure sur un autre poste."]]],
+  "responsable:situation": ["Situation", [["Qui", "Tous les clients, ou un seul client."], ["Période", "Choisissez les dates."], ["Sortir", "Imprimer, Excel ou CSV."]]],
 };
 function HelpPanel({ role, route, onClose }: { role: Role; route: string; onClose: () => void }) {
   const [title, steps] = HELP[`${role}:${route}`] ?? HELP[`${role}:${HOME[role].name}`];

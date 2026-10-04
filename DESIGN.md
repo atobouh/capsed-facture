@@ -1,44 +1,33 @@
-# CAPSED — interface de bureau dans le navigateur
+# CAPSED — design system (v2)
 
-## Direction
+Product truth lives in `PRODUCT.md`. This file records the visual system the app now uses. Mode: **Operate** (people complete tasks). Built with the installed skills in `.claude/skills/` (impeccable, frontend-design, web-design-guidelines, ui-ux-pro-max); run `/impeccable critique` or `/web-design-guidelines app/v2` before shipping UI changes.
 
-Un espace de travail de facturation, avec navigation permanente, commandes courtes, registre et panneau contextuel. La fenêtre disponible détermine la composition. Les contenus longs défilent dans la zone de travail ; la navigation et la barre d’état restent en place sur ordinateur.
+## Principles
 
-## Références étudiées avec Firecrawl
+1. One primary button per screen, top right of the page header. Rare actions go in « Autres actions ».
+2. Each role only sees its own menu: Facturation (Factures, Clients, Demandes), Encaissement (Clients et paiements, Demandes), Direction (Clients, À valider, Situation, Réglages).
+3. Lists are plain rows in one panel, never grids of cards. Numbers are a row of labelled facts, never coloured tiles.
+4. The A4 document is always shown whole, scaled to the width (`FitPaper`), never cropped or scrolled inside a box.
+5. Serious actions confirm with their exact effect (closing a month, validating, archiving). Nothing is deleted.
+6. Colour carries meaning only: plum for the primary action, current tab and focus; green / amber / red for status, always with a word.
 
-- [Microsoft — tailles de fenêtres et grille de quatre pixels](https://learn.microsoft.com/en-us/windows/apps/design/layout/screen-sizes-and-breakpoints-for-responsive-design) : dimensions selon la fenêtre, rythme de quatre pixels et trois classes de largeur. Diagramme téléchargé dans `design/references/windows-grid.svg`.
-- [IBM Carbon — tableaux de données](https://carbondesignsystem.com/components/data-table/usage/) : barre d’outils près des données, densité régulière, en-têtes et alignement des valeurs.
-- [Zoho Books — flux des factures](https://www.zoho.com/us/books/help/invoice/) : création depuis le registre, client existant, lignes de prestations, suivi des paiements, impression et avoirs.
-- [Zoho Invoice — format des documents](https://www.zoho.com/us/invoice/help/settings/templates.html) : séparation des réglages et du document, configuration de bannière et pied de page avec aperçu. Capture de référence téléchargée dans `design/references/zoho-workspace.png` ; cette capture est documentaire, elle n’est pas une image de notre produit.
+## Tokens (`app/v2/v2.css`)
 
-## Règles
+| Token | Value | Use |
+| --- | --- | --- |
+| `--bg` | #f7f6f9 | page ground |
+| `--surface` | #ffffff | panels, inputs |
+| `--ink` / `--ink-2` / `--muted` | #211a29 / #4c4558 / #686174 | text levels |
+| `--line` / `--line-2` | #e8e4ed / #d4cddc | dividers / control borders |
+| `--plum` | #6e2882 | primary, selection, focus (CAPSED letterhead) |
+| `--azure` | #0a7fbf | signature rule only |
+| `--good` `--warn` `--bad` `--info` | #1d7446 #8f5600 #b42318 #0a6aa1 | status dots and notices |
+| radius | 8 px controls, 12 px panels | |
 
-| Élément | Règle |
-| --- | --- |
-| Police | Segoe UI, puis Inter/Arial ; texte courant 13 px, données de tableaux 12 px |
-| Titres de vues | 24 px, graisse 600, hauteur 32 px |
-| Libellés et texte secondaire | 12–13 px ; métadonnées 11 px |
-| Espacements | 4, 8, 12, 16, 20, 24, 32 px |
-| Navigation | 216 px ; repliée 64 px ; entrées 40 px |
-| Barre supérieure / état | 52 px / 28 px |
-| Champs / boutons | 38 px sur bureau ; 40 px pour les principaux contrôles mobiles |
-| Registre | Lignes 56 px ; barre de recherche 60 px ; détails 280 px |
-| Arrondis | 5–6 px sur contrôles et panneaux ; 8 px sur dialogues |
-| Couleurs | Graphite pour la navigation, gris neutres pour les surfaces, bleu pour les actions et la sélection |
-| Statuts | Vert : soldé ; ambre : partiel ; gris : à payer ; libellé toujours visible |
+Type: **Lexend** (self-hosted in `public/fonts`, chosen for reading fluency and a plain zero), weights 400/600/700, sizes 14 / 16 / 19 / 28 / 36. Playfair Display only on the sign-in title, echoing the letterhead. Tabular figures everywhere.
 
-Les dimensions et la typographie des documents A4 sont indépendantes de l’interface. Aucun changement de numérotation, de stockage ou de calcul comptable n’est impliqué par ce redesign.
+Signature: the letterhead's double rule (2 px plum over 1 px azure) under the brand in the side menu and under the Direction header. No other decoration: no gradients, no coloured side bars, no eyebrow labels, no shadows except menus and dialogs.
 
-## Flux
+## Components
 
-1. Le registre affiche le mois et les onglets Factures/Avoirs.
-2. Un clic sur une ligne sélectionne son document et affiche ses détails à droite sur grand écran. Le bouton flèche, Entrée ou un double clic ouvre le document complet.
-3. Le panneau donne accès au compte client, au document imprimable, à la saisie d’un paiement et à l’émission d’un avoir.
-4. La saisie conserve les étapes client, prestations, règlement, avec un récapitulatif latéral stable.
-5. Le format conserve une configuration unique, présentée comme un panneau de réglages à côté de la page A4 avec zoom.
-
-Sur une fenêtre plus étroite, le panneau de détails se masque et les commandes d’ouverture restent accessibles. Sur téléphone, les lignes deviennent des fiches. Aucun contrôle de fenêtre factice n’est ajouté : le produit demeure un site web.
-
-## Apprentissage et confort quotidien
-
-Les instructions répétées sont retirées des vues. Le bouton Aide ouvre trois gestes adaptés à l’écran courant, sans tutoriel obligatoire. La saisie montre d’abord désignation, quantité et prix ; contrat et destination se déplient au besoin. Les titres, données, contrôles et libellés gagnent un cran de taille, avec une hiérarchie et une structure identiques. Les explications comptables importantes restent présentes au moment d’émettre un avoir ou de clôturer un mois.
+Button (primary / secondary / quiet / link, 44 px), text button, field with visible label and inline error, money input with live spacing, choice (radio cards; compact without dot for 5 options), search, underline tabs, panel + table, list row (main text left, amount right), facts row, notice, disclosure, modal (focused tasks only: payment, credit note, confirmation, request), toast (bottom centre).

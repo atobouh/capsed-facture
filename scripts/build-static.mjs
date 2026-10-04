@@ -1,5 +1,5 @@
 import { build } from "esbuild";
-import { readFile, writeFile, mkdir, copyFile } from "node:fs/promises";
+import { readFile, writeFile, mkdir, copyFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
 
@@ -37,11 +37,14 @@ const formatCreditCss = await readFile(path.join(root, "app", "format-credit.css
 const polishCss = await readFile(path.join(root, "app", "polish.css"), "utf8");
 const desktopCss = await readFile(path.join(root, "app", "desktop.css"), "utf8");
 const controlCss = await readFile(path.join(root, "app", "control-center.css"), "utf8");
-await writeFile(path.join(dist, "styles.css"), baseCss + modalCss + editorialCss + simpleCss + formatCreditCss + polishCss + desktopCss + controlCss + await readFile(path.join(root, "app", "feedback.css"), "utf8") + await readFile(path.join(root, "app", "v2", "v2.css"), "utf8"));
+await writeFile(path.join(dist, "styles.css"), baseCss + modalCss + editorialCss + simpleCss + formatCreditCss + polishCss + desktopCss + controlCss + await readFile(path.join(root, "app", "feedback.css"), "utf8") + await readFile(path.join(root, "app", "v2", "fonts.css"), "utf8") + await readFile(path.join(root, "app", "v2", "v2.css"), "utf8"));
 const assetVersion = createHash("sha256").update(await readFile(path.join(dist, "app.js"))).update(await readFile(path.join(dist, "styles.css"))).digest("hex").slice(0, 12);
-await writeFile(path.join(dist, "index.html"), `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#355fd4"><meta name="description" content="CAPSED : facturation, encaissement et contrôle des clients, un espace par rôle."><title>CAPSED Facture</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@700&display=swap"><link rel="icon" href="favicon.svg"><link rel="stylesheet" href="styles.css?v=${assetVersion}"></head><body><div id="root"></div><script type="module" src="app.js?v=${assetVersion}"></script></body></html>`);
+await writeFile(path.join(dist, "index.html"), `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f7f6f9"><meta name="description" content="CAPSED : facturation, encaissement et contrôle des clients, un espace par rôle."><title>CAPSED Facture</title><link rel="preload" href="fonts/Lexend-latin.woff2" as="font" type="font/woff2" crossorigin><link rel="icon" href="favicon.svg"><link rel="stylesheet" href="styles.css?v=${assetVersion}"></head><body><div id="root"></div><script type="module" src="app.js?v=${assetVersion}"></script></body></html>`);
 await copyFile(path.join(root, "public", "favicon.svg"), path.join(dist, "favicon.svg"));
 
 
 await copyFile(path.join(root, "public", "capsed-letterhead.webp"), path.join(dist, "capsed-letterhead.webp"));
 await copyFile(path.join(root, "public", "capsed-logo.png"), path.join(dist, "capsed-logo.png"));
+await copyFile(path.join(root, "public", "capsed-header.webp"), path.join(dist, "capsed-header.webp"));
+await mkdir(path.join(dist, "fonts"), { recursive: true });
+for (const f of await readdir(path.join(root, "public", "fonts"))) await copyFile(path.join(root, "public", "fonts", f), path.join(dist, "fonts", f));

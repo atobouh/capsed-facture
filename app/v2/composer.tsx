@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FileText, Pencil, Plus, Trash2, UserPlus } from "lucide-react";
+import { ChevronLeft, FileText, Pencil, Plus, Trash2, UserPlus } from "lucide-react";
 import { invoiceTotals, lineAmount, normalizePayment } from "../invoice-math";
 import type { TaxMode } from "../invoice-math";
 import { fixedModel } from "../invoice-format";
@@ -53,11 +53,11 @@ export default function Composer({ editId, clientId, requestId, by, onDone, onCa
     if (editing) {
       const { history, ...previous } = editing; const stamp = nowIso();
       invoice = { ...editing, ...data, revisedAt: stamp, history: [...(history ?? []), { ...previous, savedAt: stamp }] as Invoice["history"] };
-      commit(by, x => ({ invoices: x.invoices.map(i => i.id === invoice.id ? invoice : i) }), { text: `Facture ${invoice.number} modifiée · version précédente conservée`, clientId: invoice.client.id, invoiceId: invoice.id });
+      commit(by, x => ({ invoices: x.invoices.map(i => i.id === invoice.id ? invoice : i) }), { text: `Facture ${invoice.number} modifiée, version précédente conservée`, clientId: invoice.client.id, invoiceId: invoice.id });
       toast("Modifications enregistrées. Le numéro et la version précédente sont conservés.");
     } else {
       invoice = { ...data, id: uid(), number: nextInvoiceNumber(cur, period), createdBy: by };
-      commit(by, x => ({ invoices: [...x.invoices, invoice], month: period, requests: request ? x.requests.map(r => r.id === request.id ? { ...r, readAt: r.readAt ?? nowIso(), resolvedAt: nowIso(), resolvedBy: by, linkedId: invoice.id, response: `Facture ${invoice.number} créée · ${money(invoiceTotals(invoice).ttc)}.` } : r) : x.requests }), { text: `Facture ${invoice.number} émise · ${money(invoiceTotals(invoice).ttc)}`, clientId: invoice.client.id, invoiceId: invoice.id });
+      commit(by, x => ({ invoices: [...x.invoices, invoice], month: period, requests: request ? x.requests.map(r => r.id === request.id ? { ...r, readAt: r.readAt ?? nowIso(), resolvedAt: nowIso(), resolvedBy: by, linkedId: invoice.id, response: `Facture ${invoice.number} créée, ${money(invoiceTotals(invoice).ttc)}.` } : r) : x.requests }), { text: `Facture ${invoice.number} émise, ${money(invoiceTotals(invoice).ttc)}`, clientId: invoice.client.id, invoiceId: invoice.id });
       toast(`Facture ${invoice.number} émise.${request ? " La demande du responsable est marquée comme traitée." : ""}`);
     }
     onDone(invoice.id);
@@ -76,7 +76,7 @@ export default function Composer({ editId, clientId, requestId, by, onDone, onCa
 
   return <section className="cx-wizard">
     <header className="cx-wizard-head cx-noprint">
-      <div><small className="cx-kicker">{editing ? "Modifier la facture" : "Nouvelle facture"}</small><h1>{editing ? `Facture ${editing.number}` : "Créer une facture"}</h1><p>Étape {step + 1} sur 4 · {STEPS[step]}</p></div>
+      <div><h1>{editing ? `Modifier la facture ${editing.number}` : "Nouvelle facture"}</h1><p>Étape {step + 1} sur 4 : {STEPS[step]}</p></div>
       <Button kind="quiet" onClick={onCancel}>Quitter sans enregistrer</Button>
     </header>
     <ol className="cx-steps cx-noprint">{STEPS.map((s, i) => <li key={s} className={i < step ? "cx-done" : i === step ? "cx-now" : ""}><button type="button" disabled={i > step} onClick={() => { setStep(i); setError(""); }}><span>{i < step ? "✓" : i + 1}</span>{s}</button></li>)}</ol>
@@ -86,14 +86,14 @@ export default function Composer({ editId, clientId, requestId, by, onDone, onCa
       <div className="cx-compose-body">
         {step === 0 && <>
           <div className="cx-card">
-            <div className="cx-section-title"><b>1</b><h2>Le client</h2></div>
-            {chosen ? <div className="cx-chosen"><span className="cx-monogram">{chosen.name.slice(0, 2).toUpperCase()}</span><div><strong>{chosen.name}</strong><span>{[chosen.address, chosen.niu && `NIU ${chosen.niu}`].filter(Boolean).join(" · ") || "Coordonnées à compléter"}</span></div>
+            <div className="cx-section-title"><h2>Le client</h2></div>
+            {chosen ? <div className="cx-chosen"><span className="cx-monogram">{chosen.name.slice(0, 2).toUpperCase()}</span><div><strong>{chosen.name}</strong><span>{[chosen.address, chosen.niu && `NIU ${chosen.niu}`].filter(Boolean).join(", ") || "Coordonnées à compléter"}</span></div>
               <div className="cx-chosen-actions"><Button size="sm" kind="quiet" icon={<Pencil size={15} />} onClick={() => setForm({ ...chosen })}>Modifier les coordonnées</Button><Button size="sm" kind="link" onClick={() => set({ clientId: "" })}>Changer de client</Button></div></div>
               : <><div className="cx-search-row"><SearchBox value={q} onChange={setQ} placeholder="Tapez le nom du client" autoFocus /><Button icon={<UserPlus size={18} />} onClick={() => setForm({ ...emptyClient(), name: q })}>Nouveau client</Button></div>
-                <div className="cx-pick-list">{clients.map(c => <button type="button" key={c.id} onClick={() => set({ clientId: c.id })}><span className="cx-monogram">{c.name.slice(0, 2).toUpperCase()}</span><span><strong>{c.name}</strong><small>{[c.address, c.phone].filter(Boolean).join(" · ")}</small></span></button>)}{!clients.length && <p className="cx-muted">Aucun client ne correspond. Utilisez « Nouveau client ».</p>}</div></>}
+                <div className="cx-pick-list">{clients.map(c => <button type="button" key={c.id} onClick={() => set({ clientId: c.id })}><span className="cx-monogram">{c.name.slice(0, 2).toUpperCase()}</span><span><strong>{c.name}</strong><small>{[c.address, c.phone].filter(Boolean).join(", ")}</small></span></button>)}{!clients.length && <p className="cx-muted">Aucun client ne correspond. Utilisez « Nouveau client ».</p>}</div></>}
           </div>
           <div className="cx-card">
-            <div className="cx-section-title"><b>2</b><h2>La facture</h2></div>
+            <div className="cx-section-title"><h2>La facture</h2></div>
             <div className="cx-form-grid">
               <Field label="Date de facture" required hint={editing ? "La date reste dans le mois du numéro." : "Une date d’un mois précédent permet de saisir une ancienne facture. Les mois clôturés restent protégés."}><DateInput value={draft.date} onChange={v => set({ date: v })} /></Field>
               <Field label="Numéro de bon de commande" optional><TextInput value={draft.purchaseOrder} onChange={v => set({ purchaseOrder: v })} placeholder="Ex. BC-2026-014" /></Field>
@@ -103,7 +103,7 @@ export default function Composer({ editId, clientId, requestId, by, onDone, onCa
           </div>
         </>}
         {step === 1 && <div className="cx-card">
-          <div className="cx-section-title"><b>3</b><h2>Articles et prestations</h2><span className="cx-muted">{chosen?.name}</span></div>
+          <div className="cx-section-title"><h2>Articles et prestations</h2><span className="cx-muted">{chosen?.name}</span></div>
           {draft.lines.some(l => !Number.isInteger(l.quantity)) && <Notice tone="warn">Cette ancienne facture contient une quantité décimale. Choisissez une quantité entière ; le montant sera recalculé et l’ancienne version conservée.</Notice>}
           {draft.lines.map((l, k) => <fieldset key={l.id} className="cx-line">
             <legend>Article {k + 1}</legend>
@@ -123,11 +123,11 @@ export default function Composer({ editId, clientId, requestId, by, onDone, onCa
           <Button icon={<Plus size={18} />} onClick={() => set({ lines: [...draft.lines, emptyLine()] })}>Ajouter un article</Button>
         </div>}
         {step === 2 && <div className="cx-card">
-          <div className="cx-section-title"><b>4</b><h2>Remise, TVA et règlement</h2></div>
+          <div className="cx-section-title"><h2>Remise, TVA et règlement</h2></div>
           <div className="cx-form-grid">
             <Field label="Remise" hint="0 si aucune remise."><NumberInput value={draft.discountRate} onChange={v => set({ discountRate: v })} decimals unit="%" /></Field>
             {draft.taxMode === "ttc" ? <Field label="TVA" hint="Taux appliqué après la remise."><NumberInput value={draft.taxRate} onChange={v => set({ taxRate: v })} decimals unit="%" /></Field>
-              : <Field label="TVA"><div className="cx-static">Aucune · facture hors taxe <button type="button" className="cx-btn cx-btn-link cx-inline" onClick={() => { set({ taxMode: "ttc", taxRate: draft.taxRate || 19.25 }); }}>Passer en TTC</button></div></Field>}
+              : <Field label="TVA"><div className="cx-static">Aucune, facture hors taxe <button type="button" className="cx-btn cx-btn-link cx-inline" onClick={() => { set({ taxMode: "ttc", taxRate: draft.taxRate || 19.25 }); }}>Passer en TTC</button></div></Field>}
             <Field label="Avance versée à la facturation" hint={`Maximum : ${money(totals.ttc)}`}><MoneyInput value={draft.advance} onChange={v => set({ advance: v })} /></Field>
           </div>
           <Field label="Mode de règlement"><Choice columns={5} value={draft.payment} onChange={v => set({ payment: v })} options={[...(!METHODS.includes(draft.payment) ? [{ value: draft.payment, label: draft.payment, sub: "ancien mode" }] : []), ...METHODS.map(m => ({ value: m, label: m }))]} /></Field>
@@ -140,9 +140,9 @@ export default function Composer({ editId, clientId, requestId, by, onDone, onCa
             <p><span>Numéro</span><strong>{number}</strong></p>
             <p><span>Date</span><strong>{dateFr(draft.date)}</strong></p>
             {draft.purchaseOrder && <p><span>Bon de commande</span><strong>{draft.purchaseOrder}</strong></p>}
-            <p><span>Type</span><strong>{draft.taxMode === "ttc" ? `TTC · TVA ${String(draft.taxRate).replace(".", ",")} %` : "Hors taxe"}</strong></p>
+            <p><span>Type</span><strong>{draft.taxMode === "ttc" ? `TTC, TVA ${String(draft.taxRate).replace(".", ",")} %` : "Hors taxe"}</strong></p>
             <p><span>Articles</span><strong>{draft.lines.filter(l => l.designation.trim()).length}</strong></p>
-            {draft.discountRate > 0 && <p><span>Remise</span><strong>{String(draft.discountRate).replace(".", ",")} % · − {money(totals.discount)}</strong></p>}
+            {draft.discountRate > 0 && <p><span>Remise</span><strong>{String(draft.discountRate).replace(".", ",")} %, soit − {money(totals.discount)}</strong></p>}
             {draft.advance > 0 && <p><span>Avance reçue</span><strong>{money(draft.advance)}</strong></p>}
             <p><span>Mode de règlement</span><strong>{draft.payment}</strong></p>
             <div className="cx-summary-total"><span>{draft.advance > 0 ? "Reste à payer" : totals.totalLabel}</span><strong>{money(totals.due)}</strong></div>
@@ -154,8 +154,8 @@ export default function Composer({ editId, clientId, requestId, by, onDone, onCa
       {step < 3 && summary}
     </div>
     <footer className="cx-wizard-foot cx-noprint">
-      <Button kind="quiet" onClick={() => step ? (setStep(step - 1), setError("")) : onCancel()}>{step ? "← Étape précédente" : "Annuler"}</Button>
-      {step < 3 ? <Button kind="primary" onClick={next}>Continuer · {STEPS[step + 1]}</Button>
+      <Button kind="quiet" icon={step ? <ChevronLeft size={18} aria-hidden="true" /> : undefined} onClick={() => step ? (setStep(step - 1), setError("")) : onCancel()}>{step ? "Étape précédente" : "Annuler"}</Button>
+      {step < 3 ? <Button kind="primary" onClick={next}>Continuer</Button>
         : <Button kind="primary" icon={<FileText size={18} />} onClick={save}>{editing ? "Enregistrer les modifications" : `Émettre la facture n° ${number}`}</Button>}
     </footer>
     {form && <ClientForm client={form} by={by} onClose={() => setForm(null)} onSaved={c => { setForm(null); set({ clientId: c.id }); }} />}

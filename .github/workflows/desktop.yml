@@ -12,6 +12,8 @@ on:
       - "static-src/**"
       - "public/**"
       - "scripts/build-static.mjs"
+      - "scripts/build-guide.mjs"
+      - "guide/**"
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/desktop.yml"

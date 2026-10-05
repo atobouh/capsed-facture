@@ -15,6 +15,7 @@ const eslintConfig = defineConfig([
     "cloud/.wrangler/**",
     "dist-site/**",
     "dist-pages/**",
+    "dist-guide/**",
     "dist-office/**",
   ]),
   {

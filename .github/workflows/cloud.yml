@@ -12,6 +12,8 @@ on:
       - "public/**"
       - "scripts/build-static.mjs"
       - "scripts/build-pages.mjs"
+      - "scripts/build-guide.mjs"
+      - "guide/**"
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/cloud.yml"
@@ -97,3 +99,11 @@ jobs:
           npx wrangler pages project list | grep "capsed-facture" | tee -a "$GITHUB_STEP_SUMMARY"
           for i in 1 2 3 4 5 6 7 8 9 10; do curl -fsS https://capsed-facture.pages.dev/api/setup && exit 0; sleep 10; done
           echo "::error::capsed-facture.pages.dev does not answer /api/setup yet."; exit 1
+
+      - name: User manual (guide.capsed-facture.pages.dev)
+        run: |
+          npm run build:guide
+          cd dist-guide
+          npx wrangler pages deploy . --project-name capsed-facture --branch guide --commit-dirty=true
+          for i in 1 2 3 4 5 6; do curl -fsS -o /dev/null https://guide.capsed-facture.pages.dev/ && { echo "### Manuel : https://guide.capsed-facture.pages.dev" >> "$GITHUB_STEP_SUMMARY"; exit 0; }; sleep 10; done
+          echo "::warning::guide.capsed-facture.pages.dev does not answer yet."

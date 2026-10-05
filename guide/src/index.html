@@ -1,0 +1,67 @@
+<!-- title: Manuel de CAPSED | lead: Tout ce qu’il faut savoir pour facturer, encaisser et suivre les clients avec CAPSED. Choisissez votre rôle, ou commencez par « CAPSED en deux minutes ». -->
+<div class="cards">
+  <a class="card" href="facturation.html"><i>Bureau</i><b>Facturation</b><span>Clients, factures, avoirs, remise au client, clôture du mois.</span></a>
+  <a class="card" href="encaissement.html"><i>Bureau</i><b>Encaissement</b><span>Paiements reçus, corrections, relevés des clients.</span></a>
+  <a class="card" href="facturation.html#les-deux-roles"><i>Bureau</i><b>Facturation et encaissement</b><span>Une seule personne fait les deux : lisez les deux pages.</span></a>
+  <a class="card" href="direction.html"><i>Site</i><b>Direction</b><span>Valider, suivre les clients, gérer l’équipe et les ordinateurs, lever une règle.</span></a>
+  <a class="card" href="installation.html"><i>Premier jour</i><b>Installer et relier un ordinateur</b><span>Télécharger CAPSED Bureau, le relier avec un code, se connecter.</span></a>
+  <a class="card" href="depannage.html"><i>En cas de souci</i><b>Dépannage</b><span>Chaque message de l’application : ce qu’il veut dire, quoi faire.</span></a>
+</div>
+
+<h2 id="en-deux-minutes">CAPSED en deux minutes</h2>
+<p>CAPSED, ce sont trois éléments qui travaillent ensemble :</p>
+<div class="illu" role="img" aria-label="Les ordinateurs du bureau et le site de la Direction échangent leurs données par le cloud.">
+<svg viewBox="0 0 560 170" width="100%" style="display:block;font-family:Geist,system-ui,sans-serif">
+  <rect x="8" y="40" width="150" height="90" rx="12" fill="#F4EFF5" stroke="#5E3A6B"/><text x="83" y="75" text-anchor="middle" font-size="15" font-weight="600" fill="#1B1820">CAPSED Bureau</text><text x="83" y="96" text-anchor="middle" font-size="12" fill="#6F6878">ordinateurs du bureau</text><text x="83" y="114" text-anchor="middle" font-size="12" fill="#6F6878">marche sans internet</text>
+  <rect x="205" y="40" width="150" height="90" rx="12" fill="#5E3A6B"/><text x="280" y="80" text-anchor="middle" font-size="15" font-weight="600" fill="#fff">Le cloud</text><text x="280" y="101" text-anchor="middle" font-size="12" fill="#EADFEC">copie de tout,</text><text x="280" y="117" text-anchor="middle" font-size="12" fill="#EADFEC">relie bureau et Direction</text>
+  <rect x="402" y="40" width="150" height="90" rx="12" fill="#F4EFF5" stroke="#5E3A6B"/><text x="477" y="75" text-anchor="middle" font-size="15" font-weight="600" fill="#1B1820">Site Direction</text><text x="477" y="96" text-anchor="middle" font-size="12" fill="#6F6878">téléphone ou ordinateur</text><text x="477" y="114" text-anchor="middle" font-size="12" fill="#6F6878">a besoin d’internet</text>
+  <path d="M160 78h42M202 92h-42" stroke="#5E3A6B" stroke-width="2" marker-end="url(#a)"/><path d="M357 78h42M399 92h-42" stroke="#5E3A6B" stroke-width="2" marker-end="url(#a)"/>
+  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#5E3A6B"/></marker></defs>
+  <text x="280" y="160" text-anchor="middle" font-size="12" fill="#6F6878">Chaque modification part toute seule dès qu’il y a internet (environ toutes les 20 secondes).</text>
+</svg></div>
+<ul>
+  <li><b>CAPSED Bureau</b> : l’application installée sur les ordinateurs du bureau (Windows). On y fait les factures, les clients et les paiements. <b>Elle marche même sans internet.</b></li>
+  <li><b>Le site de la Direction</b> : <a href="https://capsed-facture.pages.dev">capsed-facture.pages.dev</a>, sur téléphone ou ordinateur. La Direction y voit tout, valide, gère l’équipe et les ordinateurs.</li>
+  <li><b>Le cloud</b> : il garde une copie de tout et relie le bureau à la Direction. Chaque facture et chaque paiement y est enregistré, avec toutes ses versions.</li>
+</ul>
+
+<h2 id="qui-fait-quoi">Qui fait quoi</h2>
+<table>
+  <tr><th>Rôle</th><th>Où il travaille</th><th>Ce qu’il fait</th></tr>
+  <tr><td>Facturation</td><td>CAPSED Bureau</td><td>Crée les clients et les factures, imprime, note la remise au client, fait les avoirs, clôture le mois.</td></tr>
+  <tr><td>Encaissement</td><td>CAPSED Bureau</td><td>Enregistre les paiements reçus, les corrige avant validation, sort les relevés des clients.</td></tr>
+  <tr><td>Facturation et encaissement</td><td>CAPSED Bureau</td><td>Les deux, avec une seule connexion.</td></tr>
+  <tr><td>Direction</td><td>Le site</td><td>Voit tout, valide factures et paiements, crée des factures si besoin, gère l’équipe, les ordinateurs, les règles et les sauvegardes.</td></tr>
+</table>
+
+<h2 id="regles-d-or">Les règles d’or</h2>
+<ol class="rules">
+  <li><b>Chacun a son identifiant et son mot de passe.</b> On ne les prête jamais : tout ce qui est fait porte le nom de la personne connectée.</li>
+  <li><b>On verrouille en quittant son poste</b> (bouton <span class="btn-ref">Verrouiller</span> ou <kbd>Ctrl</kbd>+<kbd>L</kbd>). Sans action pendant 10 minutes, l’ordinateur se verrouille tout seul.</li>
+  <li><b>Rien n’est jamais supprimé.</b> Une correction garde l’ancienne version ; un paiement annulé reste visible comme annulé.</li>
+  <li><b>Le numéro de facture est donné à l’émission et ne change plus.</b> Chaque ordinateur a sa propre série : deux ordinateurs ne peuvent pas donner le même numéro.</li>
+  <li><b>Sans internet, on continue.</b> Tout part tout seul quand la connexion revient. La barre d’état dit « Tout est envoyé » ou combien de modifications attendent.</li>
+  <li><b>Un paiement validé par la Direction est verrouillé.</b> Pour le corriger, on le demande à la Direction.</li>
+  <li><b>Un mois clôturé est protégé.</b> Plus de facture ni d’avoir dessus. Seule la Direction peut le rouvrir.</li>
+  <li><b>Le délai de paiement (60 jours par défaut) est interne.</b> Il n’est jamais imprimé sur la facture ; il sert à repérer les retards.</li>
+  <li><b>Avant d’éteindre un ordinateur pour longtemps</b>, vérifiez qu’il affiche « Tout est envoyé ».</li>
+  <li><b>En cas de doute</b> : la page <a href="depannage.html">Dépannage</a>, puis la Direction.</li>
+</ol>
+
+<h2 id="avec-ou-sans-internet">Avec ou sans internet</h2>
+<table>
+  <tr><th>Action</th><th>Sans internet</th><th>Remarque</th></tr>
+  <tr><td>Se connecter sur un ordinateur déjà relié</td><td class="yes">Oui</td><td>Le mot de passe est vérifié sur l’ordinateur.</td></tr>
+  <tr><td>Créer, modifier, imprimer une facture</td><td class="yes">Oui</td><td>Elle part au cloud au retour de la connexion.</td></tr>
+  <tr><td>Enregistrer un paiement</td><td class="yes">Oui</td><td>Idem.</td></tr>
+  <tr><td>Relier un nouvel ordinateur</td><td class="no">Non</td><td>Il faut internet une fois, pour le code.</td></tr>
+  <tr><td>Voir le travail des autres ordinateurs</td><td class="no">Non</td><td>Chaque ordinateur voit le travail des autres dès qu’il est en ligne.</td></tr>
+  <tr><td>Site de la Direction</td><td>En partie</td><td>Le téléphone garde la dernière situation reçue et le dit clairement ; il faut internet pour la mettre à jour et pour valider.</td></tr>
+</table>
+
+<h2 id="adresses">Les adresses à garder</h2>
+<ul>
+  <li>Site de la Direction : <a href="https://capsed-facture.pages.dev">https://capsed-facture.pages.dev</a></li>
+  <li>Télécharger CAPSED Bureau (Windows) : <a href="https://github.com/atobouh/capsed-facture/releases/download/bureau-latest/CAPSED-Bureau-installation.exe">CAPSED-Bureau-installation.exe</a></li>
+  <li>Ce manuel : <a href="https://guide.capsed-facture.pages.dev">https://guide.capsed-facture.pages.dev</a> (il est aussi dans l’application : bouton d’aide, puis « Manuel complet »).</li>
+</ul>

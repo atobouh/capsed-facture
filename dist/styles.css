@@ -896,3 +896,6 @@ button.cx-list-row:hover,label.cx-list-row:hover{background:var(--hover)}
 .cx-tag-bad{background:#FBE9E7;color:#A8322A}
 .cx-flags-block{display:grid;gap:6px;margin:0 0 14px}
 .cx-flags-block .cx-flag{margin:0;font-size:13.5px;padding:10px 12px}
+/* The full manual, over the app */
+.cx-manual{position:fixed;inset:0;z-index:95;background:var(--bg)}
+.cx-manual iframe{width:100%;height:100%;border:0;display:block}

@@ -157,7 +157,23 @@ export function HelpPanel({ role, route, onClose }: { role: Role; route: string;
   // The full office mode reuses the Facturation and Encaissement help.
   const keys: Role[] = role === "bureau" ? ["facturation", "encaissement"] : [role];
   const [title, steps] = keys.map(k => HELP[`${k}:${route}`]).find(Boolean) ?? HELP[`${keys[0]}:${HOME[keys[0]].name}`];
-  return <Modal title={title} subtitle="Les gestes essentiels" onClose={onClose} actions={<Button kind="primary" onClick={onClose}>J’ai compris</Button>}>
+  const [manual, setManual] = useState(false), page = GUIDE_PAGE[role];
+  // The full manual (guide/): inside the site and the office app, so it opens even without internet; the demo links to it online.
+  const openManual = () => { if (CLOUD) setManual(true); else window.open(`${GUIDE_ONLINE}${page}.html`, "_blank", "noopener"); };
+  if (manual) return <ManualOverlay src={`guide/${page}.html`} onClose={() => { setManual(false); onClose(); }} />;
+  return <Modal title={title} subtitle="Les gestes essentiels" onClose={onClose} actions={<><Button kind="quiet" onClick={openManual}>Manuel complet</Button><Button kind="primary" onClick={onClose}>J’ai compris</Button></>}>
     <ol className="cx-help">{steps.map(([t, s], i) => <li key={t}><span>{i + 1}</span><div><h3>{t}</h3><p>{s}</p></div></li>)}</ol>
   </Modal>;
+}
+const GUIDE_ONLINE = "https://guide.capsed-facture.pages.dev/";
+const GUIDE_PAGE: Record<Role, string> = { facturation: "facturation", encaissement: "encaissement", bureau: "facturation", responsable: "direction" };
+/** The manual over the app: the screen underneath (and any form in progress) stays as it was. */
+export function ManualOverlay({ src, onClose }: { src: string; onClose: () => void }) {
+  useEffect(() => {
+    const msg = (e: MessageEvent) => { if (e.data === "capsed-guide-close") onClose(); };
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("message", msg); window.addEventListener("keydown", key);
+    return () => { window.removeEventListener("message", msg); window.removeEventListener("keydown", key); };
+  }, [onClose]);
+  return <div className="cx-manual" role="dialog" aria-modal="true" aria-label="Manuel CAPSED"><iframe src={src} title="Manuel CAPSED" /></div>;
 }

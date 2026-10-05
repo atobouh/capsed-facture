@@ -8,6 +8,7 @@ import { makeHash } from "./password";
 import { CLOUD, MODE, ROLE_LABEL, accountName, ago, commit, generateLogin, generatePassword, getData, monthLabel, nowIso, resetDemo, setOnline, timeFr, uid, useData } from "./store";
 import type { Account, Override, Role } from "./store";
 import { useSync } from "./sync";
+import { ManualOverlay } from "./app";
 import { exportAll } from "./export-all";
 import { ImportClients } from "./import-clients";
 import { fetchJson } from "./net";
@@ -297,5 +298,11 @@ const GUIDES: [string, string][] = [
   ["Mot de passe oublié", "Pour l’équipe : Réglages, Équipe et accès, « Nouveau mot de passe ». Pour la Direction : la personne qui a installé l’application dispose d’un lien de secours."],
 ];
 function Help() {
-  return <section className="cx-section"><ol className="cx-help">{GUIDES.map(([t, s], i) => <li key={t}><span>{i + 1}</span><div><h3>{t}</h3><p>{s}</p></div></li>)}</ol></section>;
+  const [manual, setManual] = useState(false);
+  return <section className="cx-section">
+    <div className="cx-section-head cx-section-head-row"><div><h2>Le manuel complet</h2><p>Chaque rôle pas à pas, avec des images, et que faire pour chaque message. À partager avec l’équipe : guide.capsed-facture.pages.dev</p></div>
+      <Button kind="primary" icon={<BookOpen size={17} aria-hidden="true" />} onClick={() => CLOUD ? setManual(true) : window.open("https://guide.capsed-facture.pages.dev/", "_blank", "noopener")}>Ouvrir le manuel</Button></div>
+    <ol className="cx-help">{GUIDES.map(([t, s], i) => <li key={t}><span>{i + 1}</span><div><h3>{t}</h3><p>{s}</p></div></li>)}</ol>
+    {manual && <ManualOverlay src="guide/direction.html" onClose={() => setManual(false)} />}
+  </section>;
 }

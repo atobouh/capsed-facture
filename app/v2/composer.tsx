@@ -5,17 +5,18 @@ import type { TaxMode } from "../invoice-math";
 import { fixedModel } from "../invoice-format";
 import { Button, Choice, DateInput, Field, MoneyInput, Notice, NumberInput, Paper, SearchBox, TextArea, TextInput, matches, toast } from "./ui";
 import { ClientForm } from "./clients";
-import { METHODS, balance, commit, dateFr, dateValid, emptyClient, emptyLine, getData, money, monthLabel, nextInvoiceNumber, nowIso, todayIso, uid, useData } from "./store";
+import { DEFAULT_TERM, METHODS, addDays, balance, commit, termOf, dateFr, dateValid, emptyClient, emptyLine, getData, money, monthLabel, nextInvoiceNumber, nowIso, todayIso, uid, useData } from "./store";
 import type { Client, Invoice, Line } from "./store";
 import { words } from "./words";
 
-type Draft = { clientId: string; date: string; lines: Line[]; taxRate: number; taxMode: TaxMode; discountRate: number; advance: number; payment: string; note: string; purchaseOrder: string };
+type Draft = { clientId: string; date: string; lines: Line[]; taxRate: number; taxMode: TaxMode; discountRate: number; advance: number; payment: string; note: string; purchaseOrder: string; paymentTerm: number };
 const STEPS = ["Client et facture", "Articles et prestations", "Remise, TVA et règlement", "Vérifier et émettre"];
 
-export default function Composer({ editId, clientId, requestId, by, onDone, onCancel }: { editId?: string; clientId?: string; requestId?: string; by: string; onDone: (invoiceId: string) => void; onCancel: () => void }) {
+/** The 4-step invoice flow. `validated`: made by the Direction, so it does not come back to validate. */
+export default function Composer({ editId, clientId, requestId, by, validated, onDone, onCancel }: { editId?: string; clientId?: string; requestId?: string; by: string; validated?: boolean; onDone: (invoiceId: string) => void; onCancel: () => void }) {
   const d = useData(), editing = d.invoices.find(i => i.id === editId);
-  const [draft, setDraft] = useState<Draft>(() => editing ? { clientId: editing.client.id, date: editing.date, lines: editing.lines.map(l => ({ ...l })), taxRate: editing.taxRate, taxMode: invoiceTotals(editing).taxMode, discountRate: editing.discountRate || 0, advance: editing.advance, payment: normalizePayment(editing.payment), note: editing.note, purchaseOrder: editing.purchaseOrder || "" }
-    : { clientId: clientId ?? getData().requests.find(r => r.id === requestId)?.clientId ?? "", date: todayIso(), lines: [emptyLine()], taxRate: 19.25, taxMode: "ht", discountRate: 0, advance: 0, payment: "Espèces", note: "", purchaseOrder: "" });
+  const [draft, setDraft] = useState<Draft>(() => editing ? { clientId: editing.client.id, date: editing.date, lines: editing.lines.map(l => ({ ...l })), taxRate: editing.taxRate, taxMode: invoiceTotals(editing).taxMode, discountRate: editing.discountRate || 0, advance: editing.advance, payment: normalizePayment(editing.payment), note: editing.note, purchaseOrder: editing.purchaseOrder || "", paymentTerm: termOf(editing) }
+    : { clientId: clientId ?? getData().requests.find(r => r.id === requestId)?.clientId ?? "", date: todayIso(), lines: [emptyLine()], taxRate: 19.25, taxMode: "ht", discountRate: 0, advance: 0, payment: "Espèces", note: "", purchaseOrder: "", paymentTerm: getData().paymentTerm ?? DEFAULT_TERM });
   const [step, setStep] = useState(0), [error, setError] = useState(""), [q, setQ] = useState(""), [form, setForm] = useState<Client | null>(null), [showContract, setShowContract] = useState<Record<string, boolean>>({});
   const set = (p: Partial<Draft>) => { setDraft(v => ({ ...v, ...p })); setError(""); };
   const setLine = (id: string, p: Partial<Line>) => set({ lines: draft.lines.map(l => l.id === id ? { ...l, ...p } : l) });
@@ -35,6 +36,7 @@ export default function Composer({ editId, clientId, requestId, by, onDone, onCa
     if (!lines.length || draft.lines.some(l => !l.designation.trim() && l.unitPrice > 0) || lines.some(l => !Number.isSafeInteger(l.quantity) || l.quantity <= 0 || !Number.isSafeInteger(l.unitPrice) || l.unitPrice < 0)) return [1, "Chaque article doit avoir une désignation, une quantité entière positive et un prix entier."];
     if (upTo < 2) return null;
     if (!Number.isFinite(draft.taxRate) || draft.taxRate < 0 || draft.taxRate > 100 || !Number.isFinite(draft.discountRate) || draft.discountRate < 0 || draft.discountRate > 100) return [2, "La TVA et la remise doivent être comprises entre 0 et 100 %."];
+    if (!Number.isSafeInteger(draft.paymentTerm) || draft.paymentTerm < 0 || draft.paymentTerm > 365) return [2, "Le délai de paiement doit être un nombre de jours entre 0 et 365."];
     if (!Number.isSafeInteger(draft.advance) || draft.advance < 0 || draft.advance > totals.ttc) return [2, `L’avance doit être comprise entre zéro et le total (${money(totals.ttc)}).`];
     if (editing) {
       const previous = d.credits.filter(c => c.invoiceId === editing.id), fin = (ls: Line[]) => JSON.stringify(ls.map(l => ({ id: l.id, quantity: l.quantity, unitPrice: l.unitPrice })));
@@ -48,7 +50,7 @@ export default function Composer({ editId, clientId, requestId, by, onDone, onCa
   function save() {
     const e = check(3); if (e) { setStep(e[0]); setError(e[1]); return; }
     const cur = getData(), lines = draft.lines.filter(l => l.designation.trim()).map(l => ({ ...l }));
-    const data = { date: draft.date, client: { ...chosen! }, company: editing?.company ?? { ...cur.company, logo: "" }, lines, taxRate: draft.taxMode === "ttc" ? draft.taxRate : editing?.taxRate ?? draft.taxRate, taxMode: draft.taxMode, discountRate: draft.discountRate, purchaseOrder: draft.purchaseOrder.trim(), advance: draft.advance, payment: draft.payment, note: draft.note, template: editing?.template ?? { document: fixedModel(cur.format) } };
+    const data = { date: draft.date, client: { ...chosen! }, company: editing?.company ?? { ...cur.company, logo: "" }, lines, taxRate: draft.taxMode === "ttc" ? draft.taxRate : editing?.taxRate ?? draft.taxRate, taxMode: draft.taxMode, discountRate: draft.discountRate, purchaseOrder: draft.purchaseOrder.trim(), advance: draft.advance, payment: draft.payment, note: draft.note, paymentTerm: draft.paymentTerm, template: editing?.template ?? { document: fixedModel(cur.format) } };
     let invoice: Invoice;
     if (editing) {
       const { history, ...previous } = editing; const stamp = nowIso();
@@ -56,7 +58,7 @@ export default function Composer({ editId, clientId, requestId, by, onDone, onCa
       commit(by, x => ({ invoices: x.invoices.map(i => i.id === invoice.id ? invoice : i) }), { text: `Facture ${invoice.number} modifiée, version précédente conservée`, clientId: invoice.client.id, invoiceId: invoice.id });
       toast("Modifications enregistrées. Le numéro et la version précédente sont conservés.");
     } else {
-      invoice = { ...data, id: uid(), number: nextInvoiceNumber(cur, period), createdBy: by };
+      invoice = { ...data, id: uid(), number: nextInvoiceNumber(cur, period), createdBy: by, ...(validated ? { validatedAt: nowIso(), validatedBy: by } : {}) };
       commit(by, x => ({ invoices: [...x.invoices, invoice], month: period, requests: request ? x.requests.map(r => r.id === request.id ? { ...r, readAt: r.readAt ?? nowIso(), resolvedAt: nowIso(), resolvedBy: by, linkedId: invoice.id, response: `Facture ${invoice.number} créée, ${money(invoiceTotals(invoice).ttc)}.` } : r) : x.requests }), { text: `Facture ${invoice.number} émise, ${money(invoiceTotals(invoice).ttc)}`, clientId: invoice.client.id, invoiceId: invoice.id });
       toast(`Facture ${invoice.number} émise.${request ? " La demande du responsable est marquée comme traitée." : ""}`);
     }
@@ -131,6 +133,7 @@ export default function Composer({ editId, clientId, requestId, by, onDone, onCa
             <Field label="Avance versée à la facturation" hint={`Maximum : ${money(totals.ttc)}`}><MoneyInput value={draft.advance} onChange={v => set({ advance: v })} /></Field>
           </div>
           <Field label="Mode de règlement"><Choice columns={5} value={draft.payment} onChange={v => set({ payment: v })} options={[...(!METHODS.includes(draft.payment) ? [{ value: draft.payment, label: draft.payment, sub: "ancien mode" }] : []), ...METHODS.map(m => ({ value: m, label: m }))]} /></Field>
+          <Field label="Délai de paiement" hint={`Usage interne, jamais imprimé sur la facture. Échéance le ${dateValid(draft.date) && Number.isSafeInteger(draft.paymentTerm) ? dateFr(addDays(draft.date, draft.paymentTerm)) : "—"}.`}><NumberInput value={draft.paymentTerm} onChange={v => set({ paymentTerm: v })} unit="jours" /></Field>
           <Field label="Note sur la facture" optional><TextArea rows={2} value={draft.note} onChange={v => set({ note: v })} /></Field>
         </div>}
         {step === 3 && chosen && <div className="cx-review">
@@ -145,6 +148,7 @@ export default function Composer({ editId, clientId, requestId, by, onDone, onCa
             {draft.discountRate > 0 && <p><span>Remise</span><strong>{String(draft.discountRate).replace(".", ",")} %, soit − {money(totals.discount)}</strong></p>}
             {draft.advance > 0 && <p><span>Avance reçue</span><strong>{money(draft.advance)}</strong></p>}
             <p><span>Mode de règlement</span><strong>{draft.payment}</strong></p>
+            <p><span>Échéance (interne)</span><strong>{dateFr(addDays(draft.date, draft.paymentTerm))}, {draft.paymentTerm} jours</strong></p>
             <div className="cx-summary-total"><span>{draft.advance > 0 ? "Reste à payer" : totals.totalLabel}</span><strong>{money(totals.due)}</strong></div>
             {editing && balance(editing, d.payments, d.credits).received > 0 && <p className="cx-muted">Paiements déjà reçus sur cette facture : {money(balance(editing, d.payments, d.credits).received)}.</p>}
           </div>

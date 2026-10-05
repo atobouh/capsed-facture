@@ -110,9 +110,9 @@ const today = () => { const t = new Date().toLocaleDateString("fr-FR", { weekday
 
 function SiteShell({ me, route, nav, onHelp, onSignOut, children }: { me: Account; route: OfficeRoute; nav: (r: OfficeRoute) => void; onHelp: () => void; onSignOut: () => void; children: ReactNode }) {
   const d = useData(), n = pendingCount(d), home = route.name === "clients";
-  const section = route.name === "client" ? "clients" : route.name === "facture" ? (route.extra === "factures" ? "factures" : "clients") : route.name === "valider" ? "factures" : route.name;
+  const section = route.name === "client" ? "clients" : route.name === "facture" ? (route.extra === "factures" ? "factures" : "clients") : route.name === "valider" || route.name === "nouvelle" ? "factures" : route.name;
   const tabs = [{ key: "clients", label: "Accueil", icon: <House size={21} aria-hidden="true" /> }, { key: "factures", label: "Factures", icon: <FileText size={21} aria-hidden="true" />, count: n }, { key: "situation", label: "Situation", icon: <ChartColumn size={21} aria-hidden="true" /> }, { key: "reglages", label: "Réglages", icon: <Settings size={21} aria-hidden="true" /> }];
-  return <div className="cx-site">
+  return <div className={`cx-site${route.name === "nouvelle" ? " cx-site-focus" : ""}`}>
     <header className="cx-site-head cx-noprint">
       <div className="cx-site-bar">
         <button type="button" className="cx-brand" onClick={() => nav({ name: "clients" })}><img src="capsed-logo.png" alt="" width="30" height="30" className="cx-brand-logo" /><span><strong>CAPSED</strong><small>{today()}</small></span></button>
@@ -124,7 +124,7 @@ function SiteShell({ me, route, nav, onHelp, onSignOut, children }: { me: Accoun
       {!home && <p className={`cx-fresh${!d.officeOnline ? " cx-fresh-stale" : ""}`}>{!d.officeOnline ? <><WifiOff size={14} aria-hidden="true" />Bureau hors ligne. Dernières nouvelles {timeFr(d.snapshot.receivedAt)}</> : <><span className="cx-sync-dot" aria-hidden="true" />Données du bureau reçues {ago(d.snapshot.receivedAt)}</>}</p>}
       {children}
     </main>
-    <nav className="cx-bottom-nav cx-noprint" aria-label="Navigation principale">{tabs.map(t => <button type="button" key={t.key} aria-current={section === t.key ? "page" : undefined} className={section === t.key ? "cx-on" : ""} onClick={() => nav({ name: t.key })}>{t.icon}<span>{t.label}</span>{!!t.count && <b className="cx-count">{t.count}</b>}</button>)}</nav>
+{route.name !== "nouvelle" && <nav className="cx-bottom-nav cx-noprint" aria-label="Navigation principale">{tabs.map(t => <button type="button" key={t.key} aria-current={section === t.key ? "page" : undefined} className={section === t.key ? "cx-on" : ""} onClick={() => nav({ name: t.key })}>{t.icon}<span>{t.label}</span>{!!t.count && <b className="cx-count">{t.count}</b>}</button>)}</nav>}
   </div>;
 }
 
@@ -147,6 +147,7 @@ const HELP: Record<string, [string, [string, string][]]> = {
   "responsable:reglages": ["Réglages", [["Équipe", "Ajoutez un membre : l’identifiant et le mot de passe sont créés pour vous. Remettez la fiche en main propre."], ["Entreprise et facture", "Modifiez les coordonnées ou la bannière, puis « Enregistrer ». Cela vaut pour les prochaines factures."], ["Sauvegarde", "Téléchargez une sauvegarde chaque semaine. Elle se restaure sur un autre poste."]]],
   "responsable:situation": ["Situation", [["Qui", "Tous les clients, ou un seul client."], ["Période", "Choisissez les dates."], ["Sortir", "Imprimer, Excel ou CSV."]]],
 };
+HELP["responsable:nouvelle"] = HELP["facturation:compose"];
 function HelpPanel({ role, route, onClose }: { role: Role; route: string; onClose: () => void }) {
   // The full office mode reuses the Facturation and Encaissement help.
   const keys: Role[] = role === "bureau" ? ["facturation", "encaissement"] : [role];

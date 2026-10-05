@@ -23,6 +23,9 @@ Product truth lives in `PRODUCT.md`. This file records the visual system the app
     - Factures: new to validate | every invoice, month by month.
   - Factures is one tab for reading and validating. On top, « Nouveau à valider » lists new or modified invoices and new payments with checkboxes. Below, every invoice the office issued, month by month with two arrows; the search covers all months.
   - Validation is a review, never a gate: nothing not yet validated is blocked or left out of balances and statements. A validated payment can no longer be corrected by Encaissement; a validated invoice stays editable and comes back to validate when it changes. The Direction reads invoices itself and never asks the office for one.
+  - The Direction can also create invoices (« Nouvelle facture » on Factures and on a client page) with the same 4-step composer; its own invoices are validated at creation. The wizard hides the bottom navigation while it is open.
+  - Situation has one switch: « Les clients » (statement with HT, TVA and TTC, on screen and on paper) or « L’équipe » (what each person did in the office apps over a period, then the journal, exportable to Excel).
+  - Payment deadline: 60 days by default, changed by the Direction in Réglages, and per invoice at step 3 of the composer. It is internal only: never printed on the invoice. Lateness (« N j de retard », « Relancer », the aging bar) counts from this deadline.
   - Base 15 px, controls 40–44 px.
 
 ## Principles

@@ -3,14 +3,14 @@ import { Check, FileText, Pencil, Plus, Printer, Undo2 } from "lucide-react";
 import { invoiceTotals } from "../invoice-math";
 import { exportInvoice } from "../receipt-export";
 import { downloadStatement, exportStatementExcel } from "../account-statement";
-import { periodTitle } from "../statement-period";
+import { periodTitle, periodTotals } from "../statement-period";
 import type { StatementPeriod } from "../statement-period";
 import { Button, Confirm, CreditPaperView, DateInput, Empty, Field, Modal, MonthStepper, MoreMenu, Notice, PageHead, Paper, Row, SearchBox, Stamp, StatementPaper, StatusChip, TextArea, Timeline, matches, toast, useWide } from "./ui";
 import { ClientAccount, ClientForm, ClientsDirectory } from "./clients";
 import type { OfficeRoute } from "./clients";
 import Composer from "./composer";
 import { CreditModal, CreditPicker, PaymentModal } from "./payments";
-import { REQUEST_LABEL, accountName, balance, canBill, canCash, commit, receives, dateFr, dateValid, delivery, methodName, monthLabel, money, nowIso, timeFr, todayIso, useData } from "./store";
+import { REQUEST_LABEL, accountName, balance, canBill, canCash, commit, receives, dateFr, dateValid, delivery, dueDateOf, overdueDays, termOf, methodName, monthLabel, money, nowIso, timeFr, todayIso, useData } from "./store";
 import type { Data, Request, Role } from "./store";
 import { words } from "./words";
 
@@ -104,6 +104,7 @@ function InvoicePanel({ id, role, by, nav }: { id: string; role: Role; by: strin
       {b.credited > 0 && <div><dt>Avoirs</dt><dd>− {money(b.credited)}</dd></div>}
       <div><dt>{b.refund > 0 ? "À rendre au client" : "Reste à payer"}</dt><dd className="cx-strong">{money(b.refund || b.due)}</dd></div>
       <div><dt>Remise au client</dt><dd className={deliv ? "" : "cx-warn-text"}>{deliv ? `Le ${dateFr(deliv.declaredAt)}, par ${accountName(deliv.by)}` : "Pas encore"}</dd></div>
+      <div><dt>Échéance (interne)</dt><dd className={b.due > 0 && overdueDays(i) > 0 ? "cx-bad-text" : ""}>{dateFr(dueDateOf(i))}, {termOf(i)} jours{b.due > 0 && overdueDays(i) > 0 ? `, ${overdueDays(i)} j de retard` : ""}</dd></div>
       <div><dt>Vue par la Direction</dt><dd className={i.validatedAt ? "" : "cx-muted"}>{i.validatedAt ? `Validée le ${dateFr(i.validatedAt)}` : "Pas encore, rien n’est bloqué"}</dd></div>
     </dl>
     <div className="cx-panel-paper"><Paper invoice={i} title={`Facture ${i.number}`} /></div>
@@ -139,6 +140,7 @@ export function InvoiceView({ id, role, by, nav, pane }: { id: string; role: Rol
       <div><dt>Reçu</dt><dd>{money(b.received)}</dd></div>
       {b.credited > 0 && <div><dt>Avoirs</dt><dd>− {money(b.credited)}</dd></div>}
       <div><dt>{b.refund > 0 ? "À rendre au client" : "Reste à payer"}</dt><dd className="cx-strong">{money(b.refund || b.due)}</dd></div>
+      <div><dt>Échéance (interne)</dt><dd className={b.due > 0 && overdueDays(i) > 0 ? "cx-bad-text" : ""}>{dateFr(dueDateOf(i))}{b.due > 0 && overdueDays(i) > 0 ? `, ${overdueDays(i)} j de retard` : ""}</dd></div>
     </dl>
     <div className={`cx-delivery cx-noprint${deliv ? " cx-delivery-done" : ""}`}>{deliv ? <p><Stamp tone="plum">Remise</Stamp>au client le {dateFr(deliv.declaredAt)} par {accountName(deliv.by)}</p>
       : biller ? <><p><strong>Pas encore remise au client.</strong> Une fois donnée, notez-le ici.</p><Button kind="secondary" icon={<Check size={18} aria-hidden="true" />} onClick={() => { commit(by, x => ({ invoiceDeliveries: [...x.invoiceDeliveries, { invoiceId: i.id, declaredAt: nowIso(), by }] }), { text: `Facture ${i.number} remise au client`, clientId: i.client.id, invoiceId: i.id }); toast("Facture marquée comme remise au client."); }}>Marquer comme remise</Button></> : <p className="cx-muted">Pas encore remise au client.</p>}</div>
@@ -177,6 +179,8 @@ export function Situation({ data, clientId: initial, fixedClient, onBack }: { da
       <label className="cx-month"><span>Au</span><DateInput value={period.to} min={period.from} onChange={v => setPeriod(p => ({ ...p, to: v }))} /></label>
       <div className="cx-quick"><button type="button" className="cx-pill" onClick={() => setPeriod({ from: todayIso().slice(0, 8) + "01", to: todayIso() })}>Ce mois-ci</button><button type="button" className="cx-pill" onClick={() => setPeriod({ from: year + "-01-01", to: todayIso() })}>Cette année</button></div>
     </div>
+    {valid && (() => { const t = periodTotals(clientId ? data.invoices.filter(i => i.client.id === clientId) : data.invoices, data.payments, data.credits, period);
+      return <dl className="cx-strip cx-noprint" aria-label="Totaux de la période"><div><dt>Facturé HT</dt><dd>{money(t.ht)}</dd></div><div><dt>TVA</dt><dd>{money(t.tax)}</dd></div><div><dt>Facturé TTC</dt><dd>{money(t.total)}</dd></div><div><dt>Reçu</dt><dd>{money(t.received)}</dd></div><div><dt>Reste à recevoir</dt><dd className="cx-strong">{money(t.due)}</dd></div></dl>; })()}
     {valid ? <StatementPaper d={data} clientId={clientId} period={period} /> : <Notice tone="bad">La date de début doit être avant la date de fin.</Notice>}
   </div>;
 }

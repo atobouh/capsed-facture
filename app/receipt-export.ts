@@ -13,7 +13,7 @@ function zip(files:Record<string,string>){
  return new Blob([...chunks,...central,end] as BlobPart[],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
 }
 export function downloadExcel(rows:Cell[][],filename:string){
- const invoice=filename.startsWith("facture-"),widths=invoice?[48,27,13,19,20]:rows[1]?.length===7?[34,19,19,19,19,21,19]:[17,37,42,21,24,21],count=widths.length;
+ const invoice=filename.startsWith("facture-"),head=(rows[1]??[]).map(String),widths=invoice?[48,27,13,19,20]:head[0]==="Client"?[30,17,15,17,15,15,15,19,15].slice(0,head.length):head[0]==="Date"&&head[1]==="Écriture"?[13,32,38,17,17,20,17].slice(0,head.length):head.map(h=>h==="Action"?70:22),count=widths.length;
  const col=(n:number):string=>n<26?String.fromCharCode(65+n):col(Math.floor(n/26)-1)+String.fromCharCode(65+n%26);
  const last=col(count-1),header=invoice?rows.findIndex(r=>r[0]==="Désignation"):1,tableEndIndex=rows.findIndex((r,i)=>i>header&&!r.length),tableEnd=tableEndIndex<0?rows.length:tableEndIndex;
  const merges:string[]=[],cell=(value:Cell,r:number,c:number,style:number)=>{const ref=col(c)+(r+1);if(typeof value==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&((!invoice&&c===0)||(invoice&&rows[r][0]==="Date"&&c===1))){value=(Date.parse(value+"T00:00:00Z")-Date.UTC(1899,11,30))/86400000;style=invoice?20:r%2?22:21;}return typeof value==="number"&&Number.isFinite(value)?'<c r="'+ref+'" s="'+style+'"><v>'+value+'</v></c>':'<c r="'+ref+'" s="'+style+'" t="inlineStr"><is><t xml:space="preserve">'+xml(value)+'</t></is></c>';};

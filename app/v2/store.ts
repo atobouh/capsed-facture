@@ -37,6 +37,7 @@ export type Data = {
 };
 
 export const METHODS = ["Chèque", "Virement", "OM", "MoMo", "Espèces"];
+export const methodName = (m: string) => ({ OM: "Orange Money", MoMo: "MTN MoMo" } as Record<string, string>)[m] ?? m;
 export const REFERENCE_HINT: Record<string, string> = { "Chèque": "Numéro du chèque", "Virement": "Référence du virement", "OM": "ID de transaction Orange Money", "MoMo": "ID de transaction MTN MoMo", "Espèces": "Note (facultatif)" };
 
 const KEY = "capsed-v2";

@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { CircleHelp, ClipboardCheck, Eye, EyeOff, FileText, Inbox, LogOut, Printer, Settings, Users, Wallet, WifiOff } from "lucide-react";
+import { ChartColumn, CircleHelp, ClipboardCheck, Eye, EyeOff, FileText, House, Inbox, LogOut, Settings, Users, Wallet, WifiOff } from "lucide-react";
 import { Button, Modal, ToastHost, Field, Notice } from "./ui";
 import { OfficeScreen } from "./office";
 import type { OfficeRoute } from "./clients";
 import { ResponsableScreen, pendingCount } from "./responsable";
 import type { RRoute } from "./responsable";
-import { ROLE_LABEL, ago, getData, hoursSince, timeFr, useData } from "./store";
+import { ROLE_LABEL, ago, getData, timeFr, useData } from "./store";
 import type { Account, Role } from "./store";
 
 const SESSION = "capsed-v2-session";
@@ -86,37 +86,39 @@ function OfficeShell({ me, route, nav, onHelp, onSignOut, children }: { me: Acco
   }, [me.role, nav, onHelp, route.name]);
   return <div className="cx-office">
     <aside className="cx-sidebar cx-noprint">
-      <div className="cx-brand"><img src="capsed-logo.png" alt="" width="44" height="44" className="cx-brand-logo" /><div><strong>CAPSED</strong><small>{ROLE_LABEL[me.role]}</small></div></div>
+      <div className="cx-brand"><img src="capsed-logo.png" alt="" width="32" height="32" className="cx-brand-logo" /><div><strong>CAPSED</strong><small>{ROLE_LABEL[me.role]}</small></div></div>
       <nav aria-label="Navigation principale">{items.map(i => <button type="button" key={i.key} aria-current={section === i.key ? "page" : undefined} className={section === i.key ? "cx-on" : ""} onClick={() => nav({ name: i.key })}>{i.icon}<span>{i.label}</span>{!!i.count && <b className="cx-count" aria-label={`${i.count} à traiter`}>{i.count}</b>}</button>)}</nav>
       <div className="cx-sidebar-foot">
-        <div className="cx-user"><span className="cx-avatar" aria-hidden="true">{me.name.slice(0, 1)}</span><div><strong>{me.name}</strong><button type="button" onClick={onSignOut}>Se déconnecter</button></div></div>
+        <p className={`cx-sync${d.officeOnline ? "" : " cx-sync-off"}`}>{d.officeOnline ? <><span className="cx-sync-dot" aria-hidden="true" />Synchronisé avec la Direction</> : <><WifiOff size={14} aria-hidden="true" />Hors ligne, saisies gardées ici</>}</p>
+        <div className="cx-user"><span className="cx-avatar" aria-hidden="true">{initials(me.name)}</span><div><strong>{me.name}</strong><button type="button" onClick={onSignOut}>Se déconnecter</button></div></div>
       </div>
     </aside>
     <main className="cx-content" id="contenu" tabIndex={-1}>{children}</main>
     <footer className="cx-statusbar cx-noprint">
-      <span className={`cx-sync${d.officeOnline ? "" : " cx-sync-off"}`}>{d.officeOnline ? <><span className="cx-sync-dot" aria-hidden="true" />Connecté à la Direction</> : <><WifiOff size={15} aria-hidden="true" />Hors ligne : vos saisies sont gardées sur ce poste</>}</span>
+      <span>Données enregistrées sur ce poste</span>
       <span className="cx-status-keys" aria-hidden="true">{me.role === "facturation" && <span><kbd>Ctrl</kbd> <kbd>N</kbd> nouvelle facture</span>}<span><kbd>Ctrl</kbd> <kbd>F</kbd> chercher</span></span>
-      <button type="button" onClick={onHelp}><CircleHelp size={16} aria-hidden="true" />Aide <kbd>F1</kbd></button>
+      <button type="button" onClick={onHelp}><CircleHelp size={15} aria-hidden="true" />Aide <kbd>F1</kbd></button>
     </footer>
   </div>;
 }
 
+const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
+const today = () => { const t = new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }); return t.charAt(0).toUpperCase() + t.slice(1); };
+
 function SiteShell({ me, route, nav, onHelp, onSignOut, children }: { me: Account; route: OfficeRoute; nav: (r: OfficeRoute) => void; onHelp: () => void; onSignOut: () => void; children: ReactNode }) {
-  const d = useData(), hours = hoursSince(d.snapshot.receivedAt), n = pendingCount(d);
-  const stale = !d.officeOnline || hours > 4;
+  const d = useData(), n = pendingCount(d), home = route.name === "clients";
   const section = route.name === "client" || route.name === "facture" ? "clients" : route.name;
-  const tabs = [{ key: "clients", label: "Clients", icon: <Users size={21} aria-hidden="true" /> }, { key: "valider", label: "À valider", icon: <ClipboardCheck size={21} aria-hidden="true" />, count: n }, { key: "situation", label: "Situation", icon: <Printer size={21} aria-hidden="true" /> }, { key: "reglages", label: "Réglages", icon: <Settings size={21} aria-hidden="true" /> }];
+  const tabs = [{ key: "clients", label: "Accueil", icon: <House size={21} aria-hidden="true" /> }, { key: "valider", label: "À valider", icon: <ClipboardCheck size={21} aria-hidden="true" />, count: n }, { key: "situation", label: "Situation", icon: <ChartColumn size={21} aria-hidden="true" /> }, { key: "reglages", label: "Réglages", icon: <Settings size={21} aria-hidden="true" /> }];
   return <div className="cx-site">
     <header className="cx-site-head cx-noprint">
       <div className="cx-site-bar">
-        <div className="cx-brand"><img src="capsed-logo.png" alt="" width="36" height="36" className="cx-brand-logo" /><div><strong>CAPSED</strong><small>Direction</small></div></div>
+        <button type="button" className="cx-brand" onClick={() => nav({ name: "clients" })}><img src="capsed-logo.png" alt="" width="30" height="30" className="cx-brand-logo" /><span><strong>CAPSED</strong><small>{today()}</small></span></button>
         <nav className="cx-site-tabs" aria-label="Navigation principale">{tabs.map(t => <button type="button" key={t.key} aria-current={section === t.key ? "page" : undefined} className={section === t.key ? "cx-on" : ""} onClick={() => nav({ name: t.key })}>{t.label}{!!t.count && <b className="cx-count">{t.count}</b>}</button>)}</nav>
-        <div className="cx-site-user"><button type="button" className="cx-icon-btn" onClick={onHelp} aria-label="Aide sur cette page"><CircleHelp size={22} /></button><button type="button" className="cx-signout" onClick={onSignOut} title={me.name} aria-label="Se déconnecter"><LogOut size={20} aria-hidden="true" /><span>Se déconnecter</span></button></div>
+        <div className="cx-site-user"><button type="button" className="cx-round-btn" onClick={onHelp} aria-label="Aide sur cette page" title="Aide"><CircleHelp size={19} /></button><button type="button" className="cx-round-btn" onClick={onSignOut} aria-label={`Se déconnecter (${me.name})`} title="Se déconnecter"><LogOut size={18} /></button></div>
       </div>
-      <div className="cx-rule" aria-hidden="true" />
     </header>
     <main className="cx-site-main" id="contenu">
-      <p className={`cx-fresh${stale ? " cx-fresh-stale" : ""}`}>{!d.officeOnline ? <><WifiOff size={15} aria-hidden="true" />Bureau hors ligne. Dernières nouvelles {timeFr(d.snapshot.receivedAt)}</> : <><span className="cx-sync-dot" aria-hidden="true" />Mis à jour {ago(d.snapshot.receivedAt)}</>}</p>
+      {!home && <p className={`cx-fresh${!d.officeOnline ? " cx-fresh-stale" : ""}`}>{!d.officeOnline ? <><WifiOff size={14} aria-hidden="true" />Bureau hors ligne. Dernières nouvelles {timeFr(d.snapshot.receivedAt)}</> : <><span className="cx-sync-dot" aria-hidden="true" />Données du bureau reçues {ago(d.snapshot.receivedAt)}</>}</p>}
       {children}
     </main>
     <nav className="cx-bottom-nav cx-noprint" aria-label="Navigation principale">{tabs.map(t => <button type="button" key={t.key} aria-current={section === t.key ? "page" : undefined} className={section === t.key ? "cx-on" : ""} onClick={() => nav({ name: t.key })}>{t.icon}<span>{t.label}</span>{!!t.count && <b className="cx-count">{t.count}</b>}</button>)}</nav>

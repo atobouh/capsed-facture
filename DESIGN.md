@@ -1,41 +1,73 @@
 # CAPSED — design system (v2)
 
-Product truth lives in `PRODUCT.md`. This file records the visual system the app now uses. Mode: **Operate** (people complete tasks). Built with the installed skills in `.claude/skills/` (impeccable, frontend-design, web-design-guidelines, ui-ux-pro-max); run `/impeccable critique` or `/web-design-guidelines app/v2` before shipping UI changes.
+Product truth lives in `PRODUCT.md`. This file records the visual system the app now uses. Mode: **Operate** (people complete tasks). Tone: a calm, premium business tool (references studied: Odoo, Invoice Ninja, Xero, Linear, Stripe dashboard). Built with the installed skills in `.claude/skills/` (impeccable, frontend-design, web-design-guidelines, ui-ux-pro-max); run `/impeccable critique` or `/web-design-guidelines app/v2` before shipping UI changes.
 
 ## Two surfaces
 
-- **Office (Facturation, Encaissement): a desktop window** (future Tauri app). Fixed frame: plum left pane with labelled destinations, one scrolling work area, a status bar (sync state, shortcuts, help). Shortcuts: F1 help, Ctrl+F search on this page, Ctrl+N new invoice. From 1180 px the lists sit beside their detail (list/details, Microsoft Fluent pattern): click a row on the left, the invoice, credit note, client account or request appears whole on the right. Narrower windows stack the same pages. Base 16 px, controls 46 px.
-- **Direction: a website, phone first.** Normal page scroll (never `overflow:hidden` on html/body), sticky plum header, large bottom bar on phones, two columns from 1024 px. Base 17 px, controls 52 px, bottom sheets for forms on phones.
+- **Office (Facturation, Encaissement): a desktop window** (future Tauri app).
+  - Frame: light 232 px sidebar (logo, labelled destinations, sync state, user and « Se déconnecter »), one scrolling work area `#contenu`, a status bar (« Données enregistrées sur ce poste », shortcuts, help).
+  - Every page has a sticky white header bar: title, tools (month, search), actions on the right.
+  - Shortcuts: F1 help, Ctrl+F search on this page, Ctrl+N new invoice.
+  - Split views:
+    - Register: invoice table with an invoice panel on the right, from 1360 px.
+    - Clients: client list beside the account, from 1180 px.
+    - Demandes: list beside the detail.
+  - Narrower windows open the same page full width. Base 14 px, controls 32 px.
+- **Direction: a website**, with a phone layout and a desktop layout.
+  - It uses normal page scroll: never `overflow:hidden` on html/body.
+  - Phones: bottom navigation (Accueil, À valider, Situation, Réglages); the validation total bar sits above it. Forms open as bottom sheets.
+  - From 1024 px: tabs in the header and two columns:
+    - Home: hero and « À faire » | clients.
+    - Client: balance and actions | invoices and payments.
+    - Validate: payments | requests.
+  - Base 15 px, controls 40–44 px.
 
 ## Principles
 
-1. No tab strips. One page per question, with subheadings; rare or finished things collapse at the bottom (archived clients, handled requests). Research basis: NN/g lower-literacy users read word by word and miss options; tabs only when users never compare groups.
-2. One primary button per screen, top right of the toolbar (first on phones). Rare actions in « Autres actions ».
-3. Each role only sees its own menu: Facturation (Factures, Clients, Demandes), Encaissement (Clients et paiements, Demandes), Direction (Clients, À valider, Situation, Réglages).
-4. Final states are stamped like an office cachet (`Stamp`): Payée, Tout payé, Traitée in green ink; Annulé in red; Validé and Remise in plum. States still moving are soft pills (À payer, Partiellement réglée, Nouvelle). The stamp lands with one short ease-out in headings; lists show it still.
-5. The A4 document is always shown whole, scaled to the width (`FitPaper`), never cropped or scrolled inside a box.
+1. No tab strips inside a page. One page per question, with subheadings; rare or finished things collapse at the bottom (paid invoices, archived clients, handled requests, history).
+2. One primary button per screen. Rare actions go in the « ⋯ » menu. The menu is portalled and fixed, flips to stay on screen and never gets clipped.
+3. Each role only sees its own menu:
+   - Facturation: Factures, Clients, Demandes.
+   - Encaissement: Clients et paiements, Demandes.
+   - Direction: Accueil, À valider, Situation, Réglages.
+4. Status pills:
+   - Settled states take the green pill: Payée, Validé par la Direction (with a lock), Traitée.
+   - Moving states take a warm or blue pill: À payer, Partiellement réglée, Nouvelle.
+   - Late states take a red pill: « 61 j de retard ».
+5. The A4 document is always shown whole, scaled to the width (`FitPaper`), never cropped and never restyled.
 6. Serious actions confirm with their exact effect. Nothing is deleted.
-7. The month is chosen with two arrows (`MonthStepper`), never a browser calendar that speaks the system language.
-8. Tables turn into one card per line when their panel is narrower than 760 px (container query), on phones and in detail panes alike.
+7. The month is chosen with two arrows (`MonthStepper`).
+8. Forms that edit a record (client, payment, credit note, request, member) open as a right-hand drawer, or a bottom sheet under 640 px. Confirmations stay centred.
+9. Tables adapt to their container, not the window:
+   - Under 880 px the date column hides.
+   - Under 700 px the amount column of an account hides.
+   - Under 560 px each line becomes a card.
+10. No button may wrap or be cut. Every release is checked with the Playwright audit at 1440/1280/1024 (office) and 1440/1024/768/390/360 (Direction). The audit reports cut text, elements off screen, clipped elements, horizontal page scroll and menus off screen.
 
 ## Tokens (`app/v2/v2.css`)
 
 | Token | Value | Use |
 | --- | --- | --- |
-| `--bg` | #f3f0f7 | page ground |
-| `--surface` | #ffffff | cards, inputs |
-| `--plum-900` / `--plum-800` | #33113f / #471a58 | side menu, Direction header, hero |
-| `--plum` | #6e2882 | primary, selection (CAPSED letterhead) |
-| `--azure` | #0a7fbf | signature rule, client initials |
-| `--ink` / `--ink-2` / `--muted` | #1f1428 / #463b52 / #655b72 | text levels |
-| `--line` / `--line-2` | #e6dfee / #d3c9de | dividers / control borders |
-| `--good` `--warn` `--bad` `--info` | #17703f #8a5200 #b3261e #0a6aa1 | status pills and notices |
-| radius | 14 px controls, 20 px cards, 24 px dialogs | |
+| `--bg` | #F6F5F7 | page ground |
+| `--surface` | #FFFFFF | cards, header bars, inputs |
+| `--ink` / `--muted` | #1B1820 / #6F6878 | text levels |
+| `--line` | #E7E4EA | dividers, card borders |
+| `--plum` | #5E3A6B | primary, selection, links (dimmed CAPSED plum) |
+| `--plum-tint` / `--plum-soft` | #F4EFF5 / #EADFEC | selected row, active nav |
+| `--aubergine` | #3A2443 | Direction hero, sign-in panel |
+| good | #1F6B42 on #E6F2EA | paid, validated |
+| warn | #8A5A0B on #FBF0DC | partially paid, new |
+| bad | #A8322A on #FBE9E7 | late, cancel |
+| info | #1F5F86 on #E7F0F6 | to pay, read |
+| radius | 8 px controls, 12 px cards, 999 px pills | |
 
-Type: **Lexend** (self-hosted in `public/fonts`, plain zero, fluent for low-literacy readers), weights 400 to 800. Playfair Display for the CAPSED wordmark (menu, header, sign-in), echoing the letterhead.
-
-Signature: the letterhead's double rule (plum over azure) under the brand, on the hero card and the sign-in top edge.
+Type: **Geist** variable (self-hosted in `public/fonts/Geist-Variable.woff2`, OFL), weights 400/500/600 only, tabular numbers for amounts. Playfair Display for the CAPSED wordmark on the sign-in page, echoing the letterhead.
 
 ## Components
 
-Window frame and status bar (office), list/details split, `Row` (list pane row with current state), `Stamp`, `MonthStepper`, button (primary / secondary / quiet / link), text button, field with visible label and inline error, money input with live spacing, choice (radio cards; compact without dot for 5 options), search, segmented tabs, hero card, alert cards, client initials, bottom bar (phone), panel + table, list row (main text left, amount right), facts row, notice, disclosure, modal (focused tasks only: payment, credit note, confirmation, request), toast (bottom centre).
+- **Window and layout:** window frame and status bar (office), sticky page header with tools, `.cx-strip` totals, list/details splits, side panel.
+- **Lists and tables:** `.cx-table` (container-query responsive), `Row` (list row with current state), `.cx-kv` key/value lines, `.cx-fold` disclosure.
+- **Status and feedback:** pill (`Chip` / `Stamp`), notice, toast.
+- **Controls:** `MonthStepper`, `SearchBox`, button (primary / secondary / quiet / link / icon), field with visible label and inline error, money input with live spacing, choice (radio cards; segmented compact for 5 payment modes), `MoreMenu`.
+- **Overlays:** `Modal` (centred confirm, `side` drawer, phone bottom sheet).
+- **Direction:** hero with aging bar, payment check cards, total action bar.

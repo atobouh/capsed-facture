@@ -15,21 +15,25 @@ Product truth lives in `PRODUCT.md`. This file records the visual system the app
   - Narrower windows open the same page full width. Base 14 px, controls 32 px.
 - **Direction: a website**, with a phone layout and a desktop layout.
   - It uses normal page scroll: never `overflow:hidden` on html/body.
-  - Phones: bottom navigation (Accueil, À valider, Situation, Réglages); the validation total bar sits above it. Forms open as bottom sheets.
+  - Phones: bottom navigation (Accueil, Factures, Situation, Réglages); the validation total bar sits above it. Forms open as bottom sheets.
   - From 1024 px: tabs in the header and two columns:
     - Home: hero and « À faire » | clients.
     - Client: balance and actions | invoices and payments.
-    - Validate: payments | requests.
+    - Invoice: payment summary | the whole A4 document, payments, history.
+    - Factures: new to validate | every invoice, month by month.
+  - Factures is one tab for reading and validating. On top, « Nouveau à valider » lists new or modified invoices and new payments with checkboxes. Below, every invoice the office issued, month by month with two arrows; the search covers all months.
+  - Validation is a review, never a gate: nothing not yet validated is blocked or left out of balances and statements. A validated payment can no longer be corrected by Encaissement; a validated invoice stays editable and comes back to validate when it changes. The Direction reads invoices itself and never asks the office for one.
   - Base 15 px, controls 40–44 px.
 
 ## Principles
 
 1. No tab strips inside a page. One page per question, with subheadings; rare or finished things collapse at the bottom (paid invoices, archived clients, handled requests, history).
 2. One primary button per screen. Rare actions go in the « ⋯ » menu. The menu is portalled and fixed, flips to stay on screen and never gets clipped.
-3. Each role only sees its own menu:
+3. The office app lists every tab once (Factures, Clients / Clients et paiements, Demandes) and the login decides which show (`canBill`, `canCash` in `store.ts`):
    - Facturation: Factures, Clients, Demandes.
    - Encaissement: Clients et paiements, Demandes.
-   - Direction: Accueil, À valider, Situation, Réglages.
+   - Facturation et encaissement (full mode, role `bureau`): Factures, Clients et paiements, Demandes, with both sets of actions.
+   - Direction: Accueil, Factures, Situation, Réglages.
 4. Status pills:
    - Settled states take the green pill: Payée, Validé par la Direction (with a lock), Traitée.
    - Moving states take a warm or blue pill: À payer, Partiellement réglée, Nouvelle.

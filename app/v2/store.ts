@@ -7,14 +7,22 @@ import type { InvoiceFormat } from "../invoice-format";
 import type { CreditNote } from "../credit-note";
 
 /* Data stays compatible with the first prototype ("capsed-facture-v1"), so its backups restore here. */
-export type Role = "facturation" | "encaissement" | "responsable";
+/** "bureau" is the full office mode: Facturation and Encaissement in one login. */
+export type Role = "facturation" | "encaissement" | "bureau" | "responsable";
 export type Account = { id: string; name: string; role: Role; login: string; password: string; active: boolean; createdAt: string; passwordAt: string };
-export const ROLE_LABEL: Record<Role, string> = { facturation: "Facturation", encaissement: "Encaissement", responsable: "Responsable" };
+export const ROLE_LABEL: Record<Role, string> = { facturation: "Facturation", encaissement: "Encaissement", bureau: "Facturation et encaissement", responsable: "Responsable" };
+/** What a login may do in the office app. Every tab exists once; the login decides which ones show. */
+export const canBill = (r: Role) => r === "facturation" || r === "bureau";
+export const canCash = (r: Role) => r === "encaissement" || r === "bureau";
+/** Requests addressed to Facturation or Encaissement also reach the full office mode. */
+export const receives = (r: Role, to: Role) => to === r || (r === "bureau" && (to === "facturation" || to === "encaissement"));
 
 export type Client = { id: string; name: string; contact: string; address: string; phone: string; email: string; niu: string; rc: string; archived?: boolean; archivedAt?: string };
 export type Company = { name: string; subtitle: string; address: string; phone: string; email: string; niu: string; rc: string; website: string; logo: string };
 export type Line = { id: string; contract: string; designation: string; destination: string; quantity: number; unitPrice: number };
-export type Invoice = { id: string; number: string; date: string; client: Client; company: Company; lines: Line[]; taxRate: number; advance: number; payment: string; note: string; taxMode?: TaxMode; discountRate?: number; purchaseOrder?: string; revisedAt?: string; history?: Invoice[] & { savedAt?: string }[]; template?: unknown; createdBy?: string };
+export type Invoice = { id: string; number: string; date: string; client: Client; company: Company; lines: Line[]; taxRate: number; advance: number; payment: string; note: string; taxMode?: TaxMode; discountRate?: number; purchaseOrder?: string; revisedAt?: string; history?: Invoice[] & { savedAt?: string }[]; template?: unknown; createdBy?: string;
+  /** Seen and approved by the Direction. Never required: an invoice not validated is used everywhere like any other. */
+  validatedAt?: string; validatedBy?: string };
 export type PaymentRevision = { amount: number; date: string; method: string; reference: string; savedAt: string; by?: string };
 export type Payment = { id: string; invoiceId: string; amount: number; date: string; method: string; reference: string; cancelledAt?: string; cancelledBy?: string; lockedAt?: string; revisedAt?: string; history?: PaymentRevision[]; by?: string; at?: string };
 export type Delivery = { invoiceId: string; declaredAt: string; by?: string; cancelledAt?: string; cancelledBy?: string };
@@ -78,6 +86,7 @@ function seed(): Data {
     inv("i5", 2, clients[3], [["", "Traitement phytosanitaire\nConteneur TRHU 411783-8", "Norfolk", 1, 650000]]),
     inv("i6", 1, clients[1], [["CTE1207131", "Fourniture de pesticides", "Bonapriso", 6, 45000]]),
   ];
+  invoices.slice(0, 4).forEach((i, k) => { i.validatedAt = at([60, 33, 20, 8][k]); i.validatedBy = "u-dir"; });
   const pay = (id: string, i: Invoice, amount: number, method: string, reference: string, d: number, locked: boolean): Payment => ({ id, invoiceId: i.id, amount, method, reference, date: day(d), by: "u-paul", at: at(d), lockedAt: locked ? at(d - 1) : undefined });
   const payments = [
     pay("p1", invoices[0], 600000, "Chèque", "0045871", 40, true),
@@ -94,6 +103,7 @@ function seed(): Data {
   const accounts: Account[] = [
     { id: "u-awa", name: "Awa Ngo", role: "facturation", login: "awa", password: "CAP-7421", active: true, createdAt: at(120), passwordAt: at(120) },
     { id: "u-paul", name: "Paul Ekane", role: "encaissement", login: "paul", password: "CAP-5308", active: true, createdAt: at(120), passwordAt: at(120) },
+    { id: "u-bureau", name: "Rose Tchami", role: "bureau", login: "rose", password: "CAP-4826", active: true, createdAt: at(120), passwordAt: at(120) },
     { id: "u-dir", name: "La Direction", role: "responsable", login: "direction", password: "CAP-9160", active: true, createdAt: at(120), passwordAt: at(120) },
   ];
   const requests: Request[] = [{ id: "r1", kind: "paiement", to: "encaissement", createdAt: at(1), by: "u-dir", clientId: "c1", clientName: "EFMK SARL", invoiceId: "i1", invoiceNumber: invoices[0].number, amount: 500000, paymentDate: day(3), method: "Virement", reference: "", message: "Le client dit avoir viré le solde la semaine dernière.", receivedAt: at(1) }];
@@ -114,8 +124,13 @@ export function fromBackup(d: Record<string, unknown>, keep?: Data): Data {
   };
 }
 function load(): Data {
-  try { const raw = localStorage.getItem(KEY); if (raw) { const d = JSON.parse(raw); if (d?.version === 2 && d.accounts && d.snapshot) return d; } } catch { /* stockage indisponible */ }
+  try { const raw = localStorage.getItem(KEY); if (raw) { const d = JSON.parse(raw); if (d?.version === 2 && d.accounts && d.snapshot) return withDemoAccounts(d); } } catch { /* stockage indisponible */ }
   return seed();
+}
+/** Demo data saved before the full office mode existed gets its demo login too. */
+function withDemoAccounts(d: Data): Data {
+  if (!d.accounts.some((a: Account) => a.id === "u-awa") || d.accounts.some((a: Account) => a.id === "u-bureau")) return d;
+  return { ...d, accounts: [...d.accounts, seed().accounts.find(a => a.id === "u-bureau")!] };
 }
 let state: Data | null = null;
 const listeners = new Set<() => void>();

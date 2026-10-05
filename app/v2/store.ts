@@ -22,7 +22,9 @@ export type Company = { name: string; subtitle: string; address: string; phone: 
 export type Line = { id: string; contract: string; designation: string; destination: string; quantity: number; unitPrice: number };
 export type Invoice = { id: string; number: string; date: string; client: Client; company: Company; lines: Line[]; taxRate: number; advance: number; payment: string; note: string; taxMode?: TaxMode; discountRate?: number; purchaseOrder?: string; revisedAt?: string; history?: Invoice[] & { savedAt?: string }[]; template?: unknown; createdBy?: string;
   /** Seen and approved by the Direction. Never required: an invoice not validated is used everywhere like any other. */
-  validatedAt?: string; validatedBy?: string };
+  validatedAt?: string; validatedBy?: string;
+  /** Internal payment deadline in days. Never printed on the invoice. */
+  paymentTerm?: number };
 export type PaymentRevision = { amount: number; date: string; method: string; reference: string; savedAt: string; by?: string };
 export type Payment = { id: string; invoiceId: string; amount: number; date: string; method: string; reference: string; cancelledAt?: string; cancelledBy?: string; lockedAt?: string; revisedAt?: string; history?: PaymentRevision[]; by?: string; at?: string };
 export type Delivery = { invoiceId: string; declaredAt: string; by?: string; cancelledAt?: string; cancelledBy?: string };
@@ -42,6 +44,8 @@ export type Data = {
   version: 2; company: Company; format: InvoiceFormat; clients: Client[]; invoices: Invoice[]; payments: Payment[]; credits: CreditNote[];
   invoiceDeliveries: Delivery[]; closedMonths: string[]; month: string; requests: Request[]; events: Event[]; accounts: Account[];
   officeOnline: boolean; snapshot: Snapshot;
+  /** Default internal payment deadline in days, set by the Direction. */
+  paymentTerm?: number;
 };
 
 export const METHODS = ["Chèque", "Virement", "OM", "MoMo", "Espèces"];
@@ -60,6 +64,13 @@ export const monthLabel = (m: string) => new Date(m + "-01T12:00:00").toLocaleDa
 export const daysSince = (d: string) => Math.max(0, Math.floor((Date.now() - new Date(d.length === 10 ? d + "T12:00:00" : d).getTime()) / 864e5));
 export const hoursSince = (iso: string) => (Date.now() - new Date(iso).getTime()) / 36e5;
 export function ago(d: string) { const m = Math.floor((Date.now() - new Date(d).getTime()) / 60000); if (m < 1) return "à l’instant"; if (m < 60) return `il y a ${m} min`; const h = Math.floor(m / 60); if (h < 24) return `il y a ${h} h`; const j = Math.floor(h / 24); return j === 1 ? "hier" : `il y a ${j} jours`; }
+export const DEFAULT_TERM = 60;
+export const addDays = (date: string, n: number) => { const t = new Date(date + "T12:00:00"); t.setDate(t.getDate() + n); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`; };
+/** Payment deadline: the invoice's own, else the Direction's default. Internal only, never on the paper. */
+export const termOf = (i: { paymentTerm?: number }) => i.paymentTerm ?? getData().paymentTerm ?? DEFAULT_TERM;
+export const dueDateOf = (i: { date: string; paymentTerm?: number }) => addDays(i.date, termOf(i));
+/** Days past the deadline, 0 while it has not passed. */
+export const overdueDays = (i: { date: string; paymentTerm?: number }) => daysSince(dueDateOf(i));
 export const dateValid = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v) && Number.isFinite(new Date(v + "T12:00:00").getTime());
 
 const company: Company = { name: "CAPSED SUARL", subtitle: "Société camerounaise de prestation et de services divers", address: "B.P. 3463 Douala, Cameroun", phone: "+237 243 55 31 56 / 674 55 73 73 / 699 92 80 02", email: "capsedsarl@gmail.com", niu: "M021612485549 S", rc: "RC/DLA/2016B599", website: "", logo: "" };

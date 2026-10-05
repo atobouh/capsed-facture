@@ -11,7 +11,7 @@ export function periodData(invoices:any[],payments:any[],credits:any[],period:St
 export function periodTotals(invoices:any[],payments:any[],credits:any[],p:StatementPeriod){
  const {bills,paid,notes}=periodData(invoices,payments,credits,p),within=(d:string)=>d>=p.from&&d<=p.to;
  const closing=bills.reduce((a,i)=>{const b=balance(i,paid,notes);return{due:a.due+b.due,refund:a.refund+b.refund};},{due:0,refund:0});
- const total=bills.filter(i=>within(i.date)).reduce((n,i)=>n+invoiceTotals(i).ttc,0),advance=bills.filter(i=>within(i.date)).reduce((n,i)=>n+i.advance,0),received=advance+paid.filter(i=>within(i.date)).reduce((n,i)=>n+i.amount,0),credited=notes.filter(i=>within(i.date)).reduce((n,i)=>n+i.amount,0);
+ const total=bills.filter(i=>within(i.date)).reduce((n,i)=>n+invoiceTotals(i).ttc,0),ht=bills.filter(i=>within(i.date)).reduce((n,i)=>n+invoiceTotals(i).ht,0),advance=bills.filter(i=>within(i.date)).reduce((n,i)=>n+i.advance,0),received=advance+paid.filter(i=>within(i.date)).reduce((n,i)=>n+i.amount,0),credited=notes.filter(i=>within(i.date)).reduce((n,i)=>n+i.amount,0);
  const opening=bills.filter(i=>i.date<p.from).reduce((n,i)=>n+invoiceTotals(i).ttc-i.advance,0)-paid.filter(i=>i.date<p.from).reduce((n,i)=>n+i.amount,0)-notes.filter(i=>i.date<p.from).reduce((n,i)=>n+i.amount,0);
- return {total,advance,received,credited,...closing,opening,closing:opening+total-credited-received};
+ return {total,ht,tax:total-ht,advance,received,credited,...closing,opening,closing:opening+total-credited-received};
 }

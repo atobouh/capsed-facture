@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Download, FolderOpen, Image as ImageIcon, RotateCcw } from "lucide-react";
 import { imageData } from "../document-model";
-import { Button, Confirm, Field, Notice, Paper, TextInput, toast } from "./ui";
-import { commit, fromBackup, getData, nowIso, setData, todayIso, useData } from "./store";
+import { Button, Confirm, Field, Notice, NumberInput, Paper, TextInput, toast } from "./ui";
+import { DEFAULT_TERM, commit, fromBackup, getData, nowIso, setData, todayIso, useData } from "./store";
 import type { Company } from "./store";
 
 export function downloadBackup() {
@@ -21,6 +21,18 @@ export function CompanySettings({ by }: { by: string }) {
     <form className="cx-form-grid" onSubmit={e => { e.preventDefault(); if (!dirty) return; commit(by, () => ({ company }), { text: "Coordonnées de l’entreprise modifiées" }); toast("Coordonnées enregistrées."); }}>
       {fields.map(([k, label, wide]) => <Field key={k} label={label} wide={wide}><TextInput value={company[k]} onChange={v => setCompany(c => ({ ...c, [k]: v }))} /></Field>)}
       <div className="cx-form-actions cx-span2"><Button kind="quiet" disabled={!dirty} onClick={() => setCompany(d.company)}>Annuler</Button><Button kind="primary" type="submit" disabled={!dirty}>Enregistrer les coordonnées</Button></div>
+    </form>
+  </section>;
+}
+
+/** Default internal payment deadline. Used for lateness only, never printed on an invoice. */
+export function TermSettings({ by }: { by: string }) {
+  const d = useData(), saved = d.paymentTerm ?? DEFAULT_TERM, [days, setDays] = useState(saved), ok = Number.isSafeInteger(days) && days >= 0 && days <= 365;
+  return <section className="cx-section" aria-labelledby="set-term">
+    <div className="cx-section-head"><h2 id="set-term">Délai de paiement</h2><p>Usage interne : sert à repérer les retards, n’est jamais imprimé sur les factures. Chaque facture peut avoir son propre délai.</p></div>
+    <form className="cx-form-grid" onSubmit={e => { e.preventDefault(); if (!ok || days === saved) return; commit(by, () => ({ paymentTerm: days }), { text: `Délai de paiement par défaut : ${days} jours` }); toast("Délai de paiement enregistré."); }}>
+      <Field label="Délai par défaut" hint="S’applique aux factures qui n’ont pas leur propre délai." error={ok ? undefined : "Entre 0 et 365 jours."}><NumberInput value={days} onChange={setDays} unit="jours" /></Field>
+      <div className="cx-form-actions cx-span2"><Button kind="quiet" disabled={days === saved} onClick={() => setDays(saved)}>Annuler</Button><Button kind="primary" type="submit" disabled={!ok || days === saved}>Enregistrer le délai</Button></div>
     </form>
   </section>;
 }

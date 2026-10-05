@@ -2,7 +2,7 @@ import { useState } from "react";
 import { FilePlus2, Lock, Pencil, Plus, UserPlus } from "lucide-react";
 import { Button, Confirm, Empty, Field, Modal, MoreMenu, Monogram, PageHead, Row, SearchBox, Stamp, StatusChip, TextInput, matches, toast, useWide } from "./ui";
 import { CancelPayment, CreditModal, PaymentModal } from "./payments";
-import { accountName, methodName, accountTotals, balance, canBill, canCash, commit, dateFr, daysSince, getData, money, nowIso, uid, useData } from "./store";
+import { accountName, methodName, accountTotals, balance, canBill, canCash, commit, dateFr, getData, overdueDays, money, nowIso, uid, useData } from "./store";
 import type { Client, Role } from "./store";
 
 export type OfficeRoute = { name: string; id?: string; extra?: string };
@@ -37,13 +37,13 @@ export function ClientForm({ client, by, requestId, onClose, onSaved }: { client
 
 export function ClientsDirectory({ role, by, nav }: { role: Role; by: string; nav: Nav }) {
   const d = useData(), wide = useWide(), [q, setQ] = useState(""), [form, setForm] = useState<Client | null>(null), [sel, setSel] = useState<string | null>(null);
-  const rows = d.clients.map(c => { const items = d.invoices.filter(i => i.client.id === c.id), open = items.filter(i => balance(i, d.payments, d.credits).due > 0); return { c, items, open, late: open.length ? Math.max(...open.map(i => daysSince(i.date))) : 0, a: accountTotals(items, d.payments, d.credits) }; })
+  const rows = d.clients.map(c => { const items = d.invoices.filter(i => i.client.id === c.id), open = items.filter(i => balance(i, d.payments, d.credits).due > 0); return { c, items, open, late: open.length ? Math.max(...open.map(overdueDays)) : 0, a: accountTotals(items, d.payments, d.credits) }; })
     .filter(r => matches(q, r.c.name, r.c.phone, r.c.contact, r.c.niu)).sort((a, b) => b.a.due - a.a.due || a.c.name.localeCompare(b.c.name));
   const owing = rows.filter(r => !r.c.archived && (r.a.due > 0 || r.a.refund > 0)), settled = rows.filter(r => !r.c.archived && !r.a.due && !r.a.refund), archived = rows.filter(r => r.c.archived);
   const current = rows.find(r => r.c.id === sel)?.c.id ?? (wide ? (owing[0] ?? settled[0] ?? archived[0])?.c.id : undefined);
   const open = (id: string) => wide ? setSel(id) : nav({ name: "client", id });
   const row = ({ c, items, open: unpaid, late, a }: typeof rows[number]) => <Row key={c.id} current={wide && current === c.id} onClick={() => open(c.id)} lead={<Monogram name={c.name} />} title={c.name}
-    sub={<><span>{unpaid.length ? `${unpaid.length} facture${unpaid.length > 1 ? "s" : ""} à payer` : items.length ? `${items.length} facture${items.length > 1 ? "s" : ""}, tout est payé` : "Aucune facture"}</span>{late > 30 && <span className={late > 60 ? "cx-bad-text" : "cx-warn-text"}>{late} j de retard</span>}</>}
+    sub={<><span>{unpaid.length ? `${unpaid.length} facture${unpaid.length > 1 ? "s" : ""} à payer` : items.length ? `${items.length} facture${items.length > 1 ? "s" : ""}, tout est payé` : "Aucune facture"}</span>{late > 0 && <span className="cx-bad-text">{late} j de retard</span>}</>}
     amount={a.due ? money(a.due) : a.refund ? `${money(a.refund)} à rendre` : undefined} />;
   const list = <>
     <div className="cx-list-cap">{canCash(role) ? "Avec un reste à payer" : "Clients"} · {owing.length}</div>

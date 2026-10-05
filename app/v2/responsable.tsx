@@ -1,21 +1,24 @@
 import { useState } from "react";
-import { ChevronRight, ClipboardCheck, Clock, Copy, KeyRound, Lock, Phone, Printer, Send, UserPlus, WifiOff } from "lucide-react";
+import { ChevronRight, FilePlus2, Plus, ClipboardCheck, Clock, Copy, KeyRound, Lock, Phone, Printer, Send, UserPlus, WifiOff } from "lucide-react";
 import { Button, Choice, Confirm, DateInput, Empty, Field, Modal, Monogram, MoneyInput, MonthStepper, MoreMenu, Notice, PageHead, Paper, Row, SearchBox, Stamp, StatusChip, TextArea, TextInput, Timeline, matches, toast } from "./ui";
 import { RequestState, Situation } from "./office";
+import { TeamReport } from "./team";
+import Composer from "./composer";
 import { exportInvoice } from "../receipt-export";
 import { words } from "./words";
-import { BackupSettings, CompanySettings, FormatSettings } from "./settings";
-import { METHODS, REQUEST_LABEL, ROLE_LABEL, accountName, accountTotals, ago, balance, commit, dateFr, daysSince, delivery, generateLogin, generatePassword, getData, methodName, money, monthLabel, nowIso, resetDemo, setOnline, timeFr, todayIso, uid, useData } from "./store";
+import { BackupSettings, CompanySettings, FormatSettings, TermSettings } from "./settings";
+import { METHODS, REQUEST_LABEL, ROLE_LABEL, accountName, accountTotals, ago, balance, commit, dateFr, delivery, generateLogin, generatePassword, getData, methodName, money, monthLabel, overdueDays, dueDateOf, nowIso, resetDemo, setOnline, timeFr, todayIso, uid, useData } from "./store";
 import type { Account, Client, Request, RequestKind, Role, Snapshot } from "./store";
 
 /** `extra: "factures"` marks an invoice opened from the Factures page, so « retour » goes back there. */
-export type RRoute = { name: "clients" | "client" | "factures" | "facture" | "valider" | "situation" | "reglages"; id?: string; extra?: string };
+export type RRoute = { name: "clients" | "client" | "factures" | "facture" | "nouvelle" | "valider" | "situation" | "reglages"; id?: string; extra?: string };
 type Nav = (r: RRoute) => void;
 
 export function ResponsableScreen({ route, nav, by }: { route: RRoute; nav: Nav; by: string }) {
   switch (route.name) {
     case "client": return <ClientStory id={route.id!} nav={nav} by={by} />;
     case "valider": case "factures": return <Invoices nav={nav} by={by} />;
+    case "nouvelle": return <Composer key={route.id ?? "new"} clientId={route.id} by={by} validated onDone={id => nav({ name: "facture", id, extra: "factures" })} onCancel={() => nav(route.id ? { name: "client", id: route.id } : { name: "factures" })} />;
     case "facture": return <InvoiceSheet id={route.id!} fromList={route.extra === "factures"} nav={nav} by={by} />;
     case "situation": return <GlobalSituation key={route.id ?? "all"} clientId={route.id ?? ""} />;
     case "reglages": return <Settings by={by} />;
@@ -26,7 +29,14 @@ export function ResponsableScreen({ route, nav, by }: { route: RRoute; nav: Nav;
 const newInvoices = (s: Snapshot) => s.invoices.filter(i => !i.validatedAt).sort((a, b) => a.date.localeCompare(b.date) || a.number.localeCompare(b.number));
 const newPayments = (s: Snapshot) => s.payments.filter(p => !p.lockedAt && !p.cancelledAt).sort((a, b) => a.date.localeCompare(b.date));
 export function pendingCount(d: { snapshot: Snapshot }) { return newInvoices(d.snapshot).length + newPayments(d.snapshot).length; }
-function GlobalSituation({ clientId }: { clientId: string }) { const d = useData(); return <Situation data={{ ...d.snapshot, format: d.format }} clientId={clientId} />; }
+/** Situation: the clients' statement (HT and TTC) or what the team did, one switch, nothing else. */
+function GlobalSituation({ clientId }: { clientId: string }) {
+  const d = useData(), [view, setView] = useState<"clients" | "equipe">("clients");
+  return <>
+    {!clientId && <div className="cx-seg cx-noprint" role="group" aria-label="Situation à afficher">{([["clients", "Les clients"], ["equipe", "L’équipe"]] as const).map(([k, label]) => <button type="button" key={k} aria-pressed={view === k} onClick={() => setView(k)}>{label}</button>)}</div>}
+    {view === "equipe" && !clientId ? <TeamReport /> : <Situation data={{ ...d.snapshot, format: d.format }} clientId={clientId} />}
+  </>;
+}
 
 /** Validate invoices and lock payments, only while the office is connected and each item still matches what the office holds. */
 function validate(invoiceIds: string[], paymentIds: string[], by: string) {
@@ -54,16 +64,16 @@ function Overview({ nav, by }: { nav: Nav; by: string }) {
   const d = useData(), s = d.snapshot, [q, setQ] = useState(""), [ask, setAsk] = useState(false);
   const rows = s.clients.filter(c => !c.archived).map(c => {
     const items = s.invoices.filter(i => i.client.id === c.id), open = items.filter(i => balance(i, s.payments, s.credits).due > 0);
-    const lateDue = open.filter(i => daysSince(i.date) > 30).reduce((n, i) => n + balance(i, s.payments, s.credits).due, 0);
+    const lateDue = open.filter(i => overdueDays(i) > 0).reduce((n, i) => n + balance(i, s.payments, s.credits).due, 0);
     const mine = s.payments.filter(p => !p.cancelledAt && items.some(i => i.id === p.invoiceId)), last = [...mine].sort((x, y) => y.date.localeCompare(x.date))[0];
-    return { c, a: accountTotals(items, s.payments, s.credits), count: items.length, oldest: open.length ? Math.max(...open.map(i => daysSince(i.date))) : 0, lateDue, last, pending: mine.some(p => !p.lockedAt) };
+    return { c, a: accountTotals(items, s.payments, s.credits), count: items.length, late: open.length ? Math.max(...open.map(overdueDays)) : 0, lateDue, last, pending: mine.some(p => !p.lockedAt) };
   });
   const total = rows.reduce((n, r) => n + r.a.due, 0), late = rows.reduce((n, r) => n + r.lateDue, 0), toCheck = pendingCount(d), reqs = [...d.requests].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  const lateClients = rows.filter(r => r.oldest > 60).sort((a, b) => b.lateDue - a.lateDue);
+  const lateClients = rows.filter(r => r.late > 0).sort((a, b) => b.lateDue - a.lateDue);
   const hits = q.trim().length >= 3 ? s.invoices.filter(i => matches(q, i.number)) : [];
   const list = rows.filter(r => matches(q, r.c.name, r.c.phone, r.c.contact)).sort((a, b) => b.a.due - a.a.due || a.c.name.localeCompare(b.c.name));
   const owing = list.filter(r => r.a.due > 0 || r.a.refund > 0), settled = list.filter(r => !r.a.due && !r.a.refund);
-  const sub = (r: typeof rows[number]) => r.oldest > 30 ? <span className={r.oldest > 60 ? "cx-bad-text" : "cx-warn-text"}>En retard de {r.oldest} jours</span> : r.pending ? <span className="cx-warn-text">Paiement à valider</span> : r.last ? `Dernier paiement le ${dateFr(r.last.date)}` : r.count ? `${r.count} facture${r.count > 1 ? "s" : ""}` : "Aucune facture";
+  const sub = (r: typeof rows[number]) => r.late > 0 ? <span className="cx-bad-text">En retard de {r.late} jour{r.late > 1 ? "s" : ""}</span> : r.pending ? <span className="cx-warn-text">Paiement à valider</span> : r.last ? `Dernier paiement le ${dateFr(r.last.date)}` : r.count ? `${r.count} facture${r.count > 1 ? "s" : ""}` : "Aucune facture";
   const row = (r: typeof rows[number]) => <Row key={r.c.id} lead={<Monogram name={r.c.name} />} title={r.c.name} sub={<span>{sub(r)}</span>} amount={r.a.due ? money(r.a.due) : r.a.refund ? `${money(r.a.refund)} à rendre` : undefined} onClick={() => nav({ name: "client", id: r.c.id })} />;
   return <div className="cx-page cx-home">
     <div className="cx-home-side">
@@ -76,7 +86,7 @@ function Overview({ nav, by }: { nav: Nav; by: string }) {
       {(toCheck > 0 || lateClients.length > 0) && <section aria-labelledby="todo"><h2 id="todo" className="cx-sec-title">À faire</h2>
         <div className="cx-card cx-card-flush cx-rows">
           {toCheck > 0 && <Row lead={<span className="cx-task-icon"><ClipboardCheck size={18} aria-hidden="true" /></span>} title={`${toCheck} nouveauté${toCheck > 1 ? "s" : ""} à valider`} sub={<span>Factures et paiements reçus du bureau</span>} state={<ChevronRight size={18} className="cx-go" aria-hidden="true" />} onClick={() => nav({ name: "factures" })} />}
-          {lateClients.slice(0, 2).map(r => <Row key={r.c.id} lead={<span className="cx-task-icon cx-task-bad"><Clock size={18} aria-hidden="true" /></span>} title={`Relancer ${r.c.name}`} sub={<span>{money(r.lateDue)} dus depuis {r.oldest} jours</span>} state={<ChevronRight size={18} className="cx-go" aria-hidden="true" />} onClick={() => nav({ name: "client", id: r.c.id })} />)}
+          {lateClients.slice(0, 2).map(r => <Row key={r.c.id} lead={<span className="cx-task-icon cx-task-bad"><Clock size={18} aria-hidden="true" /></span>} title={`Relancer ${r.c.name}`} sub={<span>{money(r.lateDue)} en retard de {r.late} jour{r.late > 1 ? "s" : ""}</span>} state={<ChevronRight size={18} className="cx-go" aria-hidden="true" />} onClick={() => nav({ name: "client", id: r.c.id })} />)}
         </div></section>}
       {reqs.length > 0 && <details className="cx-fold cx-card"><summary><span>Vos demandes au bureau <em>({reqs.length})</em></span></summary>
         <div className="cx-rows">{reqs.map(r => <Row key={r.id} title={REQUEST_LABEL[r.kind]} sub={<span>{r.clientName}{r.amount ? ` · ${money(r.amount)}` : ""}{r.response ? ` · ${r.response}` : ""}</span>} state={<RequestState r={r} />} onClick={() => r.clientId ? nav({ name: "client", id: r.clientId }) : undefined} />)}</div></details>}
@@ -102,9 +112,9 @@ function ClientStory({ id, nav, by }: { id: string; nav: Nav; by: string }) {
   const items = s.invoices.filter(i => i.client.id === c.id).sort((a, b) => b.date.localeCompare(a.date)), a = accountTotals(items, s.payments, s.credits);
   const open = items.filter(i => balance(i, s.payments, s.credits).due > 0), done = items.filter(i => !balance(i, s.payments, s.credits).due);
   const pays = s.payments.filter(p => items.some(i => i.id === p.invoiceId)).sort((x, y) => y.date.localeCompare(x.date)), reqs = d.requests.filter(r => r.clientId === c.id);
-  const inv = (i: typeof items[number]) => { const b = balance(i, s.payments, s.credits), dv = delivery(s, i.id), age = daysSince(i.date);
+  const inv = (i: typeof items[number]) => { const b = balance(i, s.payments, s.credits), dv = delivery(s, i.id), late = overdueDays(i);
     return <Row key={i.id} title={<span className="cx-nowrap">{i.number}</span>} sub={<><span>{dateFr(i.date)}</span>{!dv && <span className="cx-warn-text">pas encore remise au client</span>}</>}
-      amount={b.due ? money(b.due) : money(b.total)} state={b.due > 0 && age > 30 ? <span className={`cx-chip cx-tone-${age > 60 ? "bad" : "warn"}`}>{age} j de retard</span> : <StatusChip status={b.status} />} onClick={() => nav({ name: "facture", id: i.id })} />; };
+      amount={b.due ? money(b.due) : money(b.total)} state={b.due > 0 && late > 0 ? <span className="cx-chip cx-tone-bad">{late} j de retard</span> : <StatusChip status={b.status} />} onClick={() => nav({ name: "facture", id: i.id })} />; };
   const paid = Math.max(0, a.total - a.credited - a.due);
   return <div className="cx-page cx-story">
     <PageHead back={{ label: "Accueil", onClick: () => nav({ name: "clients" }) }} title={c.name} sub={[c.contact, c.phone].filter(Boolean).join(" · ") || undefined}
@@ -117,9 +127,10 @@ function ClientStory({ id, nav, by }: { id: string; nav: Nav; by: string }) {
           {a.total > 0 && <><div className="cx-progress" aria-hidden="true"><span style={{ width: `${Math.min(100, Math.round(paid / a.total * 100))}%` }} /></div>
           <p className="cx-sum-legend"><span>Payé {money(paid)}</span><span>Facturé {money(a.total)}</span></p>{a.credited > 0 && <p className="cx-sum-legend"><span>Avoirs − {money(a.credited)}</span></p>}</>}
         </section>
-        {items.length > 0 && <div className="cx-actionbar">
-          <Button kind="primary" icon={<Send size={15} aria-hidden="true" />} onClick={() => setAsk(true)}>Signaler un paiement</Button>
-        </div>}
+        <div className="cx-actionbar">
+          <Button icon={<FilePlus2 size={16} aria-hidden="true" />} disabled={!d.officeOnline || !!c.archived} title={!d.officeOnline ? "Le bureau est hors ligne" : c.archived ? "Client archivé" : undefined} onClick={() => nav({ name: "nouvelle", id: c.id })}>Nouvelle facture</Button>
+          {items.length > 0 && <Button kind="primary" icon={<Send size={15} aria-hidden="true" />} onClick={() => setAsk(true)}>Signaler un paiement</Button>}
+        </div>
       </div>
       <div className="cx-story-main">
         <section aria-labelledby="inv-title"><h2 id="inv-title" className="cx-sec-title">Factures non soldées</h2>
@@ -191,11 +202,12 @@ function Invoices({ nav, by }: { nav: Nav; by: string }) {
   const list = (searching ? s.invoices.filter(i => matches(q, i.number, i.client.name)) : ofMonth).sort((a, b) => b.date.localeCompare(a.date) || b.number.localeCompare(a.number));
   const sum = (f: "total" | "received" | "due") => ofMonth.reduce((t, i) => t + balance(i, s.payments, s.credits)[f], 0);
   const open = (id: string) => nav({ name: "facture", id, extra: "factures" });
-  const row = (i: typeof list[number]) => { const b = balance(i, s.payments, s.credits), dv = delivery(s, i.id), age = daysSince(i.date);
+  const row = (i: typeof list[number]) => { const b = balance(i, s.payments, s.credits), dv = delivery(s, i.id), late = overdueDays(i);
     return <Row key={i.id} title={<span className="cx-nowrap">{i.number}</span>} sub={<><span>{i.client.name}</span><span>{dateFr(i.date)}{!dv && <> · <span className="cx-warn-text cx-nowrap">pas encore remise</span></>}</span></>}
-      amount={money(b.total)} state={b.due > 0 && age > 30 ? <span className={`cx-chip cx-tone-${age > 60 ? "bad" : "warn"}`}>{age} j de retard</span> : <StatusChip status={b.status} />} onClick={() => open(i.id)} />; };
+      amount={money(b.total)} state={b.due > 0 && late > 0 ? <span className="cx-chip cx-tone-bad">{late} j de retard</span> : <StatusChip status={b.status} />} onClick={() => open(i.id)} />; };
   return <div className="cx-page cx-bills cx-validate">
-    <PageHead title="Factures" sub="Les factures et paiements du bureau. Validez-les quand vous voulez : rien n’attend votre validation." />
+    <PageHead title="Factures" sub="Les factures et paiements du bureau. Validez-les quand vous voulez : rien n’attend votre validation."
+      actions={<Button kind="primary" icon={<Plus size={16} aria-hidden="true" />} disabled={!d.officeOnline} title={!d.officeOnline ? "Le bureau est hors ligne" : undefined} onClick={() => nav({ name: "nouvelle" })}>Nouvelle facture</Button>} />
     {!d.officeOnline && <Notice tone="warn">Le bureau est hors ligne. La validation reprendra à sa reconnexion ; tout reste consultable.</Notice>}
     <div className="cx-validate-grid">
       <section aria-labelledby="new-title">
@@ -251,6 +263,7 @@ function InvoiceSheet({ id, fromList, nav, by }: { id: string; fromList: boolean
             <div><dt>Montant</dt><dd>{money(b.total)}</dd></div>
             <div><dt>Reçu</dt><dd>{money(b.received)}</dd></div>
             {b.credited > 0 && <div><dt>Avoirs</dt><dd>− {money(b.credited)}</dd></div>}
+            <div><dt>Échéance</dt><dd className={b.due > 0 && overdueDays(i) > 0 ? "cx-bad-text" : ""}>{dateFr(dueDateOf(i))}{b.due > 0 && overdueDays(i) > 0 ? `, ${overdueDays(i)} j de retard` : ""}</dd></div>
             <div><dt>Remise au client</dt><dd className={dv ? "" : "cx-warn-text"}>{dv ? `Le ${dateFr(dv.declaredAt)}` : "Pas encore"}</dd></div>
             <div><dt>Votre validation</dt><dd>{i.validatedAt ? <span className="cx-chip cx-tone-good">Validée le {dateFr(i.validatedAt)}</span> : <Button size="sm" disabled={!d.officeOnline} title={!d.officeOnline ? "Le bureau est hors ligne" : undefined} onClick={() => { if (validate([i.id], [], by)) toast("Facture validée."); }}>Valider</Button>}</dd></div>
           </dl>
@@ -279,6 +292,7 @@ function Settings({ by }: { by: string }) {
         <span className="cx-list-actions"><button type="button" className="cx-text-btn" onClick={() => setReset(a)}><KeyRound size={15} aria-hidden="true" />Nouveau mot de passe</button>{a.id !== by && <button type="button" className="cx-text-btn" onClick={() => setToggle(a)}>{a.active ? "Désactiver" : "Réactiver"}</button>}</span>
       </div>)}</div>
     </section>
+    <TermSettings by={by} />
     <CompanySettings by={by} />
     <FormatSettings by={by} />
     <BackupSettings />

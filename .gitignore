@@ -43,3 +43,8 @@ next-env.d.ts
 /.codex/
 /outputs/
 /work/
+
+# Built by scripts/build-static.mjs for the cloud Worker and the desktop app
+dist-site/
+dist-office/
+cloud/.wrangler/

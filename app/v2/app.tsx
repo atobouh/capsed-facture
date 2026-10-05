@@ -6,11 +6,12 @@ import { OfficeScreen } from "./office";
 import type { OfficeRoute } from "./clients";
 import { ResponsableScreen, pendingCount } from "./responsable";
 import type { RRoute } from "./responsable";
-import { ROLE_LABEL, ago, canBill, canCash, getData, receives, timeFr, useData } from "./store";
+import { CLOUD, ROLE_LABEL, ago, canBill, canCash, getData, receives, timeFr, useData } from "./store";
+import { FreshnessBar, SyncLine } from "./freshness";
 import type { Account, Role } from "./store";
 
 const SESSION = "capsed-v2-session";
-const HOME: Record<Role, OfficeRoute> = { facturation: { name: "register" }, encaissement: { name: "clients" }, bureau: { name: "register" }, responsable: { name: "clients" } };
+export const HOME: Record<Role, OfficeRoute> = { facturation: { name: "register" }, encaissement: { name: "clients" }, bureau: { name: "register" }, responsable: { name: "clients" } };
 const readSession = () => { try { return localStorage.getItem(SESSION) ?? ""; } catch { return ""; } };
 
 export default function App() {
@@ -43,13 +44,7 @@ function SignIn({ onSignIn }: { onSignIn: (a: Account) => void }) {
   }
   const icon = (r: Role) => r === "facturation" ? <FileText size={20} /> : r === "encaissement" ? <Wallet size={20} /> : r === "bureau" ? <BriefcaseBusiness size={20} /> : <ClipboardCheck size={20} />;
   return <main className="cx-signin">
-    <section className="cx-signin-brand">
-      <img src="capsed-logo.png" alt="Logo CAPSED" className="cx-signin-logo" />
-      <h1>CAPSED SUARL</h1>
-      <p>Facturation, encaissement et suivi des clients.</p>
-      <ul><li><FileText size={17} /> La facturation crée, imprime et remet les factures.</li><li><Wallet size={17} /> L’encaissement enregistre chaque paiement.</li><li><ClipboardCheck size={17} /> Le responsable suit tout, sans appeler le bureau.</li></ul>
-      <small>Rien n’est jamais supprimé : chaque correction reste visible dans l’historique.</small>
-    </section>
+    <SignInBrand />
     <section className="cx-signin-panel">
       <form className="cx-signin-form" onSubmit={e => { e.preventDefault(); submit(); }}>
         <h2>Connexion</h2>
@@ -68,8 +63,18 @@ function SignIn({ onSignIn }: { onSignIn: (a: Account) => void }) {
   </main>;
 }
 
-function OfficeShell({ me, route, nav, onHelp, onSignOut, children }: { me: Account; route: OfficeRoute; nav: (r: OfficeRoute) => void; onHelp: () => void; onSignOut: () => void; children: ReactNode }) {
-  const d = useData(), inbox = d.requests.filter(r => receives(me.role, r.to) && r.receivedAt && !r.resolvedAt).length, bill = canBill(me.role), cash = canCash(me.role);
+export function SignInBrand() {
+  return <section className="cx-signin-brand">
+    <img src="capsed-logo.png" alt="Logo CAPSED" className="cx-signin-logo" />
+    <h1>CAPSED SUARL</h1>
+    <p>Facturation, encaissement et suivi des clients.</p>
+    <ul><li><FileText size={17} /> La facturation crée, imprime et remet les factures.</li><li><Wallet size={17} /> L’encaissement enregistre chaque paiement.</li><li><ClipboardCheck size={17} /> Le responsable suit tout, sans appeler le bureau.</li></ul>
+    <small>Rien n’est jamais supprimé : chaque correction reste visible dans l’historique.</small>
+  </section>;
+}
+
+export function OfficeShell({ me, route, nav, onHelp, onSignOut, children }: { me: Account; route: OfficeRoute; nav: (r: OfficeRoute) => void; onHelp: () => void; onSignOut: () => void; children: ReactNode }) {
+  const d = useData(), inbox = d.requests.filter(r => receives(me.role, r.to) && (CLOUD || r.receivedAt) && !r.resolvedAt).length, bill = canBill(me.role), cash = canCash(me.role);
   // Every office tab is listed once; the login decides which ones show.
   const items: { key: string; label: string; icon: ReactNode; show: boolean; count?: number }[] = [
     { key: "register", label: "Factures", icon: <FileText size={20} aria-hidden="true" />, show: bill },
@@ -92,13 +97,13 @@ function OfficeShell({ me, route, nav, onHelp, onSignOut, children }: { me: Acco
       <div className="cx-brand"><img src="capsed-logo.png" alt="" width="32" height="32" className="cx-brand-logo" /><div><strong>CAPSED</strong><small>{ROLE_LABEL[me.role]}</small></div></div>
       <nav aria-label="Navigation principale">{items.filter(i => i.show).map(i => <button type="button" key={i.key} aria-current={section === i.key ? "page" : undefined} className={section === i.key ? "cx-on" : ""} onClick={() => nav({ name: i.key })}>{i.icon}<span>{i.label}</span>{!!i.count && <b className="cx-count" aria-label={`${i.count} à traiter`}>{i.count}</b>}</button>)}</nav>
       <div className="cx-sidebar-foot">
-        <p className={`cx-sync${d.officeOnline ? "" : " cx-sync-off"}`}>{d.officeOnline ? <><span className="cx-sync-dot" aria-hidden="true" />Synchronisé avec la Direction</> : <><WifiOff size={14} aria-hidden="true" />Hors ligne, saisies gardées ici</>}</p>
+        {CLOUD ? <SyncLine /> : <p className={`cx-sync${d.officeOnline ? "" : " cx-sync-off"}`}>{d.officeOnline ? <><span className="cx-sync-dot" aria-hidden="true" />Synchronisé avec la Direction</> : <><WifiOff size={14} aria-hidden="true" />Hors ligne, saisies gardées ici</>}</p>}
         <div className="cx-user"><span className="cx-avatar" aria-hidden="true">{initials(me.name)}</span><div><strong>{me.name}</strong><button type="button" onClick={onSignOut}>Se déconnecter</button></div></div>
       </div>
     </aside>
     <main className="cx-content" id="contenu" tabIndex={-1}>{children}</main>
     <footer className="cx-statusbar cx-noprint">
-      <span>Données enregistrées sur ce poste</span>
+      {CLOUD ? <SyncLine bar /> : <span>Données enregistrées sur ce poste</span>}
       <span className="cx-status-keys" aria-hidden="true">{bill && <span><kbd>Ctrl</kbd> <kbd>N</kbd> nouvelle facture</span>}<span><kbd>Ctrl</kbd> <kbd>F</kbd> chercher</span></span>
       <button type="button" onClick={onHelp}><CircleHelp size={15} aria-hidden="true" />Aide <kbd>F1</kbd></button>
     </footer>
@@ -108,7 +113,7 @@ function OfficeShell({ me, route, nav, onHelp, onSignOut, children }: { me: Acco
 const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
 const today = () => { const t = new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }); return t.charAt(0).toUpperCase() + t.slice(1); };
 
-function SiteShell({ me, route, nav, onHelp, onSignOut, children }: { me: Account; route: OfficeRoute; nav: (r: OfficeRoute) => void; onHelp: () => void; onSignOut: () => void; children: ReactNode }) {
+export function SiteShell({ me, route, nav, onHelp, onSignOut, children }: { me: Account; route: OfficeRoute; nav: (r: OfficeRoute) => void; onHelp: () => void; onSignOut: () => void; children: ReactNode }) {
   const d = useData(), n = pendingCount(d), home = route.name === "clients";
   const section = route.name === "client" ? "clients" : route.name === "facture" ? (route.extra === "factures" ? "factures" : "clients") : route.name === "valider" || route.name === "nouvelle" ? "factures" : route.name;
   const tabs = [{ key: "clients", label: "Accueil", icon: <House size={21} aria-hidden="true" /> }, { key: "factures", label: "Factures", icon: <FileText size={21} aria-hidden="true" />, count: n }, { key: "situation", label: "Situation", icon: <ChartColumn size={21} aria-hidden="true" /> }, { key: "reglages", label: "Réglages", icon: <Settings size={21} aria-hidden="true" /> }];
@@ -121,7 +126,7 @@ function SiteShell({ me, route, nav, onHelp, onSignOut, children }: { me: Accoun
       </div>
     </header>
     <main className="cx-site-main" id="contenu">
-      {!home && <p className={`cx-fresh${!d.officeOnline ? " cx-fresh-stale" : ""}`}>{!d.officeOnline ? <><WifiOff size={14} aria-hidden="true" />Bureau hors ligne. Dernières nouvelles {timeFr(d.snapshot.receivedAt)}</> : <><span className="cx-sync-dot" aria-hidden="true" />Données du bureau reçues {ago(d.snapshot.receivedAt)}</>}</p>}
+      {CLOUD ? <FreshnessBar home={home} /> : !home && <p className={`cx-fresh${!d.officeOnline ? " cx-fresh-stale" : ""}`}>{!d.officeOnline ? <><WifiOff size={14} aria-hidden="true" />Bureau hors ligne. Dernières nouvelles {timeFr(d.snapshot.receivedAt)}</> : <><span className="cx-sync-dot" aria-hidden="true" />Données du bureau reçues {ago(d.snapshot.receivedAt)}</>}</p>}
       {children}
     </main>
 {route.name !== "nouvelle" && <nav className="cx-bottom-nav cx-noprint" aria-label="Navigation principale">{tabs.map(t => <button type="button" key={t.key} aria-current={section === t.key ? "page" : undefined} className={section === t.key ? "cx-on" : ""} onClick={() => nav({ name: t.key })}>{t.icon}<span>{t.label}</span>{!!t.count && <b className="cx-count">{t.count}</b>}</button>)}</nav>}
@@ -148,7 +153,7 @@ const HELP: Record<string, [string, [string, string][]]> = {
   "responsable:situation": ["Situation", [["Qui", "Tous les clients, ou un seul client."], ["Période", "Choisissez les dates."], ["Sortir", "Imprimer, Excel ou CSV."]]],
 };
 HELP["responsable:nouvelle"] = HELP["facturation:compose"];
-function HelpPanel({ role, route, onClose }: { role: Role; route: string; onClose: () => void }) {
+export function HelpPanel({ role, route, onClose }: { role: Role; route: string; onClose: () => void }) {
   // The full office mode reuses the Facturation and Encaissement help.
   const keys: Role[] = role === "bureau" ? ["facturation", "encaissement"] : [role];
   const [title, steps] = keys.map(k => HELP[`${k}:${route}`]).find(Boolean) ?? HELP[`${keys[0]}:${HOME[keys[0]].name}`];

@@ -10,7 +10,7 @@ import { ClientAccount, ClientForm, ClientsDirectory } from "./clients";
 import type { OfficeRoute } from "./clients";
 import Composer from "./composer";
 import { CreditModal, CreditPicker, PaymentModal } from "./payments";
-import { REQUEST_LABEL, accountName, balance, canBill, canCash, commit, receives, dateFr, dateValid, delivery, dueDateOf, overdueDays, termOf, methodName, monthLabel, money, nowIso, timeFr, todayIso, useData } from "./store";
+import { CLOUD, REQUEST_LABEL, accountName, balance, canBill, canCash, commit, receives, dateFr, dateValid, delivery, dueDateOf, overdueDays, termOf, methodName, monthLabel, money, nowIso, timeFr, todayIso, useData } from "./store";
 import type { Data, Request, Role } from "./store";
 import { words } from "./words";
 
@@ -188,7 +188,7 @@ export function Situation({ data, clientId: initial, fixedClient, onBack }: { da
 /** Requests sent by the Direction to this role. They never change a balance by themselves. */
 function Inbox({ role, by, nav }: { role: Role; by: string; nav: Nav }) {
   const d = useData(), wide = useWide(), [active, setActive] = useState<string | null>(null), [form, setForm] = useState<Request | null>(null), [pay, setPay] = useState<Request | null>(null);
-  const mine = d.requests.filter(r => receives(role, r.to) && r.receivedAt).sort((a, b) => b.createdAt.localeCompare(a.createdAt)), todo = mine.filter(r => !r.resolvedAt), done = mine.filter(r => r.resolvedAt);
+  const mine = d.requests.filter(r => receives(role, r.to) && (CLOUD || r.receivedAt)).sort((a, b) => b.createdAt.localeCompare(a.createdAt)), todo = mine.filter(r => !r.resolvedAt), done = mine.filter(r => r.resolvedAt);
   const current = mine.find(x => x.id === active) ?? (wide ? todo[0] ?? done[0] : undefined);
   function open(x: Request) { setActive(x.id); if (!x.readAt) commit(by, dd => ({ requests: dd.requests.map(y => y.id === x.id ? { ...y, readAt: nowIso() } : y) })); }
   const row = (x: Request) => <Row key={x.id} current={wide && current?.id === x.id} onClick={() => open(x)} lead={!x.readAt ? <span className="cx-new" aria-label="Nouvelle" /> : undefined}

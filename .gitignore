@@ -49,6 +49,7 @@ dist-site/
 dist-pages/
 dist-office/
 cloud/.wrangler/
+cloud/pages/.wrangler/
 
 # Desktop app build output
 src-tauri/target/

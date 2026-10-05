@@ -10,6 +10,10 @@
     "dev": "vinext dev --port 5173",
     "build": "vinext build",
     "build:static": "node scripts/build-static.mjs",
+    "build:site": "node scripts/build-static.mjs site",
+    "build:office": "node scripts/build-static.mjs office",
+    "build:cloud": "node scripts/build-static.mjs site && CAPSED_OUT=dist-site/bureau CAPSED_API= node scripts/build-static.mjs office",
+    "test:cloud": "node --test cloud/test/api.test.mjs",
     "start": "node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js dev --config dist/server/wrangler.json --local --persist-to .wrangler/state --ip 127.0.0.1 --inspector-port 0",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"

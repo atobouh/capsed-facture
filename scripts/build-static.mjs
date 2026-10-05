@@ -5,10 +5,18 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 
 const root = process.cwd();
-const dist = path.join(root, "dist");
+// demo: the GitHub Pages demo (dist). site: the Direction website served by the cloud Worker (dist-site).
+// office: the desktop app for Facturation and Encaissement (dist-office), linked to CAPSED_API.
+const mode = process.argv[2] ?? "demo";
+if (!["demo", "site", "office"].includes(mode)) throw new Error("Mode inconnu : " + mode);
+// The office build can also be published under /bureau/ of the cloud site (CAPSED_OUT=dist-site/bureau, CAPSED_API=""),
+// an installable offline web app until the Windows installer is ready.
+const api = process.env.CAPSED_API ?? "https://capsed.erdj5926.workers.dev";
+const dist = path.join(root, process.env.CAPSED_OUT ?? (mode === "demo" ? "dist" : `dist-${mode}`));
 await mkdir(dist, { recursive: true });
 await build({
-  entryPoints: [path.join(root, "static-src", "main.tsx")],
+  entryPoints: [path.join(root, "static-src", mode === "demo" ? "main.tsx" : "cloud.tsx")],
+  define: { __CAPSED_MODE__: JSON.stringify(mode), __CAPSED_API__: JSON.stringify(mode === "office" ? api : "") },
   outfile: path.join(dist, "app.js"),
   bundle: true,
   minify: true,
@@ -41,14 +49,14 @@ const controlCss = await readFile(path.join(root, "app", "control-center.css"), 
 // The first prototype's CSS styles whole pages (and locks html/body scrolling on wide screens). It ships
 // separately and only loads at #ancien. The new app keeps just the rules that draw the A4 documents.
 const legacyCss = baseCss + modalCss + editorialCss + simpleCss + formatCreditCss + polishCss + desktopCss + controlCss + await readFile(path.join(root, "app", "feedback.css"), "utf8");
-await writeFile(path.join(dist, "legacy.css"), legacyCss);
+if (mode === "demo") await writeFile(path.join(dist, "legacy.css"), legacyCss);
 const paperCss = postcss.parse(legacyCss);
 paperCss.walkRules(rule => { if (rule.parent?.type === "atrule" && /keyframes/.test(rule.parent.name)) return; const keep = rule.selectors.filter(sel => /\.(doc-|document-|free-table|kind-|credit-items|credit-motif|field-note|receipt-|statement-)/.test(sel) && !/\b(html|body|#root)\b/.test(sel)); if (!keep.length) rule.remove(); else rule.selectors = keep; });
 paperCss.walkAtRules(at => { if (at.name !== "font-face" && !at.nodes?.length) at.remove(); });
 paperCss.walkAtRules(at => { if (at.name === "media" && !at.nodes?.some(n => n.type === "rule" || n.type === "atrule")) at.remove(); });
 await writeFile(path.join(dist, "styles.css"), paperCss.toString() + "\n" + await readFile(path.join(root, "app", "v2", "fonts.css"), "utf8") + await readFile(path.join(root, "app", "v2", "v2.css"), "utf8"));
 const assetVersion = createHash("sha256").update(await readFile(path.join(dist, "app.js"))).update(await readFile(path.join(dist, "styles.css"))).digest("hex").slice(0, 12);
-await writeFile(path.join(dist, "index.html"), `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#F6F5F7"><meta name="description" content="CAPSED : facturation, encaissement et contrôle des clients, un espace par rôle."><title>CAPSED Facture</title><link rel="preload" href="fonts/Geist-Variable.woff2" as="font" type="font/woff2" crossorigin><link rel="icon" href="favicon.svg"><link rel="stylesheet" href="styles.css?v=${assetVersion}"></head><body><div id="root"></div><script type="module" src="app.js?v=${assetVersion}"></script></body></html>`);
+await writeFile(path.join(dist, "index.html"), `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#F6F5F7"><meta name="description" content="CAPSED : facturation, encaissement et contrôle des clients, un espace par rôle.">${mode !== "demo" ? `<meta name="robots" content="noindex"><link rel="manifest" href="manifest.webmanifest">` : ""}<title>${mode === "site" ? "CAPSED Direction" : mode === "office" ? "CAPSED Bureau" : "CAPSED Facture"}</title><link rel="preload" href="fonts/Geist-Variable.woff2" as="font" type="font/woff2" crossorigin><link rel="icon" href="favicon.svg"><link rel="stylesheet" href="styles.css?v=${assetVersion}"></head><body><div id="root"></div><script type="module" src="app.js?v=${assetVersion}"></script></body></html>`);
 await copyFile(path.join(root, "public", "favicon.svg"), path.join(dist, "favicon.svg"));
 
 
@@ -57,3 +65,7 @@ await copyFile(path.join(root, "public", "capsed-logo.png"), path.join(dist, "ca
 await copyFile(path.join(root, "public", "capsed-header.webp"), path.join(dist, "capsed-header.webp"));
 await mkdir(path.join(dist, "fonts"), { recursive: true });
 for (const f of await readdir(path.join(root, "public", "fonts"))) await copyFile(path.join(root, "public", "fonts", f), path.join(dist, "fonts", f));
+
+if (mode !== "demo") await copyFile(path.join(root, "static-src", "sw.js"), path.join(dist, "sw.js"));
+if (mode !== "demo") await writeFile(path.join(dist, "manifest.webmanifest"), JSON.stringify({ name: mode === "site" ? "CAPSED Direction" : "CAPSED Bureau", short_name: "CAPSED", start_url: "./", display: "standalone", background_color: "#F6F5F7", theme_color: "#5E3A6B", lang: "fr", icons: [{ src: "capsed-logo.png", sizes: "192x192", type: "image/png" }] }));
+if (mode !== "demo") await writeFile(path.join(dist, "_headers"), "/*\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: same-origin\n  X-Frame-Options: DENY\n");

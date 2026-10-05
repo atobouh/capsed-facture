@@ -29,7 +29,7 @@ export type Invoice = { id: string; number: string; date: string; client: Client
   /** Internal payment deadline in days. Never printed on the invoice. */
   paymentTerm?: number };
 export type PaymentRevision = { amount: number; date: string; method: string; reference: string; savedAt: string; by?: string };
-export type Payment = { id: string; invoiceId: string; amount: number; date: string; method: string; reference: string; cancelledAt?: string; cancelledBy?: string; lockedAt?: string; revisedAt?: string; history?: PaymentRevision[]; by?: string; at?: string };
+export type Payment = { id: string; invoiceId: string; amount: number; date: string; method: string; reference: string; cancelledAt?: string; cancelledBy?: string; lockedAt?: string; unlockedAt?: string; changedAfterLock?: string; revisedAt?: string; history?: PaymentRevision[]; by?: string; at?: string };
 export type Delivery = { invoiceId: string; declaredAt: string; by?: string; cancelledAt?: string; cancelledBy?: string };
 export type { CreditNote };
 /** Requests only go from the manager to the office team. */

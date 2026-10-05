@@ -1,14 +1,15 @@
 import { useState } from "react";
-import { ChevronRight, FilePlus2, Plus, ClipboardCheck, Clock, Copy, KeyRound, Lock, Phone, Printer, Send, UserPlus, WifiOff } from "lucide-react";
+import { ChevronRight, FilePlus2, Plus, ClipboardCheck, Clock, Lock, Phone, Printer, Send, UserPlus, WifiOff } from "lucide-react";
 import { Button, Choice, Confirm, DateInput, Empty, Field, Modal, Monogram, MoneyInput, MonthStepper, MoreMenu, Notice, PageHead, Paper, Row, SearchBox, Stamp, StatusChip, TextArea, TextInput, Timeline, matches, toast } from "./ui";
 import { RequestState, Situation } from "./office";
 import { TeamReport } from "./team";
+import { LiftDialog, Reglages } from "./reglages";
+import { liftRule } from "./overrides";
 import Composer from "./composer";
 import { exportInvoice } from "../receipt-export";
 import { words } from "./words";
-import { BackupSettings, CompanySettings, FormatSettings, TermSettings } from "./settings";
-import { METHODS, REQUEST_LABEL, ROLE_LABEL, accountName, accountTotals, ago, balance, commit, dateFr, delivery, generateLogin, generatePassword, getData, methodName, money, monthLabel, overdueDays, dueDateOf, nowIso, resetDemo, setOnline, timeFr, todayIso, uid, useData } from "./store";
-import type { Account, Client, Request, RequestKind, Role, Snapshot } from "./store";
+import { METHODS, REQUEST_LABEL, ROLE_LABEL, accountName, accountTotals, ago, balance, commit, dateFr, delivery, getData, methodName, money, monthLabel, overdueDays, dueDateOf, nowIso, timeFr, todayIso, uid, useData } from "./store";
+import type { Client, Request, RequestKind, Snapshot } from "./store";
 
 /** `extra: "factures"` marks an invoice opened from the Factures page, so « retour » goes back there. */
 export type RRoute = { name: "clients" | "client" | "factures" | "facture" | "nouvelle" | "valider" | "situation" | "reglages"; id?: string; extra?: string };
@@ -21,7 +22,7 @@ export function ResponsableScreen({ route, nav, by }: { route: RRoute; nav: Nav;
     case "nouvelle": return <Composer key={route.id ?? "new"} clientId={route.id} by={by} validated onDone={id => nav({ name: "facture", id, extra: "factures" })} onCancel={() => nav(route.id ? { name: "client", id: route.id } : { name: "factures" })} />;
     case "facture": return <InvoiceSheet id={route.id!} fromList={route.extra === "factures"} nav={nav} by={by} />;
     case "situation": return <GlobalSituation key={route.id ?? "all"} clientId={route.id ?? ""} />;
-    case "reglages": return <Settings by={by} />;
+    case "reglages": return <Reglages page={route.id} nav={nav} by={by} />;
     default: return <Overview nav={nav} by={by} />;
   }
 }
@@ -80,7 +81,7 @@ function Overview({ nav, by }: { nav: Nav; by: string }) {
       <section className="cx-hero" aria-label="Total à recevoir">
         <p className="cx-hero-top"><span>Il reste à recevoir</span><span className="cx-hero-fresh">{d.officeOnline ? <><i aria-hidden="true" />Bureau {ago(s.receivedAt)}</> : <><WifiOff size={13} aria-hidden="true" />Bureau hors ligne</>}</span></p>
         <p className="cx-hero-amount">{money(total).replace(/\s*FCFA$/, "")} <small>FCFA</small></p>
-        {total > 0 && <><div className="cx-aging" aria-hidden="true"><span style={{ flexGrow: total - late }} /><span className="cx-aging-late" style={{ flexGrow: late }} /></div>
+        {total > 0 && <><div className="cx-aging" aria-hidden="true"><span style={{ flexGrow: total - late }} />{late > 0 && <span className="cx-aging-late" style={{ flexGrow: late }} />}</div>
         <p className="cx-aging-legend"><span><i />À jour {money(total - late)}</span><span><i className="cx-aging-late" />En retard {money(late)}</span></p></>}
       </section>
       {(toCheck > 0 || lateClients.length > 0) && <section aria-labelledby="todo"><h2 id="todo" className="cx-sec-title">À faire</h2>
@@ -146,11 +147,15 @@ function ClientStory({ id, nav, by }: { id: string; nav: Nav; by: string }) {
   </div>;
 }
 function PaymentRow({ p, by }: { p: Snapshot["payments"][number]; by: string }) {
-  const d = useData(), i = d.snapshot.invoices.find(x => x.id === p.invoiceId), [ask, setAsk] = useState(false);
+  const d = useData(), i = d.snapshot.invoices.find(x => x.id === p.invoiceId), [ask, setAsk] = useState(false), [lift, setLift] = useState<"unlock-payment" | "restore-payment" | null>(null);
   return <div className={`cx-list-row cx-static${p.cancelledAt ? " cx-cancelled" : ""}`}>
-    <span className="cx-list-main"><strong>{money(p.amount)} · {methodName(p.method)}</strong><small>{dateFr(p.date)} · facture {i?.number}{p.reference ? ` · ${p.reference}` : ""} · saisi par {accountName(p.by)}</small></span>
-    <span className="cx-list-actions">{p.cancelledAt ? <Stamp tone="bad">Annulé</Stamp> : p.lockedAt ? <Stamp tone="good"><Lock size={12} aria-hidden="true" />Validé</Stamp> : <Button size="sm" disabled={!d.officeOnline} title={!d.officeOnline ? "Le bureau est hors ligne" : undefined} onClick={() => setAsk(true)}>Valider</Button>}</span>
-    {ask && <Confirm title={`Valider ce paiement de ${money(p.amount)} ?`} confirm="Valider le paiement" cancel="Pas maintenant" onClose={() => setAsk(false)} onConfirm={() => { setAsk(false); if (validate([], [p.id], by)) toast("Paiement validé."); }}><p>Une fois validé, l’encaissement ne pourra plus le corriger ni l’annuler.</p></Confirm>}
+    <span className="cx-list-main"><strong>{money(p.amount)} · {methodName(p.method)}</strong><small>{dateFr(p.date)} · facture {i?.number}{p.reference ? ` · ${p.reference}` : ""} · saisi par {accountName(p.by)}</small>{p.changedAfterLock && !p.lockedAt && <span className="cx-chip cx-tone-warn">Modifié après validation</span>}</span>
+    <span className="cx-list-actions">{p.cancelledAt ? <><Stamp tone="bad">Annulé</Stamp><button type="button" className="cx-text-btn" onClick={() => setLift("restore-payment")}>Rétablir</button></>
+      : p.lockedAt ? <><Stamp tone="good"><Lock size={12} aria-hidden="true" />Validé</Stamp><button type="button" className="cx-text-btn" onClick={() => setLift("unlock-payment")}>Déverrouiller</button></>
+      : <Button size="sm" disabled={!d.officeOnline} title={!d.officeOnline ? "Le bureau est hors ligne" : undefined} onClick={() => setAsk(true)}>Valider</Button>}</span>
+    {ask && <Confirm title={`Valider ce paiement de ${money(p.amount)} ?`} confirm="Valider le paiement" cancel="Pas maintenant" onClose={() => setAsk(false)} onConfirm={() => { setAsk(false); if (validate([], [p.id], by)) toast("Paiement validé."); }}><p>Une fois validé, l’encaissement ne pourra plus le corriger ni l’annuler. Vous pourrez le déverrouiller si besoin.</p></Confirm>}
+    {lift === "unlock-payment" && <LiftDialog title={`Déverrouiller ce paiement de ${money(p.amount)} ?`} effect="L’encaissement pourra de nouveau le corriger ou l’annuler. Il reviendra dans vos éléments à valider." confirm="Déverrouiller" onClose={() => setLift(null)} onConfirm={r => { liftRule(by, "unlock-payment", p.id, r); setLift(null); toast("Paiement déverrouillé."); }} />}
+    {lift === "restore-payment" && <LiftDialog title={`Rétablir ce paiement de ${money(p.amount)} ?`} effect="Il comptera de nouveau dans le solde du client. Son annulation reste dans l’historique." confirm="Rétablir le paiement" onClose={() => setLift(null)} onConfirm={r => { liftRule(by, "restore-payment", p.id, r); setLift(null); toast("Paiement rétabli."); }} />}
   </div>;
 }
 function RequestRow({ r }: { r: Request }) {
@@ -195,9 +200,10 @@ function RequestForm({ kind, client, invoiceId, by, onClose }: { kind: Exclude<R
 function Invoices({ nav, by }: { nav: Nav; by: string }) {
   const d = useData(), s = d.snapshot, [month, setMonth] = useState(() => todayIso().slice(0, 7)), [q, setQ] = useState("");
   const bills = newInvoices(s), pays = newPayments(s), keys = [...bills.map(i => "i:" + i.id), ...pays.map(p => "p:" + p.id)];
-  const [sel, setSel] = useState<string[]>(keys), [confirm, setConfirm] = useState(false);
+  // Everything new is ticked until the Direction changes the selection (items can arrive after the page opened).
+  const [picked, setSel] = useState<string[] | null>(null), sel = picked ?? keys, [confirm, setConfirm] = useState(false);
   const chosenBills = bills.filter(i => sel.includes("i:" + i.id)), chosenPays = pays.filter(p => sel.includes("p:" + p.id)), n = chosenBills.length + chosenPays.length, all = n === keys.length;
-  const toggle = (k: string, on: boolean) => setSel(v => on ? [...v, k] : v.filter(x => x !== k));
+  const toggle = (k: string, on: boolean) => setSel(on ? [...sel, k] : sel.filter(x => x !== k));
   const searching = !!q.trim(), ofMonth = s.invoices.filter(i => i.date.startsWith(month));
   const list = (searching ? s.invoices.filter(i => matches(q, i.number, i.client.name)) : ofMonth).sort((a, b) => b.date.localeCompare(a.date) || b.number.localeCompare(a.number));
   const sum = (f: "total" | "received" | "due") => ofMonth.reduce((t, i) => t + balance(i, s.payments, s.credits)[f], 0);
@@ -222,7 +228,7 @@ function Invoices({ nav, by }: { nav: Nav; by: string }) {
           </label>; })}
           {pays.map(p => { const i = s.invoices.find(x => x.id === p.invoiceId), on = sel.includes("p:" + p.id); return <label key={p.id} className={`cx-pay-card${on ? " cx-on" : ""}`}>
             <input type="checkbox" checked={on} onChange={e => toggle("p:" + p.id, e.target.checked)} />
-            <span className="cx-pay-body"><span className="cx-pay-top"><strong>{money(p.amount)}</strong><span className="cx-chip cx-tone-good">Paiement · {methodName(p.method)}</span></span>
+            <span className="cx-pay-body"><span className="cx-pay-top"><strong>{money(p.amount)}</strong><span className={`cx-chip cx-tone-${p.changedAfterLock ? "warn" : "good"}`}>{p.changedAfterLock ? "Corrigé après validation" : `Paiement · ${methodName(p.method)}`}</span></span>
               <span className="cx-pay-who">{i?.client.name} · facture {i?.number}</span>
               <small>Payé le {dateFr(p.date)}{p.reference ? ` · réf. ${p.reference}` : ""} · saisi par {accountName(p.by)}{p.history?.length ? ` · corrigé ${p.history.length} fois` : ""}</small></span>
           </label>; })}
@@ -239,7 +245,7 @@ function Invoices({ nav, by }: { nav: Nav; by: string }) {
           : <Empty title={searching ? "Aucune facture ne correspond." : `Aucune facture en ${monthLabel(month)}.`}>{searching ? "Essayez un autre numéro ou nom de client." : "Changez de mois avec les flèches."}</Empty>}</div>
       </section>
     </div>
-    {confirm && <Confirm title={`Valider ${n} élément${n > 1 ? "s" : ""} ?`} confirm="Valider" cancel="Pas maintenant" onClose={() => setConfirm(false)} onConfirm={() => { const done = validate(chosenBills.map(i => i.id), chosenPays.map(p => p.id), by); setConfirm(false); if (done) { toast(`${done} élément${done > 1 ? "s validés" : " validé"}.`); setSel([]); } }}>
+    {confirm && <Confirm title={`Valider ${n} élément${n > 1 ? "s" : ""} ?`} confirm="Valider" cancel="Pas maintenant" onClose={() => setConfirm(false)} onConfirm={() => { const done = validate(chosenBills.map(i => i.id), chosenPays.map(p => p.id), by); setConfirm(false); if (done) { toast(`${done} élément${done > 1 ? "s validés" : " validé"}.`); setSel(null); } }}>
       <ul className="cx-mini-list">{chosenBills.map(i => <li key={i.id}>Facture {i.number}, {money(balance(i, s.payments, s.credits).total)}, {i.client.name}</li>)}{chosenPays.map(p => <li key={p.id}>Paiement de {money(p.amount)}, {methodName(p.method)}, {s.invoices.find(x => x.id === p.invoiceId)?.client.name}</li>)}</ul>
       {chosenPays.length > 0 && <p>Les paiements validés ne pourront plus être corrigés ni annulés par l’encaissement.</p>}</Confirm>}
   </div>;
@@ -279,50 +285,4 @@ function InvoiceSheet({ id, fromList, nav, by }: { id: string; fromList: boolean
     </div>
     {ask && <RequestForm kind="paiement" client={client as Client} invoiceId={i.id} by={by} onClose={() => setAsk(false)} />}
   </div>;
-}
-
-function Settings({ by }: { by: string }) {
-  const d = useData(), [add, setAdd] = useState(false), [sheet, setSheet] = useState<Account | null>(null), [reset, setReset] = useState<Account | null>(null), [toggle, setToggle] = useState<Account | null>(null), [demo, setDemo] = useState(false);
-  return <div className="cx-page">
-    <PageHead title="Réglages" />
-    <section className="cx-section" aria-labelledby="set-team">
-      <div className="cx-section-head cx-section-head-row"><div><h2 id="set-team">Équipe</h2><p>Chacun se connecte avec l’identifiant et le mot de passe que vous lui remettez.</p></div><Button icon={<UserPlus size={17} aria-hidden="true" />} onClick={() => setAdd(true)}>Ajouter une personne</Button></div>
-      <div className="cx-panel cx-list">{d.accounts.map(a => <div key={a.id} className={`cx-list-row cx-static${a.active ? "" : " cx-cancelled"}`}>
-        <span className="cx-list-main"><strong>{a.name}{!a.active && <span className="cx-chip">Désactivé</span>}</strong><small>{ROLE_LABEL[a.role]}. Identifiant : {a.login}</small></span>
-        <span className="cx-list-actions"><button type="button" className="cx-text-btn" onClick={() => setReset(a)}><KeyRound size={15} aria-hidden="true" />Nouveau mot de passe</button>{a.id !== by && <button type="button" className="cx-text-btn" onClick={() => setToggle(a)}>{a.active ? "Désactiver" : "Réactiver"}</button>}</span>
-      </div>)}</div>
-    </section>
-    <TermSettings by={by} />
-    <CompanySettings by={by} />
-    <FormatSettings by={by} />
-    <BackupSettings />
-    <section className="cx-section" aria-labelledby="set-demo"><div className="cx-section-head"><h2 id="set-demo">Démonstration</h2><p>Ces boutons servent seulement à essayer la maquette.</p></div>
-      <div className="cx-form-actions cx-left"><Button onClick={() => { setOnline(!d.officeOnline); toast(d.officeOnline ? "Coupure du bureau simulée." : "Bureau reconnecté."); }}>{d.officeOnline ? <><WifiOff size={16} aria-hidden="true" />Simuler une coupure du bureau</> : "Reconnecter le bureau"}</Button><Button kind="quiet" onClick={() => setDemo(true)}>Recharger les données d’exemple</Button></div>
-    </section>
-    {add && <AddMember by={by} onClose={() => setAdd(false)} onCreated={a => { setAdd(false); setSheet(a); }} />}
-    {sheet && <CredentialSheet a={sheet} onClose={() => setSheet(null)} />}
-    {reset && <Confirm title={`Nouveau mot de passe pour ${reset.name} ?`} confirm="Créer le mot de passe" cancel="Annuler" onClose={() => setReset(null)} onConfirm={() => { const pw = generatePassword(), at = nowIso(); commit(by, x => ({ accounts: x.accounts.map(a => a.id === reset.id ? { ...a, password: pw, passwordAt: at } : a) }), { text: `Nouveau mot de passe pour ${reset.name}` }); setSheet({ ...reset, password: pw, passwordAt: at }); setReset(null); }}><p>L’ancien mot de passe ne marchera plus. Vous remettrez le nouveau à {reset.name}.</p></Confirm>}
-    {toggle && <Confirm title={toggle.active ? `Désactiver ${toggle.name} ?` : `Réactiver ${toggle.name} ?`} confirm={toggle.active ? "Désactiver" : "Réactiver"} cancel="Annuler" onClose={() => setToggle(null)} onConfirm={() => { commit(by, x => ({ accounts: x.accounts.map(a => a.id === toggle.id ? { ...a, active: !a.active } : a) }), { text: `Compte de ${toggle.name} ${toggle.active ? "désactivé" : "réactivé"}` }); setToggle(null); toast(toggle.active ? "Compte désactivé." : "Compte réactivé."); }}><p>{toggle.active ? "Cette personne ne pourra plus se connecter. Ce qu’elle a saisi reste dans l’historique." : "Cette personne pourra de nouveau se connecter."}</p></Confirm>}
-    {demo && <Confirm title="Recharger les données d’exemple ?" confirm="Recharger" cancel="Garder mes essais" onClose={() => setDemo(false)} onConfirm={() => { resetDemo(); setDemo(false); toast("Données d’exemple rechargées."); }}><p>Les essais faits dans ce navigateur seront remplacés par les données de départ.</p></Confirm>}
-  </div>;
-}
-function AddMember({ by, onClose, onCreated }: { by: string; onClose: () => void; onCreated: (a: Account) => void }) {
-  const [name, setName] = useState(""), [role, setRole] = useState<Role | "">(""), [error, setError] = useState("");
-  function create() {
-    if (!name.trim()) return setError("Écrivez le nom de la personne."); if (!role) return setError("Choisissez ce qu’elle fera.");
-    const d = getData(), a: Account = { id: uid(), name: name.trim(), role, login: generateLogin(name, d.accounts), password: generatePassword(), active: true, createdAt: nowIso(), passwordAt: nowIso() };
-    commit(by, x => ({ accounts: [...x.accounts, a] }), { text: `Compte créé pour ${a.name} (${ROLE_LABEL[a.role]})` }); onCreated(a);
-  }
-  return <Modal side title="Ajouter une personne" subtitle="L’identifiant et le mot de passe sont créés pour vous." onClose={onClose} actions={<><Button kind="quiet" onClick={onClose}>Annuler</Button><Button kind="primary" onClick={create}>Créer son accès</Button></>}>
-    <Field label="Nom et prénom" required><TextInput value={name} onChange={v => { setName(v); setError(""); }} autoFocus placeholder="Ex. Marie Ndjock…" /></Field>
-    <Field label="Que fera-t-elle ?" required><Choice columns={2} value={role} onChange={v => { setRole(v); setError(""); }} options={[{ value: "facturation", label: "Facturation", sub: "Factures, avoirs, clients" }, { value: "encaissement", label: "Encaissement", sub: "Paiements" }, { value: "bureau", label: "Facturation et encaissement", sub: "Tout le bureau, une seule connexion" }, { value: "responsable", label: "Direction", sub: "Ce site" }]} /></Field>
-    {error && <Notice tone="bad">{error}</Notice>}
-  </Modal>;
-}
-function CredentialSheet({ a, onClose }: { a: Account; onClose: () => void }) {
-  const text = `CAPSED, accès de ${a.name}\nEspace : ${ROLE_LABEL[a.role]}\nIdentifiant : ${a.login}\nMot de passe : ${a.password}`;
-  return <Modal title={`Accès de ${a.name}`} subtitle="Remettez ces informations à cette personne uniquement." onClose={onClose} actions={<><Button kind="quiet" icon={<Copy size={16} aria-hidden="true" />} onClick={() => { navigator.clipboard?.writeText(text).then(() => toast("Copié.")).catch(() => toast("Copie impossible : recopiez les informations.", "warn")); }}>Copier</Button><Button kind="primary" onClick={onClose}>C’est noté</Button></>}>
-    <dl className="cx-credential"><div><dt>Espace</dt><dd>{ROLE_LABEL[a.role]}</dd></div><div><dt>Identifiant</dt><dd translate="no">{a.login}</dd></div><div><dt>Mot de passe</dt><dd translate="no">{a.password}</dd></div></dl>
-    <p className="cx-muted">En cas de perte, créez un nouveau mot de passe : l’ancien ne marchera plus.</p>
-  </Modal>;
 }

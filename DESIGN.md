@@ -26,6 +26,9 @@ Product truth lives in `PRODUCT.md`. This file records the visual system the app
   - The Direction can also create invoices (« Nouvelle facture » on Factures and on a client page) with the same 4-step composer; its own invoices are validated at creation. The wizard hides the bottom navigation while it is open.
   - Situation has one switch: « Les clients » (statement with HT, TVA and TTC, on screen and on paper) or « L’équipe » (what each person did in the office apps over a period, then the journal, exportable to Excel).
   - Payment deadline: 60 days by default, changed by the Direction in Réglages, and per invoice at step 3 of the composer. It is internal only: never printed on the invoice. Lateness (« N j de retard », « Relancer », the aging bar) counts from this deadline.
+  - Réglages is an index of five pages, one question each: Équipe et accès (people, passwords, office computers), Règles et dérogations (payment deadline, closed months, every rule lifted with « Revenir en arrière »), Entreprise et factures, Données et sauvegarde (when each computer last sent data), Aide.
+  - Rules the Direction can lift (unlock a validated payment, restore a cancelled one, reopen a closed month) always ask for a reason, state the exact effect, are written in the journal and can be undone.
+  - Freshness is always visible: the Direction site says « Situation au … » and when each office computer last sent data, and warns when one has sent nothing for a day or when the phone is offline. The office status bar says « Tout est envoyé · 14:32 » or how many changes wait to be sent.
   - Base 15 px, controls 40–44 px.
 
 ## Principles

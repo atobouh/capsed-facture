@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import type { ReactNode } from "react";
 import { Check, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, Info, MoreHorizontal, Search, X } from "lucide-react";
 import { DocumentPages } from "../document-renderer";
@@ -18,9 +19,8 @@ export function Button({ kind = "secondary", icon, children, onClick, disabled, 
 }
 export function Chip({ tone = "neutral", children, icon }: { tone?: Tone; children: ReactNode; icon?: ReactNode }) { return <span className={`cx-chip cx-tone-${tone}`}>{icon}{children}</span>; }
 /** Final states are stamped like the office cachet; states still moving are a soft pill. */
-export function Stamp({ tone, children }: { tone: "good" | "bad" | "plum"; children: ReactNode }) { return <span className={`cx-stamp cx-stamp-${tone}`}>{children}</span>; }
+export function Stamp({ tone, children }: { tone: "good" | "bad" | "plum"; children: ReactNode }) { return <span className={`cx-chip cx-tone-${tone}`}>{children}</span>; }
 export function StatusChip({ status }: { status: string }) {
-  if (status === "Payée" || status === "Soldée avec avoir") return <Stamp tone="good">{status}</Stamp>;
   return <Chip tone={STATUS_TONE[status] ?? "neutral"}>{status}</Chip>;
 }
 /** Month chosen with two arrows: no calendar widget, no browser-language month names. */
@@ -29,9 +29,9 @@ export function MonthStepper({ value, onChange }: { value: string; onChange: (v:
   return <div className="cx-monthstep" role="group" aria-label="Mois affiché"><button type="button" onClick={() => shift(-1)} aria-label="Mois précédent"><ChevronLeft size={20} /></button><strong aria-live="polite">{monthLabel(value)}</strong><button type="button" onClick={() => shift(1)} aria-label="Mois suivant"><ChevronRight size={20} /></button></div>;
 }
 /** True when the window is wide enough to show a list and its detail side by side. */
-const WIDE = "(min-width: 1180px)";
-export function useWide() {
-  return useSyncExternalStore(cb => { const m = window.matchMedia(WIDE); m.addEventListener("change", cb); return () => m.removeEventListener("change", cb); }, () => window.matchMedia(WIDE).matches, () => true);
+export function useWide(min = 1180) {
+  const q = `(min-width: ${min}px)`;
+  return useSyncExternalStore(cb => { const m = window.matchMedia(q); m.addEventListener("change", cb); return () => m.removeEventListener("change", cb); }, () => window.matchMedia(q).matches, () => true);
 }
 
 export function Field({ label, hint, error, children, required, optional, wide }: { label: string; hint?: ReactNode; error?: string; children: ReactNode; required?: boolean; optional?: boolean; wide?: boolean }) {
@@ -59,7 +59,7 @@ export function NumberInput({ value, onChange, placeholder = "0", decimals, unit
   return <div className="cx-money"><input className="cx-input" inputMode={decimals ? "decimal" : "numeric"} value={shown} placeholder={placeholder} onBlur={() => setText(null)} onChange={e => { const raw = decimals ? e.target.value.replace(/[^\d,.]/g, "") : e.target.value.replace(/\D/g, ""); setText(raw); onChange(Number(raw.replace(",", ".")) || 0); }} />{unit && <span>{unit}</span>}</div>;
 }
 export function Choice<T extends string>({ options, value, onChange, columns = 2 }: { options: { value: T; label: string; sub?: string }[]; value: T | ""; onChange: (v: T) => void; columns?: number }) {
-  return <div className={`cx-choice${columns >= 5 ? " cx-choice-compact" : ""}`} role="radiogroup" style={{ gridTemplateColumns: `repeat(auto-fit, minmax(${columns >= 5 ? 108 : columns >= 3 ? 140 : 190}px, 1fr))` }}>
+  return <div className={`cx-choice${columns >= 5 ? " cx-choice-compact" : ""}`} role="radiogroup" style={{ gridTemplateColumns: `repeat(auto-fit, minmax(${columns >= 5 ? 72 : columns >= 3 ? 140 : 190}px, 1fr))` }}>
     {options.map(o => <button type="button" role="radio" aria-checked={value === o.value} key={o.value} className={`cx-choice-item${value === o.value ? " cx-on" : ""}`} onClick={() => onChange(o.value)}>
       <span className="cx-choice-dot">{value === o.value && <Check size={13} strokeWidth={3} />}</span><span><strong>{o.label}</strong>{o.sub && <small>{o.sub}</small>}</span>
     </button>)}
@@ -75,10 +75,11 @@ export function Notice({ tone = "info", children, title, action }: { tone?: Tone
   return <div className={`cx-notice cx-tone-${tone}`} role={tone === "bad" ? "alert" : "status"}><span className="cx-notice-icon">{tone === "info" ? <Info size={18} /> : tone === "good" ? <Check size={18} /> : <CircleAlert size={18} />}</span><div>{title && <strong>{title}</strong>}{children && <div>{children}</div>}</div>{action}</div>;
 }
 
-export function Modal({ title, subtitle, children, onClose, actions, wide }: { title: string; subtitle?: string; children: ReactNode; onClose: () => void; actions?: ReactNode; wide?: boolean }) {
+/** A dialog. `side` slides a form in from the right (a phone shows it as a bottom sheet); without it, a small centred box for confirmations. */
+export function Modal({ title, subtitle, children, onClose, actions, wide, side }: { title: string; subtitle?: string; children: ReactNode; onClose: () => void; actions?: ReactNode; wide?: boolean; side?: boolean }) {
   useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [onClose]);
-  return <div className="cx-overlay cx-noprint" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
-    <div className={`cx-modal${wide ? " cx-modal-wide" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
+  return <div className={`cx-overlay cx-noprint${side ? " cx-overlay-side" : ""}`} onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className={`cx-modal${wide ? " cx-modal-wide" : ""}${side ? " cx-modal-side" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
       <header><div><h2>{title}</h2>{subtitle && <p>{subtitle}</p>}</div><button type="button" className="cx-icon-btn" onClick={onClose} aria-label="Fermer"><X size={20} /></button></header>
       <div className="cx-modal-body">{children}</div>
       {actions && <footer>{actions}</footer>}
@@ -89,14 +90,28 @@ export function Modal({ title, subtitle, children, onClose, actions, wide }: { t
 export function Confirm({ title, children, confirm, cancel = "Retour", onConfirm, onClose }: { title: string; children: ReactNode; confirm: string; cancel?: string; onConfirm: () => void; onClose: () => void }) {
   return <Modal title={title} onClose={onClose} actions={<><Button kind="quiet" onClick={onClose}>{cancel}</Button><Button kind="primary" onClick={onConfirm}>{confirm}</Button></>}>{children}</Modal>;
 }
-export function MoreMenu({ items, label = "Plus d’actions" }: { items: { label: string; hint?: string; onClick: () => void; disabled?: boolean }[]; label?: string }) {
-  const [open, setOpen] = useState(false), ref = useRef<HTMLDivElement>(null);
-  useEffect(() => { if (!open) return; const k = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); }; document.addEventListener("mousedown", k); return () => document.removeEventListener("mousedown", k); }, [open]);
+/** "More actions" menu. Drawn in a layer above the page (never inside a scrolling panel), flipped to stay on screen. */
+export function MoreMenu({ items, label = "Plus d’actions", iconOnly }: { items: { label: string; hint?: string; onClick: () => void; disabled?: boolean }[]; label?: string; iconOnly?: boolean }) {
+  const [open, setOpen] = useState(false), btn = useRef<HTMLButtonElement>(null), menu = useRef<HTMLDivElement>(null), [pos, setPos] = useState<{ top: number; left: number } | null>(null), [host, setHost] = useState<Element | null>(null);
+  useLayoutEffect(() => {
+    if (!open || !btn.current || !menu.current) return;
+    const r = btn.current.getBoundingClientRect(), m = menu.current.getBoundingClientRect(), pad = 8;
+    let left = r.right - m.width; if (left < pad) left = Math.min(r.left, window.innerWidth - m.width - pad);
+    let top = r.bottom + 4; if (top + m.height > window.innerHeight - pad) top = Math.max(pad, r.top - m.height - 4);
+    setPos({ top, left: Math.max(pad, left) });
+  }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => { if (!menu.current?.contains(e.target as Node) && !btn.current?.contains(e.target as Node)) setOpen(false); };
+    const close = () => setOpen(false), esc = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", away); window.addEventListener("resize", close); window.addEventListener("scroll", close, true); window.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", away); window.removeEventListener("resize", close); window.removeEventListener("scroll", close, true); window.removeEventListener("keydown", esc); };
+  }, [open]);
   if (!items.length) return null;
-  return <div className="cx-more" ref={ref}>
-    <button type="button" className="cx-btn cx-btn-quiet" aria-expanded={open} onClick={() => setOpen(o => !o)}><MoreHorizontal size={18} /><span>{label}</span><ChevronDown size={16} /></button>
-    {open && <div className="cx-more-menu" role="menu">{items.map(i => <button type="button" role="menuitem" key={i.label} disabled={i.disabled} onClick={() => { setOpen(false); i.onClick(); }}><strong>{i.label}</strong>{i.hint && <small>{i.hint}</small>}</button>)}</div>}
-  </div>;
+  return <>
+    <button ref={btn} type="button" className={`cx-btn cx-btn-secondary${iconOnly ? " cx-btn-icon" : ""}`} aria-haspopup="menu" aria-expanded={open} aria-label={iconOnly ? label : undefined} title={iconOnly ? label : undefined} onClick={e => { setHost(e.currentTarget.closest(".cx-app") ?? document.body); setPos(null); setOpen(o => !o); }}><MoreHorizontal size={17} aria-hidden="true" />{!iconOnly && <><span>{label}</span><ChevronDown size={15} aria-hidden="true" /></>}</button>
+    {open && host && createPortal(<div ref={menu} className="cx-more-menu" role="menu" style={{ top: pos?.top ?? -9999, left: pos?.left ?? -9999 }}>{items.map(i => <button type="button" role="menuitem" key={i.label} disabled={i.disabled} onClick={() => { setOpen(false); i.onClick(); }}><strong>{i.label}</strong>{i.hint && <small>{i.hint}</small>}</button>)}</div>, host)}
+  </>;
 }
 
 type Toast = { id: number; text: string; tone: "good" | "warn" };
@@ -124,10 +139,10 @@ export function Stat({ label, value, tone, sub, big }: { label: string; value: s
 export function Empty({ title, children, action, icon }: { title: string; children?: ReactNode; action?: ReactNode; icon?: ReactNode }) {
   return <div className="cx-empty">{icon}<strong>{title}</strong>{children && <p>{children}</p>}{action}</div>;
 }
-export function PageHead({ title, sub, actions, back, pane }: { kicker?: string; title: ReactNode; sub?: ReactNode; actions?: ReactNode; back?: { label: string; onClick: () => void }; pane?: boolean }) {
+export function PageHead({ title, sub, actions, back, pane, tools }: { kicker?: string; title: ReactNode; sub?: ReactNode; actions?: ReactNode; back?: { label: string; onClick: () => void }; pane?: boolean; tools?: ReactNode }) {
   return <header className={`cx-page-head cx-noprint${pane ? " cx-pane-head" : ""}`}>
     {back && <button type="button" className="cx-back" onClick={back.onClick}><ChevronLeft size={18} aria-hidden="true" />{back.label}</button>}
-    <div className="cx-page-head-row"><div className="cx-page-title">{pane ? <h2>{title}</h2> : <h1>{title}</h1>}{sub && <p>{sub}</p>}</div>{actions && <div className="cx-head-actions">{actions}</div>}</div>
+    <div className="cx-page-head-row"><div className="cx-page-title">{pane ? <h2>{title}</h2> : <h1>{title}</h1>}{sub && <p>{sub}</p>}</div>{tools && <div className="cx-head-tools">{tools}</div>}{actions && <div className="cx-head-actions">{actions}</div>}</div>
   </header>;
 }
 /** A row in a list pane: who and what on the left, the amount and its state on the right. */

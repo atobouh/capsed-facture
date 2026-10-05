@@ -2,7 +2,7 @@ import { useState } from "react";
 import { FilePlus2, Lock, Pencil, Plus, UserPlus } from "lucide-react";
 import { Button, Confirm, Empty, Field, Modal, MoreMenu, Monogram, PageHead, Row, SearchBox, Stamp, StatusChip, TextInput, matches, toast, useWide } from "./ui";
 import { CancelPayment, CreditModal, PaymentModal } from "./payments";
-import { accountName, methodName, accountTotals, balance, commit, dateFr, daysSince, getData, money, nowIso, uid, useData } from "./store";
+import { accountName, methodName, accountTotals, balance, canBill, canCash, commit, dateFr, daysSince, getData, money, nowIso, uid, useData } from "./store";
 import type { Client, Role } from "./store";
 
 export type OfficeRoute = { name: string; id?: string; extra?: string };
@@ -46,14 +46,14 @@ export function ClientsDirectory({ role, by, nav }: { role: Role; by: string; na
     sub={<><span>{unpaid.length ? `${unpaid.length} facture${unpaid.length > 1 ? "s" : ""} à payer` : items.length ? `${items.length} facture${items.length > 1 ? "s" : ""}, tout est payé` : "Aucune facture"}</span>{late > 30 && <span className={late > 60 ? "cx-bad-text" : "cx-warn-text"}>{late} j de retard</span>}</>}
     amount={a.due ? money(a.due) : a.refund ? `${money(a.refund)} à rendre` : undefined} />;
   const list = <>
-    <div className="cx-list-cap">{role === "encaissement" ? "Avec un reste à payer" : "Clients"} · {owing.length}</div>
+    <div className="cx-list-cap">{canCash(role) ? "Avec un reste à payer" : "Clients"} · {owing.length}</div>
     {owing.length ? <div className="cx-rows" role="list">{owing.map(row)}</div> : <p className="cx-fold-note">{q ? "Aucun client ne correspond." : "Aucun client n’a de reste à payer."}</p>}
     {settled.length > 0 && <details className="cx-fold" open={!!q && !owing.length}><summary><span>Tout payé <em>({settled.length})</em></span></summary><div className="cx-rows" role="list">{settled.map(row)}</div></details>}
     {archived.length > 0 && <details className="cx-fold" open={!!q && !owing.length && !settled.length}><summary><span>Clients archivés <em>({archived.length})</em></span></summary><div className="cx-rows" role="list">{archived.map(row)}</div></details>}
   </>;
   return <div className={`cx-page${wide ? " cx-page-split" : ""}`}>
-    <PageHead title={role === "encaissement" ? "Clients et paiements" : "Clients"} tools={<SearchBox value={q} onChange={setQ} placeholder="Chercher un client" />}
-      actions={role === "facturation" ? <Button kind="primary" icon={<UserPlus size={16} aria-hidden="true" />} onClick={() => setForm({ id: "", name: "", contact: "", address: "", phone: "", email: "", niu: "", rc: "" })}>Ajouter un client</Button> : undefined} />
+    <PageHead title={canCash(role) ? "Clients et paiements" : "Clients"} tools={<SearchBox value={q} onChange={setQ} placeholder="Chercher un client" />}
+      actions={canBill(role) ? <Button kind="primary" icon={<UserPlus size={16} aria-hidden="true" />} onClick={() => setForm({ id: "", name: "", contact: "", address: "", phone: "", email: "", niu: "", rc: "" })}>Ajouter un client</Button> : undefined} />
     {wide ? <div className="cx-split cx-split-list"><section className="cx-card cx-card-flush cx-scroll" aria-label="Clients">{list}</section><section className="cx-scroll cx-detail-col" aria-label="Compte du client">{current ? <ClientAccount key={current} id={current} role={role} by={by} nav={nav} pane /> : <Empty title="Choisissez un client dans la liste." />}</section></div>
       : <section className="cx-card cx-card-flush">{list}</section>}
     {form && <ClientForm client={form} by={by} onClose={() => setForm(null)} onSaved={c => { setForm(null); open(c.id); }} />}
@@ -66,7 +66,7 @@ export function ClientAccount({ id, role, by, nav, pane }: { id: string; role: R
   if (!client) return <Empty title="Client introuvable." action={<Button onClick={() => nav({ name: "clients" })}>Tous les clients</Button>} />;
   const items = d.invoices.filter(i => i.client.id === client.id).sort((a, b) => b.date.localeCompare(a.date) || b.number.localeCompare(a.number));
   const a = accountTotals(items, d.payments, d.credits), unpaid = items.filter(i => balance(i, d.payments, d.credits).due > 0);
-  const cashier = role === "encaissement", biller = role === "facturation";
+  const cashier = canCash(role), biller = canBill(role);
   const entries = [
     ...items.filter(i => i.advance > 0).map(i => ({ id: `advance-${i.id}`, invoiceId: i.id, amount: i.advance, date: i.date, method: i.payment, reference: "Avance à la facturation", advance: true as const })),
     ...d.payments.filter(p => items.some(i => i.id === p.invoiceId)).map(p => ({ ...p, advance: false as const })),
@@ -75,13 +75,14 @@ export function ClientAccount({ id, role, by, nav, pane }: { id: string; role: R
   const contact = [client.contact, client.phone, client.email, client.address].filter(Boolean).join(", ");
   return <div className={pane ? "cx-detail" : "cx-page"}>
     <PageHead pane={pane} back={pane ? undefined : { label: "Clients", onClick: () => nav({ name: "clients" }) }} title={<>{client.name}{client.archived && <span className="cx-chip">Archivé</span>}</>} sub={contact || "Coordonnées à compléter"}
-      actions={biller ? <>
-        <MoreMenu label="Autres actions" items={[client.archived ? { label: "Réactiver le client", onClick: () => { commit(by, x => ({ clients: x.clients.map(c => c.id === client.id ? { ...c, archived: false, archivedAt: undefined } : c) }), { text: `Client ${client.name} réactivé`, clientId: client.id }); toast("Client réactivé."); } } : { label: "Archiver le client", hint: "Il quitte la liste. Rien n’est supprimé.", onClick: () => setArchive(true) }]} />
-        <Button icon={<Pencil size={17} aria-hidden="true" />} onClick={() => setEdit(true)}>Modifier</Button>
-        <Button kind="primary" icon={<FilePlus2 size={18} aria-hidden="true" />} disabled={!!client.archived} title={client.archived ? "Réactivez le client pour le facturer" : undefined} onClick={() => nav({ name: "compose", extra: client.id })}>Nouvelle facture</Button>
-      </> : <>
-        <Button onClick={() => nav({ name: "situation", id: client.id })}>Relevé du client</Button>
-        <Button kind="primary" icon={<Plus size={18} aria-hidden="true" />} disabled={!unpaid.length} onClick={() => setPay({ invoiceId: unpaid[unpaid.length - 1].id })}>Enregistrer un paiement</Button>
+      actions={<>
+        {biller && <MoreMenu label="Autres actions" items={[
+          ...(cashier ? [{ label: "Modifier les coordonnées", onClick: () => setEdit(true) }, { label: "Relevé du client", onClick: () => nav({ name: "situation", id: client.id }) }] : []),
+          client.archived ? { label: "Réactiver le client", onClick: () => { commit(by, x => ({ clients: x.clients.map(c => c.id === client.id ? { ...c, archived: false, archivedAt: undefined } : c) }), { text: `Client ${client.name} réactivé`, clientId: client.id }); toast("Client réactivé."); } } : { label: "Archiver le client", hint: "Il quitte la liste. Rien n’est supprimé.", onClick: () => setArchive(true) }]} />}
+        {biller && !cashier && <Button icon={<Pencil size={17} aria-hidden="true" />} onClick={() => setEdit(true)}>Modifier</Button>}
+        {cashier && !biller && <Button onClick={() => nav({ name: "situation", id: client.id })}>Relevé du client</Button>}
+        {biller && <Button kind={cashier ? "secondary" : "primary"} icon={<FilePlus2 size={18} aria-hidden="true" />} disabled={!!client.archived} title={client.archived ? "Réactivez le client pour le facturer" : undefined} onClick={() => nav({ name: "compose", extra: client.id })}>Nouvelle facture</Button>}
+        {cashier && <Button kind="primary" icon={<Plus size={18} aria-hidden="true" />} disabled={!unpaid.length} onClick={() => setPay({ invoiceId: unpaid[unpaid.length - 1].id })}>Enregistrer un paiement</Button>}
       </>} />
     <dl className="cx-strip">
       <div><dt>Facturé</dt><dd>{money(a.total)}</dd></div>
@@ -97,7 +98,7 @@ export function ClientAccount({ id, role, by, nav, pane }: { id: string; role: R
       </tbody></table> : <Empty title="Aucune facture pour ce client." action={biller ? <Button kind="primary" onClick={() => nav({ name: "compose", extra: client.id })}>Créer sa première facture</Button> : undefined} />}
     </section>
     {notes.length > 0 && <section className="cx-card cx-card-flush"><h2 className="cx-card-title">Avoirs</h2><div className="cx-list">{notes.map(c => <button type="button" className="cx-list-row" key={c.id} onClick={() => nav({ name: "credit", id: c.id })}><span className="cx-list-main"><strong>{c.number}</strong><small>{dateFr(c.date)}, sur la facture {c.invoiceNumber}. {c.reason}</small></span><span className="cx-list-amount"><strong>− {money(c.amount)}</strong></span></button>)}</div></section>}
-    <section className="cx-card cx-card-flush"><h2 className="cx-card-title">Paiements reçus{biller && <small>Saisis par l’encaissement</small>}</h2>
+    <section className="cx-card cx-card-flush"><h2 className="cx-card-title">Paiements reçus{biller && !cashier && <small>Saisis par l’encaissement</small>}</h2>
       <div className="cx-list">{entries.map(p => <div className={`cx-list-row cx-static${!p.advance && p.cancelledAt ? " cx-cancelled" : ""}`} key={p.id}>
         <span className="cx-list-main"><strong>{money(p.amount)}, {methodName(p.method)}</strong><small>{dateFr(p.date)}, facture {items.find(i => i.id === p.invoiceId)?.number}{p.reference ? `. ${p.reference}` : ""}{!p.advance && p.by ? `. Saisi par ${accountName(p.by)}` : ""}</small>
           {!p.advance && p.history?.length ? <details className="cx-revisions"><summary>Corrigé {p.history.length} fois</summary>{p.history.map((v, k) => <p key={k}>Avant : {money(v.amount)}, {methodName(v.method)}, {dateFr(v.date)}</p>)}</details> : null}</span>

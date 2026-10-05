@@ -52,7 +52,7 @@ export default function Composer({ editId, clientId, requestId, by, onDone, onCa
     let invoice: Invoice;
     if (editing) {
       const { history, ...previous } = editing; const stamp = nowIso();
-      invoice = { ...editing, ...data, revisedAt: stamp, history: [...(history ?? []), { ...previous, savedAt: stamp }] as Invoice["history"] };
+      invoice = { ...editing, ...data, validatedAt: undefined, validatedBy: undefined, revisedAt: stamp, history: [...(history ?? []), { ...previous, savedAt: stamp }] as Invoice["history"] };
       commit(by, x => ({ invoices: x.invoices.map(i => i.id === invoice.id ? invoice : i) }), { text: `Facture ${invoice.number} modifiée, version précédente conservée`, clientId: invoice.client.id, invoiceId: invoice.id });
       toast("Modifications enregistrées. Le numéro et la version précédente sont conservés.");
     } else {

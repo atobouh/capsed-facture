@@ -762,3 +762,16 @@ button.cx-list-row:hover,label.cx-list-row:hover{background:var(--hover)}
 .cx-pw-sheet{display:inline-flex;align-items:center;gap:6px}
 /* An invoice made before the app, typed in afterwards */
 .cx-legacy-tag{display:inline-block;margin-left:8px;padding:1px 7px;border-radius:999px;background:#EEF0F3;color:#4E5563;font-size:11.5px;font-weight:500;vertical-align:1px;white-space:nowrap}
+/* Office computer locked after 10 minutes without use (or « Verrouiller ») */
+.cx-lock-host{display:contents}
+.cx-lock{position:fixed;inset:0;z-index:90;display:grid;place-items:center;padding:16px;background:#3a2443e6;backdrop-filter:blur(6px)}
+.cx-lock-card{width:min(380px,100%);background:var(--surface);border-radius:16px;padding:28px 26px 22px;box-shadow:0 24px 60px #1b182040;display:grid;gap:12px;text-align:center}
+.cx-lock-card h2{font-size:20px;font-weight:600;margin:0}
+.cx-lock-card p{margin:0}
+.cx-lock-card .cx-field{text-align:left}
+.cx-lock-mark{width:52px;height:52px;margin:0 auto 4px;border-radius:13px}
+.cx-user-actions{display:flex;gap:6px;align-items:center;color:var(--muted);font-size:12px}
+.cx-update-bar span{white-space:normal}
+.cx-update-bar{width:max-content;max-width:min(760px,calc(100vw - 32px))}
+.cx-import-preview{border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:320px}
+.cx-import-preview .cx-table td,.cx-import-preview .cx-table th{white-space:nowrap}

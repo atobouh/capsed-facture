@@ -73,7 +73,7 @@ export function SignInBrand() {
   </section>;
 }
 
-export function OfficeShell({ me, route, nav, onHelp, onSignOut, children }: { me: Account; route: OfficeRoute; nav: (r: OfficeRoute) => void; onHelp: () => void; onSignOut: () => void; children: ReactNode }) {
+export function OfficeShell({ me, route, nav, onHelp, onSignOut, onLock, children }: { me: Account; route: OfficeRoute; nav: (r: OfficeRoute) => void; onHelp: () => void; onSignOut: () => void; onLock?: () => void; children: ReactNode }) {
   const d = useData(), inbox = d.requests.filter(r => receives(me.role, r.to) && (CLOUD || r.receivedAt) && !r.resolvedAt).length, bill = canBill(me.role), cash = canCash(me.role);
   // Every office tab is listed once; the login decides which ones show.
   const items: { key: string; label: string; icon: ReactNode; show: boolean; count?: number }[] = [
@@ -98,7 +98,7 @@ export function OfficeShell({ me, route, nav, onHelp, onSignOut, children }: { m
       <nav aria-label="Navigation principale">{items.filter(i => i.show).map(i => <button type="button" key={i.key} aria-current={section === i.key ? "page" : undefined} className={section === i.key ? "cx-on" : ""} onClick={() => nav({ name: i.key })}>{i.icon}<span>{i.label}</span>{!!i.count && <b className="cx-count" aria-label={`${i.count} à traiter`}>{i.count}</b>}</button>)}</nav>
       <div className="cx-sidebar-foot">
         {CLOUD ? <SyncLine /> : <p className={`cx-sync${d.officeOnline ? "" : " cx-sync-off"}`}>{d.officeOnline ? <><span className="cx-sync-dot" aria-hidden="true" />Synchronisé avec la Direction</> : <><WifiOff size={14} aria-hidden="true" />Hors ligne, saisies gardées ici</>}</p>}
-        <div className="cx-user"><span className="cx-avatar" aria-hidden="true">{initials(me.name)}</span><div><strong>{me.name}</strong><button type="button" onClick={onSignOut}>Se déconnecter</button></div></div>
+        <div className="cx-user"><span className="cx-avatar" aria-hidden="true">{initials(me.name)}</span><div><strong>{me.name}</strong><span className="cx-user-actions">{onLock && <><button type="button" onClick={onLock} title="Verrouiller (Ctrl+L)">Verrouiller</button><span aria-hidden="true">·</span></>}<button type="button" onClick={onSignOut}>Se déconnecter</button></span></div></div>
       </div>
     </aside>
     <main className="cx-content" id="contenu" tabIndex={-1}>{children}</main>

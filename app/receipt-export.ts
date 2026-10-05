@@ -4,13 +4,13 @@ import { clientDetailLines } from "./client-details";
 type Cell = string | number;
 const xml=(v:unknown)=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&apos;"}[c]!)).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,"");
 export function downloadBlob(data:Blob,name:string){const url=URL.createObjectURL(data),a=document.createElement("a");a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
-function zip(files:Record<string,string>){
+export function zip(files:Record<string,string>,type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"){
  const encoder=new TextEncoder(),chunks:Uint8Array[]=[],central:Uint8Array[]=[];let offset=0;
  const crc=(data:Uint8Array)=>{let n=0xffffffff;for(const b of data){n^=b;for(let i=0;i<8;i++)n=(n>>>1)^((n&1)?0xedb88320:0);}return(n^0xffffffff)>>>0;};
  for(const [name,value] of Object.entries(files)){const path=encoder.encode(name),data=encoder.encode(value),sum=crc(data);const header=new Uint8Array(30+path.length),v=new DataView(header.buffer);v.setUint32(0,0x04034b50,true);v.setUint16(4,20,true);v.setUint16(6,0x0800,true);v.setUint32(14,sum,true);v.setUint32(18,data.length,true);v.setUint32(22,data.length,true);v.setUint16(26,path.length,true);header.set(path,30);chunks.push(header,data);
  const entry=new Uint8Array(46+path.length),e=new DataView(entry.buffer);e.setUint32(0,0x02014b50,true);e.setUint16(4,20,true);e.setUint16(6,20,true);e.setUint16(8,0x0800,true);e.setUint32(16,sum,true);e.setUint32(20,data.length,true);e.setUint32(24,data.length,true);e.setUint16(28,path.length,true);e.setUint32(42,offset,true);entry.set(path,46);central.push(entry);offset+=header.length+data.length;}
  const end=new Uint8Array(22),e=new DataView(end.buffer);e.setUint32(0,0x06054b50,true);e.setUint16(8,central.length,true);e.setUint16(10,central.length,true);e.setUint32(12,central.reduce((n,c)=>n+c.length,0),true);e.setUint32(16,offset,true);
- return new Blob([...chunks,...central,end] as BlobPart[],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+ return new Blob([...chunks,...central,end] as BlobPart[],{type});
 }
 export function downloadExcel(rows:Cell[][],filename:string){
  const invoice=filename.startsWith("facture-"),head=(rows[1]??[]).map(String),widths=invoice?[48,27,13,19,20]:head[0]==="Client"?[30,17,15,17,15,15,15,19,15].slice(0,head.length):head[0]==="Date"&&head[1]==="Écriture"?[13,32,38,17,17,20,17].slice(0,head.length):head.map(h=>h==="Action"?70:22),count=widths.length;

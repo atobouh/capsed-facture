@@ -2,9 +2,11 @@
 // The screens are the web build in ../dist-office; data stays on this computer and syncs with the cloud.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod update;
+
 use std::time::Duration;
 use tauri::webview::PageLoadEvent;
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::{AppHandle, Manager, RunEvent, Runtime};
 
 /// The main window is ready: show it (maximized, in front) and close the small opening card.
 fn reveal<R: Runtime>(app: &AppHandle<R>) {
@@ -22,6 +24,8 @@ fn reveal<R: Runtime>(app: &AppHandle<R>) {
 
 fn main() {
     tauri::Builder::default()
+        .manage(update::Updates::default())
+        .invoke_handler(tauri::generate_handler![update::update_ready, update::install_update_now])
         // Opening the app a second time brings the open window to the front instead of a second copy.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             reveal(app);
@@ -43,8 +47,14 @@ fn main() {
                 std::thread::sleep(Duration::from_secs(8));
                 reveal(&handle);
             });
+            update::start(app.handle());
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("CAPSED Bureau n'a pas pu démarrer");
+        .build(tauri::generate_context!())
+        .expect("CAPSED Bureau n'a pas pu démarrer")
+        .run(|app, event| {
+            if let RunEvent::Exit = event {
+                update::on_exit(app);
+            }
+        });
 }

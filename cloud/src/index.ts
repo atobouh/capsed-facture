@@ -79,9 +79,15 @@ async function tooManyFailures(env: Env, key: string, max: number) {
 }
 const noteFailure = (env: Env, key: string) => env.DB.prepare("INSERT INTO login_failures (key, at) VALUES (?, ?)").bind(key, now()).run();
 const ipOf = (req: Request) => req.headers.get("cf-connecting-ip") ?? "local";
-async function startSession(env: Env, account: Account) {
+/** « Android · Chrome », « Windows · Edge »…: enough for the Direction to recognise its own phones and computers. */
+function deviceLabel(ua: string) {
+  const os = /iPhone/.test(ua) ? "iPhone" : /iPad/.test(ua) ? "iPad" : /Android/.test(ua) ? "Android" : /Windows/.test(ua) ? "Windows" : /Mac OS X|Macintosh/.test(ua) ? "Mac" : /Linux/.test(ua) ? "Linux" : "Appareil";
+  const browser = /SamsungBrowser/.test(ua) ? "Samsung Internet" : /Edg\//.test(ua) ? "Edge" : /OPR\/|Opera/.test(ua) ? "Opera" : /Firefox\//.test(ua) ? "Firefox" : /CriOS|Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : "navigateur";
+  return `${os} · ${browser}`;
+}
+async function startSession(env: Env, account: Account, req?: Request) {
   const token = newToken();
-  await env.DB.prepare("INSERT INTO sessions (token_hash, account_id, created_at, last_seen, expires_at) VALUES (?, ?, ?, ?, ?)").bind(await sha256(token), account.id, now(), now(), later(SESSION_DAYS * 864e5)).run();
+  await env.DB.prepare("INSERT INTO sessions (token_hash, account_id, created_at, last_seen, expires_at, label) VALUES (?, ?, ?, ?, ?, ?)").bind(await sha256(token), account.id, now(), now(), later(SESSION_DAYS * 864e5), deviceLabel(req?.headers.get("user-agent") ?? "")).run();
   return { "set-cookie": `${COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_DAYS * 86400}` };
 }
 const clearCookie = { "set-cookie": `${COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0` };
@@ -90,8 +96,11 @@ function cookieToken(req: Request) { return (req.headers.get("cookie") ?? "").sp
 /** The Direction on the website (cookie), or an office computer (bearer token) acting for the person signed in on it. */
 async function webActor(env: Env, req: Request): Promise<Actor | null> {
   const token = cookieToken(req); if (!token) return null;
-  const s = await env.DB.prepare("SELECT account_id, expires_at FROM sessions WHERE token_hash = ?").bind(await sha256(token)).first<{ account_id: string; expires_at: string }>();
+  const hash = await sha256(token);
+  const s = await env.DB.prepare("SELECT account_id, expires_at, last_seen FROM sessions WHERE token_hash = ?").bind(hash).first<{ account_id: string; expires_at: string; last_seen: string }>();
   if (!s || s.expires_at < now()) return null;
+  // When each connection was last used (written at most every 5 minutes).
+  if (Date.parse(s.last_seen) < Date.now() - 5 * 60_000) await env.DB.prepare("UPDATE sessions SET last_seen = ? WHERE token_hash = ?").bind(now(), hash).run();
   const account = await accountById(env, s.account_id);
   if (!account?.active || account.role !== "responsable") return null;
   return { account, device: null };
@@ -176,7 +185,7 @@ async function api(env: Env, req: Request, url: URL): Promise<Response> {
     const a: Account = { id: uuid(), name, role: "responsable", login, active: true, createdAt: now(), passwordAt: now(), ...(await makeHash(b.password!)), visiblePassword: b.password };
     await writeRecord(env, { collection: "accounts", id: a.id, data: a, by: a.id, device: null, note: "premier compte" });
     await event(env, a.id, `Compte Direction créé pour ${a.name}`);
-    return json({ account: publicAccount(a) }, 200, await startSession(env, a));
+    return json({ account: publicAccount(a) }, 200, await startSession(env, a, req));
   }
   if (p === "/api/login" && post) {
     csrf();
@@ -186,7 +195,7 @@ async function api(env: Env, req: Request, url: URL): Promise<Response> {
     if (!a || !(await checkPassword(b.password ?? "", a))) { await noteFailure(env, "login:" + login); await noteFailure(env, "ip:" + ipOf(req)); return fail(401, "Identifiant ou mot de passe incorrect."); }
     if (!a.active) return fail(403, "Ce compte est désactivé.");
     if (a.role !== "responsable") return fail(403, "Ce site est réservé à la Direction. L’équipe travaille dans l’application de bureau.");
-    return json({ account: publicAccount(a) }, 200, await startSession(env, a));
+    return json({ account: publicAccount(a) }, 200, await startSession(env, a, req));
   }
   if (p === "/api/logout" && post) {
     const token = cookieToken(req);
@@ -255,6 +264,20 @@ async function api(env: Env, req: Request, url: URL): Promise<Response> {
     const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000).padStart(6, "0"), expiresAt = later(24 * 36e5);
     await env.DB.prepare("INSERT INTO device_codes (code_hash, letter, created_by, created_at, expires_at) VALUES (?, ?, ?, ?, ?)").bind(await sha256(code), letter, w.account.id, now(), expiresAt).run();
     return json({ code, letter, expiresAt });
+  }
+  // The Direction's own sign-ins: list them, and sign out every other phone or computer at once.
+  if (p === "/api/sessions" && !post) {
+    const mine = await sha256(cookieToken(req)!);
+    const { results } = await env.DB.prepare("SELECT token_hash, label, created_at, last_seen FROM sessions WHERE account_id = ? AND expires_at > ? ORDER BY last_seen DESC").bind(w.account.id, now()).all<{ token_hash: string; label: string | null; created_at: string; last_seen: string }>();
+    return json({ sessions: results.map(r => ({ id: r.token_hash.slice(0, 12), label: r.label ?? "Appareil", created_at: r.created_at, last_seen: r.last_seen, current: r.token_hash === mine })) });
+  }
+  if (p === "/api/sessions/others" && post) {
+    csrf();
+    const mine = await sha256(cookieToken(req)!);
+    const r = await env.DB.prepare("DELETE FROM sessions WHERE account_id = ? AND token_hash != ?").bind(w.account.id, mine).run();
+    const n = r.meta.changes ?? 0;
+    await event(env, w.account.id, `${w.account.name} a déconnecté ${n} autre(s) appareil(s) du site`);
+    return json({ signedOut: n });
   }
   if (p === "/api/devices/revoke" && post) {
     csrf();

@@ -13,7 +13,7 @@ import { DIRECTION_LETTER } from "./collections";
 import { checkPassword } from "./password";
 import { ROLE_LABEL, commit, forgetLocalData, getData, nowIso, receives, setSeriesLetter, useData } from "./store";
 import type { Account } from "./store";
-import { resetSync, startSync, syncNow, useSync } from "./sync";
+import { resetSync, startSync, stopSync, syncNow, useSync } from "./sync";
 import { fetchJson } from "./net";
 import type { NetOptions } from "./net";
 
@@ -29,9 +29,9 @@ function call<T>(base: string, path: string, body?: unknown, opts?: NetOptions):
 /** Button text while waiting: says so when the connection is slow, so nobody thinks it froze. */
 const waiting = (busy: boolean, slow: boolean, label: string, doing: string) => !busy ? label : slow ? "Connexion lente, on continue…" : doing;
 
-function PasswordInput({ id, value, onChange, autoComplete }: { id: string; value: string; onChange: (v: string) => void; autoComplete: string }) {
+function PasswordInput({ id, value, onChange, autoComplete, autoFocus }: { id: string; value: string; onChange: (v: string) => void; autoComplete: string; autoFocus?: boolean }) {
   const [show, setShow] = useState(false);
-  return <div className="cx-password"><input id={id} className="cx-input" type={show ? "text" : "password"} value={value} autoComplete={autoComplete} onChange={e => onChange(e.target.value)} /><button type="button" className="cx-icon-btn" onClick={() => setShow(s => !s)} aria-label={show ? "Masquer le mot de passe" : "Afficher le mot de passe"}>{show ? <EyeOff size={18} /> : <Eye size={18} />}</button></div>;
+  return <div className="cx-password"><input id={id} className="cx-input" type={show ? "text" : "password"} value={value} autoComplete={autoComplete} autoFocus={autoFocus} onChange={e => onChange(e.target.value)} /><button type="button" className="cx-icon-btn" onClick={() => setShow(s => !s)} aria-label={show ? "Masquer le mot de passe" : "Afficher le mot de passe"}>{show ? <EyeOff size={18} /> : <Eye size={18} />}</button></div>;
 }
 function Screen({ children }: { children: React.ReactNode }) {
   return <div className="cx-app"><main className="cx-signin"><SignInBrand /><section className="cx-signin-panel">{children}</section></main><ToastHost /></div>;
@@ -54,8 +54,28 @@ function useNewVersion() {
   }, []);
   return ready;
 }
+// The desktop app downloads its new version by itself (src-tauri/src/update.rs) and installs it when it closes.
+type TauriBridge = { invoke: <T>(cmd: string, args?: Record<string, unknown>) => Promise<T> };
+const tauri = () => (window as unknown as { __TAURI_INTERNALS__?: TauriBridge }).__TAURI_INTERNALS__;
+function useDesktopUpdate() {
+  const [ready, setReady] = useState<{ version: string } | null>(null);
+  useEffect(() => {
+    const t = tauri(); if (!t) return;
+    const look = () => t.invoke<{ version: string } | null>("update_ready").then(r => setReady(r ?? null)).catch(() => { /* ancienne version */ });
+    const timer = setInterval(look, 60_000); void look();
+    return () => clearInterval(timer);
+  }, []);
+  return ready;
+}
 function UpdateBar() {
-  const ready = useNewVersion();
+  const ready = useNewVersion(), desktop = useDesktopUpdate(), [busy, setBusy] = useState(false);
+  if (desktop) return <div className="cx-update-bar" role="status"><span>Nouvelle version {desktop.version} prête. Elle s’installe quand vous fermez CAPSED Bureau.</span>
+    <Button kind="primary" disabled={busy} onClick={async () => {
+      setBusy(true); syncNow();
+      // A moment for the last changes to be saved on this computer (and sent if online), then the small installer runs and the app reopens.
+      await new Promise(r => setTimeout(r, 2500));
+      void tauri()?.invoke("install_update_now");
+    }}>{busy ? "Installation…" : "Installer maintenant"}</Button></div>;
   if (!ready) return null;
   return <div className="cx-update-bar" role="status"><span>Une nouvelle version est prête.</span><Button kind="primary" onClick={() => location.reload()}>Mettre à jour</Button></div>;
 }
@@ -148,15 +168,27 @@ const DEVICE = "capsed-office-device", SESSION = "capsed-office-session";
 type Device = { api: string; id: string; name: string; letter: string; token: string };
 const readDevice = (): Device | null => { try { return JSON.parse(read(DEVICE)) as Device; } catch { return null; } };
 
+const REVOKED = "capsed-office-revoked";
 export function OfficeApp() {
-  const [device, setDevice] = useState<Device | null>(readDevice);
+  const [device, setDevice] = useState<Device | null>(readDevice), sync = useSync();
   useEffect(() => {
     if (!device) return;
     setSeriesLetter(device.letter);
     startSync({ api: device.api, token: device.token, by: () => read(SESSION) || undefined, interval: 20_000 });
   }, [device]);
-  if (!device) return <Screen><Enroll onDone={d => { write(DEVICE, JSON.stringify(d)); setDevice(d); }} /></Screen>;
-  return <OfficeSignedIn device={device} onUnlink={() => { resetSync(); forgetLocalData(); write(DEVICE, ""); write(SESSION, ""); setDevice(null); }} />;
+  const unlink = useCallback((keepUnsent: boolean) => {
+    // Changes not yet sent stay on this computer and leave as soon as it is linked again; otherwise its copy is wiped.
+    if (keepUnsent) stopSync(); else { resetSync(); forgetLocalData(); }
+    write(DEVICE, ""); write(SESSION, ""); write(LOCKED, ""); setDevice(null);
+  }, []);
+  // The Direction removed this computer: as soon as the cloud says so, whoever was working is signed out and the app asks for a new code.
+  useEffect(() => {
+    if (!device || !sync.authLost) return;
+    write(REVOKED, String(sync.pending || 0));
+    unlink(sync.pending > 0);
+  }, [device, sync.authLost, sync.pending, unlink]);
+  if (!device) return <Screen><Enroll revoked={read(REVOKED)} onDone={d => { write(REVOKED, ""); write(DEVICE, JSON.stringify(d)); setDevice(d); }} /></Screen>;
+  return <OfficeSignedIn device={device} onUnlink={() => unlink(false)} />;
 }
 
 function OfficeSignedIn({ device, onUnlink }: { device: Device; onUnlink: () => void }) {
@@ -171,17 +203,65 @@ function OfficeSignedIn({ device, onUnlink }: { device: Device; onUnlink: () => 
     if (fresh.length) commit(me.id, x => ({ requests: x.requests.map(r => fresh.some(f => f.id === r.id) ? { ...r, receivedAt: nowIso() } : r) }));
   }, [d.requests, me]);
   useEffect(() => { document.title = me ? `CAPSED, ${ROLE_LABEL[me.role]}` : "CAPSED, Connexion"; }, [me]);
+  const [locked, lock, unlock] = useAutoLock(!!me);
   if (!sync.firstPullDone && !d.accounts.length) return <Loading title="Première récupération des données…" detail={sync.received ? `${sync.received} éléments reçus` : `Poste « ${device.name} ». Une seule fois, ensuite le poste travaille même sans internet.`} error={sync.authLost ? "Ce poste n’est plus autorisé. Demandez un nouveau code à la Direction." : sync.error} onRetry={sync.authLost ? onUnlink : sync.error ? syncNow : undefined} />;
-  if (!me) return <Screen><OfficeLogin device={device} authLost={!!sync.authLost} onUnlink={onUnlink} onDone={a => { write(SESSION, a.id); setSid(a.id); setRoute(HOME[a.role]); }} /></Screen>;
+  if (!me) return <Screen><OfficeLogin device={device} authLost={!!sync.authLost} onUnlink={onUnlink} onDone={a => { write(SESSION, a.id); setSid(a.id); setRoute(HOME[a.role]); unlock(); }} /></Screen>;
   return <div className={`cx-app cx-role-${me.role}`}>
-    <OfficeShell me={me} route={route} nav={nav} onHelp={() => setHelp(true)} onSignOut={() => { write(SESSION, ""); setSid(""); }}><OfficeScreen role={me.role} by={me.id} route={route} nav={nav} /></OfficeShell>
+    <div className="cx-lock-host" inert={locked || undefined}><OfficeShell me={me} route={route} nav={nav} onHelp={() => setHelp(true)} onLock={lock} onSignOut={() => { write(SESSION, ""); setSid(""); unlock(); }}><OfficeScreen role={me.role} by={me.id} route={route} nav={nav} /></OfficeShell></div>
+    {locked && <LockScreen me={me} onUnlock={unlock} onSwitch={() => { write(SESSION, ""); setSid(""); unlock(); }} />}
     {help && <HelpPanel role={me.role} route={route.name} onClose={() => setHelp(false)} />}
     <UpdateBar />
     <ToastHost />
   </div>;
 }
 
-function Enroll({ onDone }: { onDone: (d: Device) => void }) {
+// ——— Automatic lock: a computer left alone locks itself; only its user's password (checked on this computer) opens it again ———
+const LOCK_AFTER = 10 * 60_000, LOCKED = "capsed-office-locked";
+function useAutoLock(active: boolean): [boolean, () => void, () => void] {
+  const [locked, setLocked] = useState(() => read(LOCKED) === "1");
+  const lock = useCallback(() => { write(LOCKED, "1"); setLocked(true); }, []);
+  const unlock = useCallback(() => { write(LOCKED, ""); setLocked(false); }, []);
+  useEffect(() => {
+    if (!active) return;
+    let last = Date.now();
+    const seen = () => { last = Date.now(); };
+    const keys = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "l") { e.preventDefault(); lock(); } };
+    const events = ["pointerdown", "pointermove", "keydown", "wheel", "touchstart"] as const;
+    events.forEach(e => window.addEventListener(e, seen, { passive: true }));
+    window.addEventListener("keydown", keys);
+    const t = setInterval(() => { if (Date.now() - last > LOCK_AFTER) lock(); }, 15_000);
+    return () => { events.forEach(e => window.removeEventListener(e, seen)); window.removeEventListener("keydown", keys); clearInterval(t); };
+  }, [active, lock]);
+  return [locked, lock, unlock];
+}
+function LockScreen({ me, onUnlock, onSwitch }: { me: Account; onUnlock: () => void; onSwitch: () => void }) {
+  const [password, setPassword] = useState(""), [error, setError] = useState(""), [busy, setBusy] = useState(false), [fails, setFails] = useState(0), [waitUntil, setWaitUntil] = useState(0);
+  async function submit() {
+    if (Date.now() < waitUntil) return setError("Trop d’essais. Patientez 30 secondes.");
+    if (!password) return setError("Saisissez votre mot de passe.");
+    setBusy(true);
+    const a = getData().accounts.find(x => x.id === me.id), ok = !!a && a.active && await checkPassword(password, a);
+    setBusy(false);
+    if (ok) return onUnlock();
+    const n = fails + 1; setFails(n); setPassword("");
+    if (n >= 5) { setWaitUntil(Date.now() + 30_000); setFails(0); setError("Trop d’essais. Patientez 30 secondes."); }
+    else setError("Mot de passe incorrect.");
+  }
+  // Keys typed here never reach the app behind (no Ctrl+N or F1 while locked).
+  return <div className="cx-lock" role="dialog" aria-modal="true" aria-labelledby="lock-title" onKeyDown={e => e.stopPropagation()}>
+    <form className="cx-lock-card" onSubmit={e => { e.preventDefault(); void submit(); }}>
+      <img src="favicon.svg" alt="" className="cx-lock-mark" />
+      <h2 id="lock-title">Session verrouillée</h2>
+      <p className="cx-muted">{me.name} · {ROLE_LABEL[me.role]}. Le travail en cours est gardé.</p>
+      <Field label="Mot de passe"><PasswordInput id="unlock-password" autoFocus value={password} onChange={v => { setPassword(v); setError(""); }} autoComplete="current-password" /></Field>
+      {error && <Notice tone="bad">{error}</Notice>}
+      <Button kind="primary" type="submit" wide disabled={busy}>Déverrouiller</Button>
+      <button type="button" className="cx-link-btn" onClick={onSwitch}>Ce n’est pas moi : changer d’utilisateur</button>
+    </form>
+  </div>;
+}
+
+function Enroll({ onDone, revoked }: { onDone: (d: Device) => void; revoked?: string }) {
   const [code, setCode] = useState(""), [name, setName] = useState(""), [api, setApi] = useState(DEFAULT_API), [advanced, setAdvanced] = useState(!DEFAULT_API), [error, setError] = useState(""), [busy, setBusy] = useState(false), [slow, setSlow] = useState(false);
   // Same id for every try from this screen: if the cloud accepted the code but the reply was lost, trying again gets this computer back.
   const [attempt] = useState(() => Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, "0")).join(""));
@@ -196,6 +276,7 @@ function Enroll({ onDone }: { onDone: (d: Device) => void }) {
   }
   return <form className="cx-signin-form" onSubmit={e => { e.preventDefault(); void submit(); }}>
     <h2>Relier cet ordinateur</h2>
+    {revoked !== undefined && revoked !== "" && <Notice tone="warn" title="Cet ordinateur a été retiré par la Direction">{Number(revoked) > 0 ? `${revoked} modification(s) faites ici n’avaient pas été envoyées : elles sont gardées et partiront dès que l’ordinateur sera relié.` : "Ses données ont été effacées de cet ordinateur."} Pour l’utiliser de nouveau, demandez un nouveau code à la Direction.</Notice>}
     <p className="cx-muted">Une seule fois. Ensuite il travaille même sans internet et envoie tout dès que la connexion revient.</p>
     <Field label="Code du poste" hint="6 chiffres, donnés par la Direction (valable 24 heures)."><input id="code" className="cx-input cx-code-input" inputMode="numeric" autoComplete="one-time-code" value={code} autoFocus onChange={e => { setCode(e.target.value.replace(/[^\d ]/g, "").slice(0, 7)); setError(""); }} placeholder="123 456" /></Field>
     <Field label="Nom de cet ordinateur"><input id="device-name" className="cx-input" value={name} onChange={e => { setName(e.target.value); setError(""); }} placeholder="Ex. Facturation 1" /></Field>

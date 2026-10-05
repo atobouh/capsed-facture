@@ -197,7 +197,7 @@ export function startSync(cfg: SyncConfig) {
   void cycle();
 }
 export function syncNow() { backoff = 0; void cycle(); }
-export function stopSync() { config = null; if (timer) clearTimeout(timer); timer = null; setCommitHook(null); }
+export function stopSync() { config = null; if (timer) clearTimeout(timer); timer = null; setCommitHook(null); set({ authLost: false, busy: false }); }
 /** Forget everything kept for sync on this browser (sign-out on a shared phone). */
 export function resetSync() {
   stopSync();

@@ -1,6 +1,6 @@
 /** Réglages: five short pages instead of one long one. Each page answers one question. */
 import { useEffect, useState } from "react";
-import { BookOpen, Building2, Check, ChevronRight, Copy, Eye, EyeOff, Database, KeyRound, Monitor, ShieldCheck, UserPlus, Users, WifiOff } from "lucide-react";
+import { BookOpen, Building2, Check, ChevronRight, Copy, Download, Eye, EyeOff, FileUp, Database, KeyRound, Monitor, ShieldCheck, UserPlus, Users, WifiOff } from "lucide-react";
 import { Button, Choice, Confirm, Empty, Field, Modal, Notice, PageHead, Row, TextArea, TextInput, toast } from "./ui";
 import { BackupSettings, CompanySettings, FormatSettings, TermSettings } from "./settings";
 import { ACTIONS, liftRule, undoOverride } from "./overrides";
@@ -8,6 +8,8 @@ import { makeHash } from "./password";
 import { CLOUD, MODE, ROLE_LABEL, accountName, ago, commit, generateLogin, generatePassword, getData, monthLabel, nowIso, resetDemo, setOnline, timeFr, uid, useData } from "./store";
 import type { Account, Override, Role } from "./store";
 import { useSync } from "./sync";
+import { exportAll } from "./export-all";
+import { ImportClients } from "./import-clients";
 import { fetchJson } from "./net";
 import type { DeviceStatus } from "./sync";
 
@@ -28,10 +30,10 @@ export function Reglages({ page, nav, by }: { page?: string; nav: Nav; by: strin
   </div>;
   return <div className="cx-page cx-reglages">
     <PageHead back={{ label: "Réglages", onClick: () => nav({ name: "reglages" }) }} title={p.title} />
-    {p.key === "equipe" && <><Team by={by} />{CLOUD && <Devices />}</>}
+    {p.key === "equipe" && <><Team by={by} />{CLOUD && <Devices />}{MODE === "site" && <Sessions />}</>}
     {p.key === "regles" && <Rules by={by} />}
     {p.key === "entreprise" && <><CompanySettings by={by} /><FormatSettings by={by} /></>}
-    {p.key === "donnees" && <>{CLOUD && <SyncStatus />}<BackupSettings by={by} />{MODE === "demo" && <DemoTools />}</>}
+    {p.key === "donnees" && <>{CLOUD && <SyncStatus />}<ExportAll /><ClientImport by={by} /><BackupSettings by={by} />{MODE === "demo" && <DemoTools />}</>}
     {p.key === "aide" && <Help />}
   </div>;
 }
@@ -193,6 +195,33 @@ function Devices() {
   </section>;
 }
 
+// ——— The Direction's own connections to this site ———
+type Session = { id: string; label: string; created_at: string; last_seen: string; current: boolean };
+function Sessions() {
+  const [list, setList] = useState<Session[] | null>(null), [error, setError] = useState(""), [step, setStep] = useState(0), [busy, setBusy] = useState(false);
+  const load = () => api<{ sessions: Session[] }>("/api/sessions").then(r => { setList(r.sessions); setError(""); }).catch(e => setError((e as Error).message));
+  useEffect(() => { void load(); }, []);
+  const others = list?.filter(x => !x.current) ?? [];
+  async function signOutOthers() {
+    setBusy(true);
+    try { const r = await api<{ signedOut: number }>("/api/sessions/others", {}); toast(r.signedOut ? `${r.signedOut} appareil(s) déconnecté(s).` : "Aucun autre appareil n’était connecté."); void load(); }
+    catch (e) { toast((e as Error).message, "warn"); }
+    finally { setBusy(false); setStep(0); }
+  }
+  return <section className="cx-section" aria-labelledby="set-sessions">
+    <div className="cx-section-head cx-section-head-row"><div><h2 id="set-sessions">Vos connexions à ce site</h2><p>Chaque téléphone ou ordinateur où votre compte Direction est ouvert. Un appareil perdu ou prêté se déconnecte ici.</p></div>
+      <Button disabled={!others.length} onClick={() => setStep(1)}>Déconnecter les autres appareils</Button></div>
+    {error && <Notice tone="warn">{error}</Notice>}
+    <div className="cx-panel cx-list">{list?.map(x => <div key={x.id} className="cx-list-row cx-static"><span className="cx-list-main"><strong>{x.label}{x.current && <span className="cx-chip cx-tone-good">Cet appareil</span>}</strong><small>Connecté le {timeFr(x.created_at)}, utilisé {ago(x.last_seen)}.</small></span></div>)}</div>
+    {step === 1 && <Confirm title={`Déconnecter ${others.length} autre(s) appareil(s) ?`} confirm="Continuer" cancel="Annuler" onClose={() => setStep(0)} onConfirm={() => setStep(2)}>
+      <p>Ces appareils devront se reconnecter avec l’identifiant et le mot de passe de la Direction :</p>
+      <ul className="cx-mini-list">{others.map(x => <li key={x.id}>{x.label}, utilisé {ago(x.last_seen)}</li>)}</ul>
+      <p>Cet appareil-ci reste connecté. Les ordinateurs du bureau ne sont pas concernés (ils se retirent dans « Ordinateurs du bureau »).</p></Confirm>}
+    {step === 2 && <Confirm title="Dernière confirmation" confirm={busy ? "Déconnexion…" : "Oui, déconnecter maintenant"} cancel="Annuler" onClose={() => setStep(0)} onConfirm={() => { if (!busy) void signOutOthers(); }}>
+      <p>La déconnexion est immédiate. Si un appareil a été perdu ou volé, pensez aussi à changer le mot de passe de la Direction (« Nouveau mot de passe » ci-dessus).</p></Confirm>}
+  </section>;
+}
+
 // ——— Règles et dérogations ———
 export function LiftDialog({ title, effect, confirm, onClose, onConfirm }: { title: string; effect: string; confirm: string; onClose: () => void; onConfirm: (reason: string) => void }) {
   const [reason, setReason] = useState(""), [tried, setTried] = useState(false);
@@ -225,6 +254,21 @@ function Rules({ by }: { by: string }) {
 }
 
 // ——— Données et sauvegarde ———
+function ClientImport({ by }: { by: string }) {
+  const [open, setOpen] = useState(false);
+  return <section className="cx-section" aria-labelledby="set-import">
+    <div className="cx-section-head cx-section-head-row"><div><h2 id="set-import">Importer des clients</h2><p>Votre liste de clients existante, depuis un fichier Excel (.xlsx) ou CSV : plus besoin de les saisir un par un. Ceux déjà enregistrés sont laissés tels quels.</p></div>
+      <Button icon={<FileUp size={17} aria-hidden="true" />} onClick={() => setOpen(true)}>Importer un fichier</Button></div>
+    {open && <ImportClients by={by} onClose={() => setOpen(false)} />}
+  </section>;
+}
+function ExportAll() {
+  const d = useData(), [busy, setBusy] = useState(false);
+  return <section className="cx-section" aria-labelledby="set-export">
+    <div className="cx-section-head cx-section-head-row"><div><h2 id="set-export">Exporter toutes les données</h2><p>Un seul fichier .zip à garder hors de Cloudflare (clé USB, disque, Google Drive) : une sauvegarde complète qui se recharge ici, et des tableaux qui s’ouvrent dans Excel ({d.invoices.length} factures, {d.payments.length} paiements, {d.clients.length} clients, le journal). Aucun mot de passe n’y figure.</p></div>
+      <Button kind="primary" icon={<Download size={17} aria-hidden="true" />} disabled={busy} onClick={() => { setBusy(true); try { exportAll(); toast("Export complet téléchargé."); } catch { toast("L’export n’a pas pu être créé. Réessayez.", "warn"); } finally { setBusy(false); } }}>Tout exporter (.zip)</Button></div>
+  </section>;
+}
 function SyncStatus() {
   const s = useSync(), devices = s.devices.filter(d => !d.revoked_at);
   return <section className="cx-section" aria-labelledby="set-sync">

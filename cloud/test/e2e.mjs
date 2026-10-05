@@ -330,6 +330,46 @@ try {
   ok(await until(async () => (await site.evaluate(() => localStorage.getItem('capsed-site-sync-outbox'))) === '[]', 20000), 'deletion sent to the cloud');
   const gone = await site.evaluate(async () => { let since = 0, found; for (;;) { const j = await fetch(`/api/sync?since=${since}&limit=500`, { headers: { 'x-capsed': '1' } }).then(r => r.json()); found = j.records.find(r => r.collection === 'accounts' && r.data.name === 'Temp Stagiaire')?.data ?? found; if (!j.more) return found; since = j.cursor; } });
   ok(gone && gone.deletedAt && !gone.pwHash && !gone.visiblePassword && !gone.active && gone.login.startsWith('supprime-'), 'in the cloud: no password, no usable login');
+
+  // 16. Automatic lock (here with « Verrouiller »): only the user's password opens it again, nothing behind it reacts.
+  await slowPc.locator('.cx-user-actions').getByRole('button', { name: 'Verrouiller' }).click();
+  ok(await slowPc.locator('.cx-lock').count() === 1, 'office computer locked');
+  await slowPc.keyboard.press('Control+n'); await wait(300);
+  ok(await slowPc.locator('.cx-wizard').count() === 0, 'while locked, shortcuts do nothing behind the lock');
+  await slowPc.locator('#unlock-password').fill('wrong-pass'); await btn(slowPc, 'Déverrouiller').click();
+  ok(await until(async () => (await slowPc.getByText('Mot de passe incorrect.').count()) === 1, 5000), 'wrong password refused');
+  await shot(slowPc, '81-locked');
+  await slowPc.locator('#unlock-password').fill('Paul2026x'); await btn(slowPc, 'Déverrouiller').click();
+  ok(await until(async () => (await slowPc.locator('.cx-lock').count()) === 0, 5000), 'right password unlocks, work kept');
+
+  // 17. The Direction's connections, listed with this device marked.
+  ok(await until(async () => (await site.locator('#set-sessions').count()) === 1 && (await site.getByText('Cet appareil').count()) > 0, 10000), 'Direction sees its connections');
+
+  // 18. A computer removed by the Direction goes back to « Relier cet ordinateur » by itself.
+  const pcRow = site.locator('#set-devices').locator('xpath=ancestor::section').locator('.cx-list-row', { hasText: 'Encaissement' });
+  await pcRow.getByRole('button', { name: 'Retirer' }).click();
+  await site.locator('.cx-modal footer').getByRole('button', { name: 'Retirer l’ordinateur' }).click();
+  ok(await until(async () => { await slowPc.evaluate(() => window.dispatchEvent(new Event('online'))); return (await slowPc.getByText('Cet ordinateur a été retiré par la Direction').count()) > 0; }, 60000, 1000), 'removed computer signs out and asks for a new code on its own');
+  await shot(slowPc, '82-removed-computer');
+
+  // 19. Import clients from an Excel file (Direction, Réglages > Données et sauvegarde).
+  await site.locator('.cx-site-tabs button', { hasText: 'Réglages' }).click();
+  await site.locator('.cx-row', { hasText: 'Données et sauvegarde' }).click();
+  await btn(site, 'Importer un fichier').click();
+  await site.locator('.cx-modal input[type=file]').setInputFiles(new URL('./fixtures/clients.xlsx', import.meta.url).pathname);
+  ok(await until(async () => (await site.locator('.cx-modal').getByText('3 nouveau(x) client(s)').count()) === 1, 10000), 'Excel file read: 3 new clients');
+  ok(/1 déjà enregistré/.test(await site.locator('.cx-modal .cx-notice').first().textContent()) && /1 ligne\(s\) sans nom/.test(await site.locator('.cx-modal .cx-notice').first().textContent()), 'known client and nameless row left out');
+  await shot(site, '83-import-preview');
+  await site.locator('.cx-modal footer').getByRole('button', { name: /Importer 3 client/ }).click();
+  ok(await until(async () => (await site.evaluate(() => JSON.parse(localStorage.getItem('capsed-site-data') || '{"clients":[]}').clients.filter(c => ['Société Agricole du Moungo', 'Port Autonome de Douala', 'Hôtel La Falaise'].includes(c.name)).length)) === 3, 5000), 'the 3 clients are added');
+
+  // 20. Export everything as one zip: backup + tables, no password inside.
+  const [dl] = await Promise.all([site.waitForEvent('download'), btn(site, 'Tout exporter (.zip)').click()]);
+  const zipBuf = await (await import('node:fs/promises')).readFile(await dl.path());
+  const zipText = zipBuf.toString('utf8');
+  ok(['capsed-sauvegarde.json', 'factures.csv', 'lignes-des-factures.csv', 'paiements.csv', 'avoirs.csv', 'clients.csv', 'journal.csv', 'LISEZMOI.txt'].every(f => zipText.includes(f)) && dl.suggestedFilename().endsWith('.zip'), 'export zip has the backup and every table');
+  ok(!/pwHash|visiblePassword|pwSalt/.test(zipText) && !zipText.includes(awaPw) && !zipText.includes('Paul2026x'), 'no password in the export');
+  ok(zipText.includes('Hôtel La Falaise') && zipText.includes(oldNumber), 'export has the imported clients and the old invoice');
 } catch (e) { errs.push('STEP ' + e.message.split('\n')[0]); await shot(site, 'ERR-site').catch(() => {}); await shot(office, 'ERR-office').catch(() => {}); }
 console.log(log.join('\n')); console.log('\nERRORS:\n' + (errs.join('\n') || 'none'));
 await b.close();

@@ -146,6 +146,23 @@ test("recovery link: wrong key is 404, right key resets the Direction password",
   assert.equal((await call("/api/login", { method: "POST", body: { login: "direction", password: "nouveau9" }, headers: { "x-capsed": "1" } })).status, 200);
 });
 
+test("the Direction sees its connections and signs out every other device", async () => {
+  const login = async ua => { const r = await fetch(B + "/api/login", { method: "POST", headers: { "content-type": "application/json", "x-capsed": "1", "user-agent": ua }, body: JSON.stringify({ login: "direction", password: "nouveau9" }) }); return r.headers.get("set-cookie").split(";")[0]; };
+  const phone = await login("Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/129.0 Mobile Safari/537.36");
+  const laptop = await login("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/129.0 Safari/537.36 Edg/129.0");
+  const get = (c, path, init = {}) => fetch(B + path, { ...init, headers: { cookie: c, "x-capsed": "1", "content-type": "application/json", ...(init.headers ?? {}) } });
+  const list = await (await get(laptop, "/api/sessions")).json();
+  assert.ok(list.sessions.some(x => x.label === "Android · Chrome"));
+  assert.equal(list.sessions.filter(x => x.current).length, 1);
+  assert.equal(list.sessions.find(x => x.current).label, "Windows · Edge");
+  const out = await (await get(laptop, "/api/sessions/others", { method: "POST", body: "{}" })).json();
+  assert.ok(out.signedOut >= 1);
+  assert.equal((await get(phone, "/api/me")).status, 401, "the phone is signed out");
+  assert.equal((await get(laptop, "/api/me")).status, 200, "this device stays signed in");
+  cookie = laptop; // the other tests go on with the connection that stayed
+  assert.equal((await get(laptop, "/api/sessions/others", { method: "POST", body: "{}", headers: { "x-capsed": "" } })).status, 403, "protected against cross-site requests");
+});
+
 test("too many wrong passwords are slowed down", async () => {
   let last;
   for (let i = 0; i < 11; i++) last = await call("/api/login", { method: "POST", body: { login: "paul", password: "x" }, headers: { "x-capsed": "1" } });

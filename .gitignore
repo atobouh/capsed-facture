@@ -46,6 +46,7 @@ next-env.d.ts
 
 # Built by scripts/build-static.mjs for the cloud Worker and the desktop app
 dist-site/
+dist-pages/
 dist-office/
 cloud/.wrangler/
 

@@ -11,6 +11,7 @@ on:
       - "static-src/**"
       - "public/**"
       - "scripts/build-static.mjs"
+      - "scripts/build-pages.mjs"
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/cloud.yml"
@@ -84,3 +85,15 @@ jobs:
           for i in 1 2 3 4 5; do curl -fsS "$URL/api/setup" && break; sleep 5; done
           curl -fsS -o /dev/null "$URL/" && curl -fsS -o /dev/null "$URL/bureau/"
           echo "### Live at $URL" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Short address (capsed-facture.pages.dev)
+        run: |
+          npm run build:pages
+          cd cloud/pages
+          if ! npx wrangler pages project list 2>/dev/null | grep -q "capsed-facture"; then
+            npx wrangler pages project create capsed-facture --production-branch main || { echo "::error::Could not create the Pages project capsed-facture. The Cloudflare token needs the permission « Cloudflare Pages : Edit »."; exit 1; }
+          fi
+          npx wrangler pages deploy --branch main --commit-dirty=true
+          npx wrangler pages project list | grep "capsed-facture" | tee -a "$GITHUB_STEP_SUMMARY"
+          for i in 1 2 3 4 5 6 7 8 9 10; do curl -fsS https://capsed-facture.pages.dev/api/setup && exit 0; sleep 10; done
+          echo "::error::capsed-facture.pages.dev does not answer /api/setup yet."; exit 1

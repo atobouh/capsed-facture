@@ -64,10 +64,11 @@ function PasswordChoice({ mode, setMode, custom, setCustom, error }: { mode: "au
 }
 const passwordError = (mode: "auto" | "custom", custom: string) => mode === "custom" && custom.trim().length < 6 ? "Au moins 6 caractères." : mode === "custom" && /\s/.test(custom.trim()) ? "Sans espace, pour éviter les erreurs de saisie." : "";
 function Team({ by }: { by: string }) {
-  const d = useData(), [add, setAdd] = useState(false), [sheet, setSheet] = useState<{ a: Account; password?: string } | null>(null), [reset, setReset] = useState<Account | null>(null), [toggle, setToggle] = useState<Account | null>(null), [edit, setEdit] = useState<Account | null>(null);
+  const d = useData(), [add, setAdd] = useState(false), [sheet, setSheet] = useState<{ a: Account; password?: string } | null>(null), [reset, setReset] = useState<Account | null>(null), [toggle, setToggle] = useState<Account | null>(null), [edit, setEdit] = useState<Account | null>(null), [remove, setRemove] = useState<Account | null>(null);
+  const team = d.accounts.filter(a => !a.deletedAt), removed = d.accounts.length - team.length;
   return <section className="cx-section" aria-labelledby="set-team">
     <div className="cx-section-head cx-section-head-row"><div><h2 id="set-team">Équipe</h2><p>Chacun se connecte avec l’identifiant et le mot de passe que vous lui remettez. Vous pouvez les revoir ici à tout moment.</p></div><Button icon={<UserPlus size={17} aria-hidden="true" />} onClick={() => setAdd(true)}>Ajouter une personne</Button></div>
-    <div className="cx-panel cx-list">{d.accounts.map(a => <div key={a.id} className={`cx-list-row cx-static cx-member${a.active ? "" : " cx-cancelled"}`}>
+    <div className="cx-panel cx-list">{team.map(a => <div key={a.id} className={`cx-list-row cx-static cx-member${a.active ? "" : " cx-cancelled"}`}>
       <span className="cx-list-main"><strong>{a.name}{!a.active && <span className="cx-chip">Désactivé</span>}</strong>
         <small>{ROLE_LABEL[a.role]} · identifiant <span translate="no">{a.login}</span>{a.email ? ` · ${a.email}` : ""}</small>
         <PasswordLine a={a} onSet={() => setReset(a)} /></span>
@@ -75,12 +76,20 @@ function Team({ by }: { by: string }) {
         <button type="button" className="cx-text-btn" onClick={() => setEdit(a)}>Modifier</button>
         <button type="button" className="cx-text-btn" onClick={() => setSheet({ a, password: shownPassword(a) })}>Fiche d’accès</button>
         <button type="button" className="cx-text-btn" onClick={() => setReset(a)}><KeyRound size={15} aria-hidden="true" />Nouveau mot de passe</button>
-        {a.id !== by && <button type="button" className="cx-text-btn" onClick={() => setToggle(a)}>{a.active ? "Désactiver" : "Réactiver"}</button>}</span>
-    </div>)}{!d.accounts.length && <p className="cx-fold-note">Personne pour l’instant.</p>}</div>
+        {a.id !== by && <button type="button" className="cx-text-btn" onClick={() => setToggle(a)}>{a.active ? "Désactiver" : "Réactiver"}</button>}
+        {a.id !== by && !a.active && <button type="button" className="cx-text-btn cx-text-bad" onClick={() => setRemove(a)}>Supprimer</button>}</span>
+    </div>)}{!team.length && <p className="cx-fold-note">Personne pour l’instant.</p>}</div>
+    {removed > 0 && <p className="cx-fold-note">{removed === 1 ? "Une personne supprimée" : `${removed} personnes supprimées`} : leur nom reste dans l’historique des factures et paiements qu’elles ont saisis.</p>}
     {add && <AddMember by={by} onClose={() => setAdd(false)} onCreated={(a, password) => { setAdd(false); setSheet({ a, password }); }} />}
     {edit && <EditMember a={edit} self={edit.id === by} by={by} onClose={() => setEdit(null)} />}
     {sheet && <CredentialSheet a={sheet.a} password={sheet.password} onClose={() => setSheet(null)} />}
     {reset && <SetPassword a={reset} self={reset.id === by} by={by} onClose={() => setReset(null)} onDone={(a, pw) => { setReset(null); setSheet({ a, password: pw }); }} />}
+    {remove && <Confirm title={`Supprimer ${remove.name} ?`} confirm="Supprimer définitivement" cancel="Garder" onClose={() => setRemove(null)} onConfirm={() => {
+      const { password: _p, visiblePassword: _v, pwHash: _h, pwSalt: _s, pwIter: _i, email: _e, ...keep } = remove; void _p; void _v; void _h; void _s; void _i; void _e;
+      const gone: Account = { ...keep, active: false, login: `supprime-${remove.id.slice(0, 8)}`, deletedAt: nowIso() };
+      commit(by, x => ({ accounts: x.accounts.map(a => a.id === remove.id ? gone : a) }), { text: `Compte de ${remove.name} supprimé` });
+      setRemove(null); toast(`${remove.name} a été supprimé(e) de l’équipe.`);
+    }}><p>Cette personne disparaît de l’équipe et ne pourra plus jamais se connecter : son identifiant et son mot de passe sont effacés, sur ce site et sur les ordinateurs du bureau.</p><p>Les factures et paiements qu’elle a saisis restent, avec son nom, dans l’historique. Cette suppression ne peut pas être annulée.</p></Confirm>}
     {toggle && <Confirm title={toggle.active ? `Désactiver ${toggle.name} ?` : `Réactiver ${toggle.name} ?`} confirm={toggle.active ? "Désactiver" : "Réactiver"} cancel="Annuler" onClose={() => setToggle(null)} onConfirm={() => { commit(by, x => ({ accounts: x.accounts.map(a => a.id === toggle.id ? { ...a, active: !a.active } : a) }), { text: `Compte de ${toggle.name} ${toggle.active ? "désactivé" : "réactivé"}` }); setToggle(null); toast(toggle.active ? "Compte désactivé." : "Compte réactivé."); }}><p>{toggle.active ? "Cette personne ne pourra plus se connecter. Ce qu’elle a saisi reste dans l’historique." : "Cette personne pourra de nouveau se connecter."}</p></Confirm>}
   </section>;
 }

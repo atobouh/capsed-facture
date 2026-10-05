@@ -312,6 +312,24 @@ try {
   await slowPc.locator('#login').fill('paul'); await slowPc.locator('#password').fill('Paul2026x');
   await btn(slowPc, 'Se connecter').click();
   ok(await until(async () => (await slowPc.locator('.cx-sidebar').count()) > 0, 15000), 'Paul signs in on the second computer with the password the Direction chose');
+
+  // 15. Removing someone for good: deactivate, then delete. Gone from the team, no login or password left anywhere.
+  await btn(site, 'Ajouter une personne').click();
+  await site.locator('.cx-modal input').first().fill('Temp Stagiaire');
+  await site.locator('.cx-choice-item', { hasText: /^Facturation/ }).first().click();
+  await btn(site, 'Créer son accès').click();
+  await btn(site, 'C’est noté').click();
+  const tempRow = site.locator('.cx-member', { hasText: 'Temp Stagiaire' });
+  await tempRow.getByRole('button', { name: 'Désactiver' }).click();
+  await site.locator('.cx-modal footer').getByRole('button', { name: 'Désactiver' }).click();
+  await tempRow.getByRole('button', { name: 'Supprimer' }).click();
+  await shot(site, '80-delete-confirm');
+  await site.locator('.cx-modal footer').getByRole('button', { name: 'Supprimer définitivement' }).click();
+  ok(await until(async () => (await site.locator('.cx-member', { hasText: 'Temp Stagiaire' }).count()) === 0, 5000), 'deleted person is gone from the team');
+  ok(await site.getByText('Une personne supprimée').count() === 1, 'the page says one person was removed, history kept');
+  ok(await until(async () => (await site.evaluate(() => localStorage.getItem('capsed-site-sync-outbox'))) === '[]', 20000), 'deletion sent to the cloud');
+  const gone = await site.evaluate(async () => { let since = 0, found; for (;;) { const j = await fetch(`/api/sync?since=${since}&limit=500`, { headers: { 'x-capsed': '1' } }).then(r => r.json()); found = j.records.find(r => r.collection === 'accounts' && r.data.name === 'Temp Stagiaire')?.data ?? found; if (!j.more) return found; since = j.cursor; } });
+  ok(gone && gone.deletedAt && !gone.pwHash && !gone.visiblePassword && !gone.active && gone.login.startsWith('supprime-'), 'in the cloud: no password, no usable login');
 } catch (e) { errs.push('STEP ' + e.message.split('\n')[0]); await shot(site, 'ERR-site').catch(() => {}); await shot(office, 'ERR-office').catch(() => {}); }
 console.log(log.join('\n')); console.log('\nERRORS:\n' + (errs.join('\n') || 'none'));
 await b.close();

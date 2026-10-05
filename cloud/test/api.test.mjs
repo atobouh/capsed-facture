@@ -121,6 +121,18 @@ test("only the Direction reopens a closed month or restores a cancelled payment"
   assert.ok((await push([change("settings", { id: "main", closedMonths: [] }, { base: s.body.results[0].rev })], "web")).body.results[0].ok);
 });
 
+test("an office invoice that lands in a month already closed is kept and marked for the Direction", async () => {
+  assert.ok((await push([change("settings", { id: "main", closedMonths: ["2026-08"] })], "web")).body.results[0].ok);
+  const late = await push([change("invoices", { ...inv, id: uid(), number: "2026-08-007", date: "2026-08-20" }, { by: awa.id })], "device");
+  assert.ok(late.body.results[0].ok, "kept, never refused");
+  assert.ok(late.body.results[0].record.afterClose, "marked");
+  const open = await push([change("invoices", { ...inv, id: uid(), number: "2026-10-008", date: "2026-10-02" }, { by: awa.id })], "device");
+  assert.equal(open.body.results[0].record.afterClose, undefined, "an open month is not marked");
+  const direction = await push([change("invoices", { ...inv, id: uid(), number: "2026-08-D001", date: "2026-08-21" })], "web");
+  assert.equal(direction.body.results[0].record.afterClose, undefined, "the Direction may write in a closed month");
+  assert.ok((await push([change("settings", { id: "main", closedMonths: [] })], "web")).body.results[0].ok);
+});
+
 test("the Direction can read a password again; office computers never receive it", async () => {
   const r = await push([change("accounts", { ...awa, email: "awa@capsed.cm", visiblePassword: "CAP-7777", pwHash: "x", pwSalt: "AAAAAAAAAAAAAAAAAAAAAA==" })], "web");
   assert.equal(r.body.results[0].record.visiblePassword, "CAP-7777");

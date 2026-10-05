@@ -14,6 +14,7 @@ Product truth lives in `PRODUCT.md`. This file records the visual system the app
     - Demandes: list beside the detail.
   - Narrower windows open the same page full width. Base 14 px, controls 32 px.
 - **Old invoices** (« ⋯ » then « Ajouter une ancienne facture », office and Direction): the same 4-step composer with the original number and date. The number must be unique; automatic numbering ignores old invoices and skips any number they use. They carry an « Ancienne » tag and sync like any invoice.
+- **Things to check, never refused**: two computers can still produce a payment entered twice, an old invoice number used twice, or an invoice made in a month another computer had closed. The cloud keeps all of it; the Direction's « Nouveau à valider » says « N points à vérifier », marks each one in red (« Doublon possible » with « Annuler ce doublon », « Numéro en double » with « Corriger le numéro », « Faite dans un mois déjà clôturé »), and leaves them unticked so « Valider » never passes them unseen.
 - **Start-up**: the page itself shows the CAPSED mark and a thin progress bar from the first frame; the Windows window stays hidden until the page is drawn, and opening the app twice brings the open window forward. App icon: plum rounded tile with the white open delta, drawn bolder at 16–48 px.
 - **Direction: a website**, with a phone layout and a desktop layout.
   - It uses normal page scroll: never `overflow:hidden` on html/body.

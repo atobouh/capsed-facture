@@ -137,8 +137,15 @@ async function applyChange(env: Env, who: Actor | { device: { id: string; name: 
   const reason = refuse(ch.collection, account.role, account.id, cur?.data ?? null, merged);
   if (reason) return { changeId: ch.changeId, ok: false, error: reason, rev: cur?.rev ?? 0, record: cur?.data ?? null };
   if (cur && same(cur.data, merged)) return { changeId: ch.changeId, ok: true, rev: cur.rev, record: cur.data };
-  const rev = await writeRecord(env, { collection: ch.collection, id: ch.id, data: merged, by: account.id, device, clientAt: ch.at, changeId: ch.changeId });
-  return { changeId: ch.changeId, ok: true, rev, record: merged };
+  // An invoice made or changed by the office in a month already closed (a computer that was offline when it was closed):
+  // kept, nothing is lost, and marked for the Direction.
+  let final = merged;
+  if (ch.collection === "invoices" && account.role !== "responsable") {
+    const closed = ((await getRecord(env, "settings", "main"))?.data?.closedMonths as string[] | undefined) ?? [];
+    if (closed.includes(String(merged.date ?? "").slice(0, 7))) final = { ...merged, afterClose: at };
+  }
+  const rev = await writeRecord(env, { collection: ch.collection, id: ch.id, data: final, by: account.id, device, clientAt: ch.at, changeId: ch.changeId });
+  return { changeId: ch.changeId, ok: true, rev, record: final };
 }
 
 async function devicesStatus(env: Env) {

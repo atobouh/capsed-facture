@@ -28,6 +28,8 @@ export type Line = { id: string; contract: string; designation: string; destinat
 export type Invoice = { id: string; number: string; date: string; client: Client; company: Company; lines: Line[]; taxRate: number; advance: number; payment: string; note: string; taxMode?: TaxMode; discountRate?: number; purchaseOrder?: string; revisedAt?: string; history?: Invoice[] & { savedAt?: string }[]; template?: unknown; createdBy?: string;
   /** Made before the app and typed in afterwards, with its original number and date. */
   legacy?: boolean;
+  /** Set by the cloud: made or changed by the office in a month already closed (a computer that was offline). */
+  afterClose?: string;
   /** Seen and approved by the Direction. Never required: an invoice not validated is used everywhere like any other. */
   validatedAt?: string; validatedBy?: string;
   /** Internal payment deadline in days. Never printed on the invoice. */

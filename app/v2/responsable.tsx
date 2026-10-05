@@ -8,6 +8,9 @@ import { liftRule } from "./overrides";
 import Composer from "./composer";
 import { exportInvoice } from "../receipt-export";
 import { words } from "./words";
+import { CancelPayment } from "./payments";
+import { findIssues, numberKey } from "./checks";
+import type { Invoice, Payment } from "./store";
 import { METHODS, REQUEST_LABEL, ROLE_LABEL, accountName, accountTotals, ago, balance, commit, dateFr, delivery, getData, methodName, money, monthLabel, overdueDays, dueDateOf, nowIso, timeFr, todayIso, uid, useData } from "./store";
 import type { Client, Request, RequestKind, Snapshot } from "./store";
 
@@ -195,13 +198,45 @@ function RequestForm({ kind, client, invoiceId, by, onClose }: { kind: Exclude<R
   </Modal>;
 }
 
+function InvoiceFlags({ i, issues, onFix }: { i: Invoice; issues: ReturnType<typeof findIssues>; onFix: () => void }) {
+  const same = issues.sameNumber.get(i.id);
+  return <>
+    {same && <span className="cx-flag">Numéro en double : aussi utilisé par {same.map(x => `la facture de ${x.client.name} du ${dateFr(x.date)}`).join(", ")}.
+      <button type="button" className="cx-link-btn" onClick={e => { e.preventDefault(); onFix(); }}>Corriger le numéro</button></span>}
+    {issues.afterClose.has(i.id) && <span className="cx-flag">Faite dans un mois déjà clôturé ({monthLabel(i.date.slice(0, 7))}), sur un ordinateur qui ne le savait pas encore. Elle est gardée : vérifiez-la avant de valider.</span>}
+  </>;
+}
+/** A number used twice is corrected by the Direction; the previous version stays in the invoice's history. */
+function FixNumber({ invoice, by, onClose }: { invoice: Invoice; by: string; onClose: () => void }) {
+  const [number, setNumber] = useState(invoice.number), [error, setError] = useState("");
+  function save() {
+    const n = number.trim(), cur = getData();
+    if (!n) return setError("Écrivez le nouveau numéro.");
+    if (n.length > 40) return setError("Ce numéro est trop long (40 caractères au plus).");
+    const other = cur.invoices.find(x => x.id !== invoice.id && numberKey(x.number) === numberKey(n));
+    if (other) return setError(`Ce numéro est déjà celui de la facture de ${other.client.name} du ${dateFr(other.date)}.`);
+    const stamp = nowIso(), now = cur.invoices.find(x => x.id === invoice.id)!, { history, ...previous } = now;
+    commit(by, x => ({
+      invoices: x.invoices.map(y => y.id === invoice.id ? { ...y, number: n, revisedAt: stamp, history: [...(history ?? []), { ...previous, savedAt: stamp }] as Invoice["history"] } : y),
+      credits: x.credits.map(c => c.invoiceId === invoice.id ? { ...c, invoiceNumber: n } : c),
+    }), { text: `Numéro de facture corrigé : ${invoice.number} → ${n}`, clientId: invoice.client.id, invoiceId: invoice.id });
+    toast(`Numéro corrigé : ${n}.`); onClose();
+  }
+  return <Modal title={`Corriger le numéro ${invoice.number}`} subtitle={`${invoice.client.name}, facture du ${dateFr(invoice.date)}`} onClose={onClose} actions={<><Button kind="quiet" onClick={onClose}>Annuler</Button><Button kind="primary" onClick={save}>Enregistrer le numéro</Button></>}>
+    <Field label="Nouveau numéro" required error={error || undefined} hint="Le numéro imprimé change. L’ancienne version reste dans l’historique de la facture."><TextInput value={number} onChange={v => { setNumber(v); setError(""); }} autoFocus /></Field>
+  </Modal>;
+}
+
 /** One tab for invoices: what is new since the last validation on top, then every invoice month by month.
  *  Validating is a review, never a gate: an invoice or payment not validated counts everywhere like the others. */
 function Invoices({ nav, by }: { nav: Nav; by: string }) {
   const d = useData(), s = d.snapshot, [month, setMonth] = useState(() => todayIso().slice(0, 7)), [q, setQ] = useState("");
   const bills = newInvoices(s), pays = newPayments(s), keys = [...bills.map(i => "i:" + i.id), ...pays.map(p => "p:" + p.id)];
+  // Items that need a second look are not ticked by default: « Valider » never passes them without anyone looking.
+  const issues = findIssues(s), flagged = (k: string) => k.startsWith("p:") ? issues.twinOf.has(k.slice(2)) : issues.sameNumber.has(k.slice(2)) || issues.afterClose.has(k.slice(2));
+  const [fix, setFix] = useState<Invoice | null>(null), [cancel, setCancel] = useState<Payment | null>(null);
   // Everything new is ticked until the Direction changes the selection (items can arrive after the page opened).
-  const [picked, setSel] = useState<string[] | null>(null), sel = picked ?? keys, [confirm, setConfirm] = useState(false);
+  const [picked, setSel] = useState<string[] | null>(null), sel = picked ?? keys.filter(k => !flagged(k)), [confirm, setConfirm] = useState(false);
   const chosenBills = bills.filter(i => sel.includes("i:" + i.id)), chosenPays = pays.filter(p => sel.includes("p:" + p.id)), n = chosenBills.length + chosenPays.length, all = n === keys.length;
   const toggle = (k: string, on: boolean) => setSel(on ? [...sel, k] : sel.filter(x => x !== k));
   const searching = !!q.trim(), ofMonth = s.invoices.filter(i => i.date.startsWith(month));
@@ -209,7 +244,7 @@ function Invoices({ nav, by }: { nav: Nav; by: string }) {
   const sum = (f: "total" | "received" | "due") => ofMonth.reduce((t, i) => t + balance(i, s.payments, s.credits)[f], 0);
   const open = (id: string) => nav({ name: "facture", id, extra: "factures" });
   const row = (i: typeof list[number]) => { const b = balance(i, s.payments, s.credits), dv = delivery(s, i.id), late = overdueDays(i);
-    return <Row key={i.id} title={<span className="cx-nowrap">{i.number}{i.legacy && <span className="cx-legacy-tag">Ancienne</span>}</span>} sub={<><span>{i.client.name}</span><span>{dateFr(i.date)}{!dv && <> · <span className="cx-warn-text cx-nowrap">pas encore remise</span></>}</span></>}
+    return <Row key={i.id} title={<span className="cx-nowrap">{i.number}{i.legacy && <span className="cx-legacy-tag">Ancienne</span>}{issues.sameNumber.has(i.id) && <span className="cx-legacy-tag cx-tag-bad">Numéro en double</span>}</span>} sub={<><span>{i.client.name}</span><span>{dateFr(i.date)}{!dv && <> · <span className="cx-warn-text cx-nowrap">pas encore remise</span></>}</span></>}
       amount={money(b.total)} state={b.due > 0 && late > 0 ? <span className="cx-chip cx-tone-bad">{late} j de retard</span> : <StatusChip status={b.status} />} onClick={() => open(i.id)} />; };
   return <div className="cx-page cx-bills cx-validate">
     <PageHead title="Factures" sub="Les factures et paiements du bureau. Validez-les quand vous voulez : rien n’attend votre validation."
@@ -218,19 +253,23 @@ function Invoices({ nav, by }: { nav: Nav; by: string }) {
     <div className="cx-validate-grid">
       <section aria-labelledby="new-title">
         <div className="cx-sec-head"><h2 id="new-title" className="cx-sec-title">Nouveau à valider</h2>{keys.length > 1 && <button type="button" className="cx-link-btn" onClick={() => setSel(all ? [] : keys)}>{all ? "Tout décocher" : "Tout cocher"}</button>}</div>
+        {issues.count > 0 && <Notice tone="warn" title={`${issues.count} point${issues.count > 1 ? "s" : ""} à vérifier`}>{[issues.twinOf.size && `${issues.twinOf.size} paiement(s) qui ressemblent à un autre (doublon possible)`, issues.sameNumber.size && "des factures avec le même numéro", issues.afterClose.size && `${issues.afterClose.size} facture(s) faite(s) dans un mois déjà clôturé`].filter(Boolean).join(" ; ")}. Ils sont signalés en rouge ci-dessous et ne sont pas cochés. Rien n’est supprimé : vous décidez.</Notice>}
         {keys.length ? <div className="cx-pay-cards">
           {bills.map(i => { const on = sel.includes("i:" + i.id), b = balance(i, s.payments, s.credits); return <label key={i.id} className={`cx-pay-card${on ? " cx-on" : ""}`}>
             <input type="checkbox" checked={on} onChange={e => toggle("i:" + i.id, e.target.checked)} />
             <span className="cx-pay-body"><span className="cx-pay-top"><strong>{money(b.total)}</strong><span className={`cx-chip cx-tone-${i.revisedAt ? "warn" : "info"}`}>{i.revisedAt ? "Facture modifiée" : i.legacy ? "Ancienne facture" : "Nouvelle facture"}</span></span>
               <span className="cx-pay-who">{i.client.name} · facture {i.number}</span>
               <small>Émise le {dateFr(i.date)} par {accountName(i.createdBy)}{i.revisedAt ? ` · modifiée le ${dateFr(i.revisedAt)}` : ""}</small>
+              <InvoiceFlags i={i} issues={issues} onFix={() => setFix(i)} />
               <button type="button" className="cx-link-btn cx-pay-open" onClick={e => { e.preventDefault(); open(i.id); }}>Voir la facture</button></span>
           </label>; })}
           {pays.map(p => { const i = s.invoices.find(x => x.id === p.invoiceId), on = sel.includes("p:" + p.id); return <label key={p.id} className={`cx-pay-card${on ? " cx-on" : ""}`}>
             <input type="checkbox" checked={on} onChange={e => toggle("p:" + p.id, e.target.checked)} />
             <span className="cx-pay-body"><span className="cx-pay-top"><strong>{money(p.amount)}</strong><span className={`cx-chip cx-tone-${p.changedAfterLock ? "warn" : "good"}`}>{p.changedAfterLock ? "Corrigé après validation" : `Paiement · ${methodName(p.method)}`}</span></span>
               <span className="cx-pay-who">{i?.client.name} · facture {i?.number}</span>
-              <small>Payé le {dateFr(p.date)}{p.reference ? ` · réf. ${p.reference}` : ""} · saisi par {accountName(p.by)}{p.history?.length ? ` · corrigé ${p.history.length} fois` : ""}</small></span>
+              <small>Payé le {dateFr(p.date)}{p.reference ? ` · réf. ${p.reference}` : ""} · saisi par {accountName(p.by)}{p.history?.length ? ` · corrigé ${p.history.length} fois` : ""}</small>
+              {issues.twinOf.has(p.id) && (() => { const t = issues.twinOf.get(p.id)!; return <span className="cx-flag">Doublon possible : même montant que le paiement du {dateFr(t.date)} saisi par {accountName(t.by)}{t.lockedAt ? " (déjà validé)" : ""}.
+                <button type="button" className="cx-link-btn" onClick={e => { e.preventDefault(); setCancel(p); }}>Annuler ce doublon</button></span>; })()}</span>
           </label>; })}
         </div> : <div className="cx-card"><Empty title="Tout est validé.">Les nouvelles factures et les nouveaux paiements du bureau apparaîtront ici.</Empty></div>}
         {keys.length > 0 && <p className="cx-validate-note">Un paiement validé ne peut plus être corrigé par l’encaissement. Une facture validée reste modifiable ; si elle change, elle revient ici.</p>}
@@ -245,6 +284,8 @@ function Invoices({ nav, by }: { nav: Nav; by: string }) {
           : <Empty title={searching ? "Aucune facture ne correspond." : `Aucune facture en ${monthLabel(month)}.`}>{searching ? "Essayez un autre numéro ou nom de client." : "Changez de mois avec les flèches."}</Empty>}</div>
       </section>
     </div>
+    {fix && <FixNumber invoice={fix} by={by} onClose={() => setFix(null)} />}
+    {cancel && <CancelPayment payment={cancel} by={by} onClose={() => setCancel(null)} />}
     {confirm && <Confirm title={`Valider ${n} élément${n > 1 ? "s" : ""} ?`} confirm="Valider" cancel="Pas maintenant" onClose={() => setConfirm(false)} onConfirm={() => { const done = validate(chosenBills.map(i => i.id), chosenPays.map(p => p.id), by); setConfirm(false); if (done) { toast(`${done} élément${done > 1 ? "s validés" : " validé"}.`); setSel(null); } }}>
       <ul className="cx-mini-list">{chosenBills.map(i => <li key={i.id}>Facture {i.number}, {money(balance(i, s.payments, s.credits).total)}, {i.client.name}</li>)}{chosenPays.map(p => <li key={p.id}>Paiement de {money(p.amount)}, {methodName(p.method)}, {s.invoices.find(x => x.id === p.invoiceId)?.client.name}</li>)}</ul>
       {chosenPays.length > 0 && <p>Les paiements validés ne pourront plus être corrigés ni annulés par l’encaissement.</p>}</Confirm>}
@@ -253,12 +294,14 @@ function Invoices({ nav, by }: { nav: Nav; by: string }) {
 
 /** One invoice for the Direction: the whole A4 document, what is paid, whether it was handed over. */
 function InvoiceSheet({ id, fromList, nav, by }: { id: string; fromList: boolean; nav: Nav; by: string }) {
-  const d = useData(), s = d.snapshot, i = s.invoices.find(x => x.id === id), [ask, setAsk] = useState(false);
+  const d = useData(), s = d.snapshot, i = s.invoices.find(x => x.id === id), [ask, setAsk] = useState(false), [fix, setFix] = useState(false);
   if (!i) return <Empty title="Facture introuvable." action={<Button onClick={() => nav({ name: "factures" })}>Toutes les factures</Button>} />;
   const b = balance(i, s.payments, s.credits), dv = delivery(s, i.id), client = s.clients.find(c => c.id === i.client.id) ?? i.client, pays = s.payments.filter(p => p.invoiceId === i.id);
   return <div className="cx-page cx-story">
     <PageHead back={fromList ? { label: "Factures", onClick: () => nav({ name: "factures" }) } : { label: i.client.name, onClick: () => nav({ name: "client", id: i.client.id }) }} title={`Facture ${i.number}`} sub={`${i.client.name}, ${i.legacy ? "ancienne facture du" : "émise le"} ${dateFr(i.date)}`}
       actions={<><Button icon={<Printer size={16} aria-hidden="true" />} onClick={() => window.print()}>Imprimer</Button><MoreMenu iconOnly label="Autres actions" items={[{ label: "Exporter en Excel", onClick: () => exportInvoice(i, words) }, { label: `Voir le client ${i.client.name}`, onClick: () => nav({ name: "client", id: i.client.id }) }]} /></>} />
+    {(() => { const issues = findIssues(s); return (issues.sameNumber.has(i.id) || issues.afterClose.has(i.id)) && <div className="cx-flags-block cx-noprint"><InvoiceFlags i={i} issues={issues} onFix={() => setFix(true)} /></div>; })()}
+    {fix && <FixNumber invoice={i} by={by} onClose={() => setFix(false)} />}
     <div className="cx-story-grid">
       <div className="cx-story-side cx-noprint">
         <section className="cx-card cx-sum" aria-label="Paiement de la facture">

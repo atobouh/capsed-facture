@@ -890,3 +890,9 @@ button.cx-list-row:hover,label.cx-list-row:hover{background:var(--hover)}
 .cx-update-bar{width:max-content;max-width:min(760px,calc(100vw - 32px))}
 .cx-import-preview{border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:320px}
 .cx-import-preview .cx-table td,.cx-import-preview .cx-table th{white-space:nowrap}
+/* Something to check: possible duplicate payment, number used twice, invoice made in a closed month */
+.cx-flag{display:block;margin-top:6px;padding:6px 9px;border-radius:8px;background:#FBE9E7;color:#A8322A;font-size:12.5px;line-height:1.45}
+.cx-flag .cx-link-btn{color:#A8322A;font-weight:600;margin-left:6px;text-decoration:underline}
+.cx-tag-bad{background:#FBE9E7;color:#A8322A}
+.cx-flags-block{display:grid;gap:6px;margin:0 0 14px}
+.cx-flags-block .cx-flag{margin:0;font-size:13.5px;padding:10px 12px}

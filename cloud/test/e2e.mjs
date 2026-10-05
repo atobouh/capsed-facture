@@ -370,6 +370,41 @@ try {
   ok(['capsed-sauvegarde.json', 'factures.csv', 'lignes-des-factures.csv', 'paiements.csv', 'avoirs.csv', 'clients.csv', 'journal.csv', 'LISEZMOI.txt'].every(f => zipText.includes(f)) && dl.suggestedFilename().endsWith('.zip'), 'export zip has the backup and every table');
   ok(!/pwHash|visiblePassword|pwSalt/.test(zipText) && !zipText.includes(awaPw) && !zipText.includes('Paul2026x'), 'no password in the export');
   ok(zipText.includes('Hôtel La Falaise') && zipText.includes(oldNumber), 'export has the imported clients and the old invoice');
+
+  // 21. What two computers can produce together, sent by the office computer: the same payment twice, an old invoice
+  //     with a number already used, an invoice in a month the Direction just closed. Kept, and flagged for the Direction.
+  const pm = new Date(); pm.setDate(1); pm.setMonth(pm.getMonth() - 2); const closedMonth = pm.toISOString().slice(0, 7);
+  await site.evaluate(m => fetch('/api/sync', { method: 'POST', headers: { 'content-type': 'application/json', 'x-capsed': '1' }, body: JSON.stringify({ changes: [{ changeId: crypto.randomUUID(), collection: 'settings', id: 'main', data: { id: 'main', closedMonths: [m] }, base: 0, at: new Date().toISOString() }] }) }).then(r => r.json()), closedMonth);
+  const sent21 = await office.evaluate(async ({ oldNumber, closedMonth }) => {
+    const dev = JSON.parse(localStorage.getItem('capsed-office-device')), data = JSON.parse(localStorage.getItem('capsed-office-data'));
+    const awa = data.accounts.find(a => a.login === 'awa'), paul = data.accounts.find(a => a.login === 'paul');
+    const base = data.invoices.find(i => !i.legacy), id = () => crypto.randomUUID(), at = new Date().toISOString(), today = at.slice(0, 10);
+    const pay = { invoiceId: base.id, amount: 10000, date: today, method: 'Espèces', reference: '', by: paul.id, at };
+    const changes = [
+      { changeId: id(), collection: 'payments', id: 'dup-a', data: { ...pay, id: 'dup-a' }, base: 0, at, by: paul.id },
+      { changeId: id(), collection: 'payments', id: 'dup-b', data: { ...pay, id: 'dup-b' }, base: 0, at, by: paul.id },
+      { changeId: id(), collection: 'invoices', id: 'old-twin', data: { ...base, id: 'old-twin', number: oldNumber, date: oldNumber.slice(0, 7) + '-20', legacy: true, validatedAt: undefined, validatedBy: undefined, createdBy: awa.id }, base: 0, at, by: awa.id },
+      { changeId: id(), collection: 'invoices', id: 'in-closed', data: { ...base, id: 'in-closed', number: closedMonth + '-099', date: closedMonth + '-15', validatedAt: undefined, validatedBy: undefined, createdBy: awa.id }, base: 0, at, by: awa.id },
+    ];
+    const r = await fetch(dev.api + '/api/sync', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + dev.token }, body: JSON.stringify({ changes }) }).then(r => r.json());
+    return r.results.map(x => x.ok && (x.record?.afterClose ? 'closed' : 'ok')).join(',');
+  }, { oldNumber, closedMonth });
+  ok(sent21 === 'ok,ok,ok,closed', `cloud keeps everything and marks the closed-month invoice (${sent21})`);
+  await site.locator('.cx-site-tabs button', { hasText: 'Factures' }).click();
+  ok(await until(async () => { await poke(site); return (await site.locator('.cx-notice', { hasText: 'à vérifier' }).count()) === 1; }, 40000, 1000), 'the Direction sees « points à vérifier »');
+  const card = t => site.locator('.cx-pay-card', { hasText: t });
+  ok(await card('Doublon possible').count() === 2, 'both payments flagged « Doublon possible »');
+  ok(await card('Numéro en double').count() >= 1, 'the old invoice with a used number is flagged');
+  ok(await card('mois déjà clôturé').count() === 1, 'the invoice made in a closed month is flagged');
+  ok(!(await card('Doublon possible').first().locator('input[type=checkbox]').isChecked()) && !(await card('mois déjà clôturé').locator('input[type=checkbox]').isChecked()), 'flagged items are not ticked for validation');
+  await shot(site, '90-flags');
+  await card('Doublon possible').first().getByRole('button', { name: 'Annuler ce doublon' }).click();
+  await site.locator('.cx-modal footer').getByRole('button', { name: 'Annuler ce paiement' }).click();
+  ok(await until(async () => (await card('Doublon possible').count()) === 0, 10000), 'one duplicate cancelled: the other is no longer flagged');
+  await card('Numéro en double').first().getByRole('button', { name: 'Corriger le numéro' }).click();
+  await site.locator('.cx-modal input').fill(oldNumber + '-bis');
+  await site.locator('.cx-modal footer').getByRole('button', { name: 'Enregistrer le numéro' }).click();
+  ok(await until(async () => (await card('Numéro en double').count()) === 0, 10000), 'number corrected: no more duplicate');
 } catch (e) { errs.push('STEP ' + e.message.split('\n')[0]); await shot(site, 'ERR-site').catch(() => {}); await shot(office, 'ERR-office').catch(() => {}); }
 console.log(log.join('\n')); console.log('\nERRORS:\n' + (errs.join('\n') || 'none'));
 await b.close();

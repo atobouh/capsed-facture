@@ -9,6 +9,7 @@ import { Button, Confirm, CreditPaperView, DateInput, Empty, Field, Modal, Month
 import { ClientAccount, ClientForm, ClientsDirectory } from "./clients";
 import type { OfficeRoute } from "./clients";
 import Composer from "./composer";
+import { findIssues } from "./checks";
 import { CreditModal, CreditPicker, PaymentModal } from "./payments";
 import { CLOUD, REQUEST_LABEL, accountName, balance, canBill, canCash, commit, receives, dateFr, dateValid, delivery, dueDateOf, overdueDays, termOf, methodName, monthLabel, money, nowIso, timeFr, todayIso, useData } from "./store";
 import type { Data, Request, Role } from "./store";
@@ -39,6 +40,7 @@ function Register({ role, by, nav }: { role: Role; by: string; nav: Nav }) {
   const eligible = d.invoices.some(i => { const b = balance(i, d.payments, d.credits); return b.credited < b.total; });
   const sum = (f: "total" | "received" | "due") => bills.reduce((s, i) => s + balance(i, d.payments, d.credits)[f], 0);
   const undelivered = bills.filter(i => !delivery(d, i.id)).length;
+  const sameNumber = findIssues(d).sameNumber;
   const valid = sel && (sel.kind === "invoice" ? shownBills.some(i => i.id === sel.id) : shownNotes.some(c => c.id === sel.id));
   const current = valid ? sel : shownBills[0] ? { kind: "invoice" as const, id: shownBills[0].id } : shownNotes[0] ? { kind: "credit" as const, id: shownNotes[0].id } : null;
   const open = (kind: "invoice" | "credit", id: string) => wide ? setSel({ kind, id }) : nav({ name: kind, id });
@@ -54,7 +56,7 @@ function Register({ role, by, nav }: { role: Role; by: string; nav: Nav }) {
         <div className="cx-card cx-card-flush cx-grow">
           {shownBills.length ? <table className="cx-table"><thead><tr><th>Numéro</th><th>Client</th><th className="cx-hide-880">Date</th><th className="cx-num">Montant</th><th className="cx-num">Reste à payer</th><th>Paiement</th><th>Remise au client</th></tr></thead><tbody>
             {shownBills.map(i => { const b = balance(i, d.payments, d.credits), dv = delivery(d, i.id); return <tr key={i.id} className={`cx-clickable${isCur("invoice", i.id) ? " cx-current" : ""}`} aria-selected={isCur("invoice", i.id) || undefined} onClick={() => open("invoice", i.id)}>
-              <td className="t-u"><button type="button" className="cx-doc-link" onClick={e => { e.stopPropagation(); open("invoice", i.id); }}>{i.number}</button>{i.legacy && <span className="cx-legacy-tag" title="Facture faite avant l’application">Ancienne</span>}</td><td className="cx-t-name t-n" data-label="Client">{i.client.name}</td><td className="t-d cx-hide-880" data-label="Date">{dateFr(i.date)}</td><td className="cx-num t-x" data-label="Montant">{money(b.total)}</td><td className="cx-num cx-t-amount t-a" data-label="Reste à payer">{money(b.due)}</td><td className="t-s" data-label="Paiement"><StatusChip status={b.status} /></td><td className={`t-x2${dv ? "" : " cx-warn-text"}`} data-label="Remise au client">{dv ? "Oui" : "Pas encore"}</td></tr>; })}
+              <td className="t-u"><button type="button" className="cx-doc-link" onClick={e => { e.stopPropagation(); open("invoice", i.id); }}>{i.number}</button>{i.legacy && <span className="cx-legacy-tag" title="Facture faite avant l’application">Ancienne</span>}{sameNumber.has(i.id) && <span className="cx-legacy-tag cx-tag-bad" title="Un autre ordinateur a une facture avec ce numéro : la Direction le corrigera">Numéro en double</span>}</td><td className="cx-t-name t-n" data-label="Client">{i.client.name}</td><td className="t-d cx-hide-880" data-label="Date">{dateFr(i.date)}</td><td className="cx-num t-x" data-label="Montant">{money(b.total)}</td><td className="cx-num cx-t-amount t-a" data-label="Reste à payer">{money(b.due)}</td><td className="t-s" data-label="Paiement"><StatusChip status={b.status} /></td><td className={`t-x2${dv ? "" : " cx-warn-text"}`} data-label="Remise au client">{dv ? "Oui" : "Pas encore"}</td></tr>; })}
           </tbody></table> : <Empty title={q ? "Aucune facture ne correspond." : `Aucune facture en ${monthLabel(month)}.`} action={!q && !closed ? <Button kind="primary" onClick={() => nav({ name: "compose" })}>Créer la première facture</Button> : undefined}>{q ? "Essayez le nom du client ou le numéro." : null}</Empty>}
           <details className="cx-fold" open={!!q && !shownBills.length && shownNotes.length > 0}>
             <summary><span>Avoirs du mois <em>({shownNotes.length})</em></span>{!closed && <button type="button" className="cx-link-btn" onClick={e => { e.preventDefault(); setClosing(true); }}>Clôturer {monthLabel(month)}…</button>}</summary>

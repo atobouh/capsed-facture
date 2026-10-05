@@ -71,7 +71,11 @@ await mkdir(path.join(dist, "fonts"), { recursive: true });
 for (const f of await readdir(path.join(root, "public", "fonts"))) await copyFile(path.join(root, "public", "fonts", f), path.join(dist, "fonts", f));
 
 if (mode !== "demo") await copyFile(path.join(root, "static-src", "sw.js"), path.join(dist, "sw.js"));
+// The desktop app shows this small card the moment it is clicked, while the main window gets ready.
+if (mode === "office") await copyFile(path.join(root, "static-src", "splash.html"), path.join(dist, "splash.html"));
 // The open site checks this small file to offer the new version as soon as it is published.
 if (mode !== "demo") await writeFile(path.join(dist, "version.json"), JSON.stringify({ v: assetVersion }));
 if (mode !== "demo") await writeFile(path.join(dist, "manifest.webmanifest"), JSON.stringify({ name: mode === "site" ? "CAPSED Direction" : "CAPSED Bureau", short_name: "CAPSED", start_url: "./", display: "standalone", background_color: "#F6F5F7", theme_color: "#5E3A6B", lang: "fr", icons: [{ src: "capsed-app-192.png", sizes: "192x192", type: "image/png" }, { src: "capsed-app-512.png", sizes: "512x512", type: "image/png" }, { src: "favicon.svg", sizes: "any", type: "image/svg+xml" }] }));
-if (mode !== "demo") await writeFile(path.join(dist, "_headers"), "/*\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: same-origin\n  X-Frame-Options: DENY\n");
+// app.js and styles.css are always asked for with ?v=<their hash>, and the fonts never change: kept a year on the phone.
+// Only the site root's _headers counts (the office copy under /bureau/ has none of its own).
+if (mode !== "demo" && !process.env.CAPSED_OUT) await writeFile(path.join(dist, "_headers"), "/*\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: same-origin\n  X-Frame-Options: DENY\n" + ["/app.js", "/styles.css", "/fonts/*", "/bureau/app.js", "/bureau/styles.css", "/bureau/fonts/*"].map(p => `${p}\n  Cache-Control: public, max-age=31536000, immutable\n`).join(""));

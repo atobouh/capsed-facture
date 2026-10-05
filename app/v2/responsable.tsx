@@ -19,7 +19,7 @@ export function ResponsableScreen({ route, nav, by }: { route: RRoute; nav: Nav;
   switch (route.name) {
     case "client": return <ClientStory id={route.id!} nav={nav} by={by} />;
     case "valider": case "factures": return <Invoices nav={nav} by={by} />;
-    case "nouvelle": return <Composer key={route.id ?? "new"} clientId={route.id} by={by} validated onDone={id => nav({ name: "facture", id, extra: "factures" })} onCancel={() => nav(route.id ? { name: "client", id: route.id } : { name: "factures" })} />;
+    case "nouvelle": return <Composer key={`${route.id ?? "new"}-${route.extra ?? ""}`} clientId={route.id} legacy={route.extra === "ancienne"} by={by} validated onDone={id => nav({ name: "facture", id, extra: "factures" })} onCancel={() => nav(route.id ? { name: "client", id: route.id } : { name: "factures" })} />;
     case "facture": return <InvoiceSheet id={route.id!} fromList={route.extra === "factures"} nav={nav} by={by} />;
     case "situation": return <GlobalSituation key={route.id ?? "all"} clientId={route.id ?? ""} />;
     case "reglages": return <Reglages page={route.id} nav={nav} by={by} />;
@@ -114,7 +114,7 @@ function ClientStory({ id, nav, by }: { id: string; nav: Nav; by: string }) {
   const open = items.filter(i => balance(i, s.payments, s.credits).due > 0), done = items.filter(i => !balance(i, s.payments, s.credits).due);
   const pays = s.payments.filter(p => items.some(i => i.id === p.invoiceId)).sort((x, y) => y.date.localeCompare(x.date)), reqs = d.requests.filter(r => r.clientId === c.id);
   const inv = (i: typeof items[number]) => { const b = balance(i, s.payments, s.credits), dv = delivery(s, i.id), late = overdueDays(i);
-    return <Row key={i.id} title={<span className="cx-nowrap">{i.number}</span>} sub={<><span>{dateFr(i.date)}</span>{!dv && <span className="cx-warn-text">pas encore remise au client</span>}</>}
+    return <Row key={i.id} title={<span className="cx-nowrap">{i.number}{i.legacy && <span className="cx-legacy-tag">Ancienne</span>}</span>} sub={<><span>{dateFr(i.date)}</span>{!dv && <span className="cx-warn-text">pas encore remise au client</span>}</>}
       amount={b.due ? money(b.due) : money(b.total)} state={b.due > 0 && late > 0 ? <span className="cx-chip cx-tone-bad">{late} j de retard</span> : <StatusChip status={b.status} />} onClick={() => nav({ name: "facture", id: i.id })} />; };
   const paid = Math.max(0, a.total - a.credited - a.due);
   return <div className="cx-page cx-story">
@@ -209,11 +209,11 @@ function Invoices({ nav, by }: { nav: Nav; by: string }) {
   const sum = (f: "total" | "received" | "due") => ofMonth.reduce((t, i) => t + balance(i, s.payments, s.credits)[f], 0);
   const open = (id: string) => nav({ name: "facture", id, extra: "factures" });
   const row = (i: typeof list[number]) => { const b = balance(i, s.payments, s.credits), dv = delivery(s, i.id), late = overdueDays(i);
-    return <Row key={i.id} title={<span className="cx-nowrap">{i.number}</span>} sub={<><span>{i.client.name}</span><span>{dateFr(i.date)}{!dv && <> · <span className="cx-warn-text cx-nowrap">pas encore remise</span></>}</span></>}
+    return <Row key={i.id} title={<span className="cx-nowrap">{i.number}{i.legacy && <span className="cx-legacy-tag">Ancienne</span>}</span>} sub={<><span>{i.client.name}</span><span>{dateFr(i.date)}{!dv && <> · <span className="cx-warn-text cx-nowrap">pas encore remise</span></>}</span></>}
       amount={money(b.total)} state={b.due > 0 && late > 0 ? <span className="cx-chip cx-tone-bad">{late} j de retard</span> : <StatusChip status={b.status} />} onClick={() => open(i.id)} />; };
   return <div className="cx-page cx-bills cx-validate">
     <PageHead title="Factures" sub="Les factures et paiements du bureau. Validez-les quand vous voulez : rien n’attend votre validation."
-      actions={<Button kind="primary" icon={<Plus size={16} aria-hidden="true" />} disabled={!d.officeOnline} title={!d.officeOnline ? "Le bureau est hors ligne" : undefined} onClick={() => nav({ name: "nouvelle" })}>Nouvelle facture</Button>} />
+      actions={<><MoreMenu iconOnly label="Autres actions" items={[{ label: "Ajouter une ancienne facture", hint: "Faite avant l’application, avec son numéro d’origine", onClick: () => nav({ name: "nouvelle", extra: "ancienne" }) }]} /><Button kind="primary" icon={<Plus size={16} aria-hidden="true" />} disabled={!d.officeOnline} title={!d.officeOnline ? "Le bureau est hors ligne" : undefined} onClick={() => nav({ name: "nouvelle" })}>Nouvelle facture</Button></>} />
     {!d.officeOnline && <Notice tone="warn">Le bureau est hors ligne. La validation reprendra à sa reconnexion ; tout reste consultable.</Notice>}
     <div className="cx-validate-grid">
       <section aria-labelledby="new-title">
@@ -221,7 +221,7 @@ function Invoices({ nav, by }: { nav: Nav; by: string }) {
         {keys.length ? <div className="cx-pay-cards">
           {bills.map(i => { const on = sel.includes("i:" + i.id), b = balance(i, s.payments, s.credits); return <label key={i.id} className={`cx-pay-card${on ? " cx-on" : ""}`}>
             <input type="checkbox" checked={on} onChange={e => toggle("i:" + i.id, e.target.checked)} />
-            <span className="cx-pay-body"><span className="cx-pay-top"><strong>{money(b.total)}</strong><span className={`cx-chip cx-tone-${i.revisedAt ? "warn" : "info"}`}>{i.revisedAt ? "Facture modifiée" : "Nouvelle facture"}</span></span>
+            <span className="cx-pay-body"><span className="cx-pay-top"><strong>{money(b.total)}</strong><span className={`cx-chip cx-tone-${i.revisedAt ? "warn" : "info"}`}>{i.revisedAt ? "Facture modifiée" : i.legacy ? "Ancienne facture" : "Nouvelle facture"}</span></span>
               <span className="cx-pay-who">{i.client.name} · facture {i.number}</span>
               <small>Émise le {dateFr(i.date)} par {accountName(i.createdBy)}{i.revisedAt ? ` · modifiée le ${dateFr(i.revisedAt)}` : ""}</small>
               <button type="button" className="cx-link-btn cx-pay-open" onClick={e => { e.preventDefault(); open(i.id); }}>Voir la facture</button></span>
@@ -257,7 +257,7 @@ function InvoiceSheet({ id, fromList, nav, by }: { id: string; fromList: boolean
   if (!i) return <Empty title="Facture introuvable." action={<Button onClick={() => nav({ name: "factures" })}>Toutes les factures</Button>} />;
   const b = balance(i, s.payments, s.credits), dv = delivery(s, i.id), client = s.clients.find(c => c.id === i.client.id) ?? i.client, pays = s.payments.filter(p => p.invoiceId === i.id);
   return <div className="cx-page cx-story">
-    <PageHead back={fromList ? { label: "Factures", onClick: () => nav({ name: "factures" }) } : { label: i.client.name, onClick: () => nav({ name: "client", id: i.client.id }) }} title={`Facture ${i.number}`} sub={`${i.client.name}, émise le ${dateFr(i.date)}`}
+    <PageHead back={fromList ? { label: "Factures", onClick: () => nav({ name: "factures" }) } : { label: i.client.name, onClick: () => nav({ name: "client", id: i.client.id }) }} title={`Facture ${i.number}`} sub={`${i.client.name}, ${i.legacy ? "ancienne facture du" : "émise le"} ${dateFr(i.date)}`}
       actions={<><Button icon={<Printer size={16} aria-hidden="true" />} onClick={() => window.print()}>Imprimer</Button><MoreMenu iconOnly label="Autres actions" items={[{ label: "Exporter en Excel", onClick: () => exportInvoice(i, words) }, { label: `Voir le client ${i.client.name}`, onClick: () => nav({ name: "client", id: i.client.id }) }]} /></>} />
     <div className="cx-story-grid">
       <div className="cx-story-side cx-noprint">

@@ -198,12 +198,22 @@ async function api(env: Env, req: Request, url: URL): Promise<Response> {
   // Office computers: enrolment with a one-time code from the Direction.
   if (p === "/api/devices/enroll" && post) {
     if (await tooManyFailures(env, "enroll:" + ipOf(req), 10)) return fail(429, "Trop d’essais. Réessayez dans 15 minutes.", cors(req));
-    const b = await readJson<{ code?: string; name?: string }>(req), code = (b.code ?? "").replace(/\D/g, ""), name = (b.name ?? "").trim().slice(0, 60);
-    const row = code.length === 6 ? await env.DB.prepare("SELECT letter, created_by FROM device_codes WHERE code_hash = ? AND used_at IS NULL AND expires_at > ?").bind(await sha256(code), now()).first<{ letter: string; created_by: string }>() : null;
+    const b = await readJson<{ code?: string; name?: string; attempt?: string }>(req), code = (b.code ?? "").replace(/\D/g, ""), name = (b.name ?? "").trim().slice(0, 60);
+    const attempt = /^[a-z0-9-]{16,64}$/i.test(b.attempt ?? "") ? await sha256(b.attempt!) : null, codeHash = code.length === 6 ? await sha256(code) : "";
+    // The same computer retrying after a lost reply: same code, same attempt id, within the code's validity.
+    if (attempt && codeHash) {
+      const again = await env.DB.prepare("SELECT d.id, d.name, d.letter FROM device_codes c JOIN devices d ON d.id = c.device_id WHERE c.code_hash = ? AND c.attempt_hash = ? AND c.expires_at > ? AND d.revoked_at IS NULL").bind(codeHash, attempt, now()).first<{ id: string; name: string; letter: string }>();
+      if (again) {
+        const token = newToken();
+        await env.DB.prepare("UPDATE devices SET token_hash = ? WHERE id = ?").bind(await sha256(token), again.id).run();
+        return json({ device: again, token }, 200, cors(req));
+      }
+    }
+    const row = codeHash ? await env.DB.prepare("SELECT letter, created_by FROM device_codes WHERE code_hash = ? AND used_at IS NULL AND expires_at > ?").bind(codeHash, now()).first<{ letter: string; created_by: string }>() : null;
     if (!row || !name) { await noteFailure(env, "enroll:" + ipOf(req)); return fail(400, "Code inconnu ou expiré. Demandez un nouveau code à la Direction.", cors(req)); }
     const id = uuid(), token = newToken();
     await env.DB.batch([
-      env.DB.prepare("UPDATE device_codes SET used_at = ? WHERE code_hash = ?").bind(now(), await sha256(code)),
+      env.DB.prepare("UPDATE device_codes SET used_at = ?, attempt_hash = ?, device_id = ? WHERE code_hash = ?").bind(now(), attempt, id, codeHash),
       env.DB.prepare("INSERT INTO devices (id, name, letter, token_hash, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?)").bind(id, name, row.letter, await sha256(token), now(), row.created_by),
     ]);
     await event(env, row.created_by, `Poste « ${name} » ajouté${row.letter ? `, série ${row.letter}` : ", série principale"}`);

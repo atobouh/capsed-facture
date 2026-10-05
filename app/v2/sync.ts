@@ -73,6 +73,9 @@ function record(changes: Change[]) {
 
 // ——— Talking to the cloud ———
 class AuthError extends Error {}
+class SlowError extends Error {}
+// Pages and batches follow the connection: smaller after a try that timed out, bigger again when it is quick.
+let pageSize = 200, batchSize = 50;
 async function request<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = { "x-capsed": "1" };
   if (config?.token) headers.authorization = "Bearer " + config.token;
@@ -83,7 +86,7 @@ async function request<T>(method: "GET" | "POST", path: string, body?: unknown):
     if (text.length > 1024 && typeof CompressionStream !== "undefined") { payload = await new Response(new Blob([text]).stream().pipeThrough(new CompressionStream("gzip"))).blob(); headers["content-encoding"] = "gzip"; }
     else payload = text;
   }
-  const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 30_000);
+  const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), method === "GET" ? 45_000 : 60_000);
   try {
     const r = await fetch((config?.api ?? "") + path, { method, headers, body: payload, signal: ctl.signal, credentials: config?.token ? "omit" : "same-origin", cache: "no-store" });
     if (r.status === 401) throw new AuthError(((await r.json().catch(() => null)) as { error?: string } | null)?.error ?? "Connexion expirée.");
@@ -91,6 +94,7 @@ async function request<T>(method: "GET" | "POST", path: string, body?: unknown):
     return await r.json() as T;
   } catch (e) {
     if (e instanceof AuthError) throw e;
+    if (ctl.signal.aborted) throw new SlowError("Connexion très lente : on continue par petits morceaux, rien n’est perdu.");
     throw new Error(ctl.signal.aborted ? "Le réseau est trop lent, nouvel essai bientôt." : e instanceof TypeError ? "Pas de connexion au serveur." : (e as Error).message);
   } finally { clearTimeout(t); }
 }
@@ -99,9 +103,13 @@ const LABEL: Record<string, string> = { clients: "Client", invoices: "Facture", 
 type PushResult = { changeId: string; ok: boolean; rev?: number; record?: Rec | null; error?: string };
 async function push() {
   while (outbox.length) {
-    const batch = outbox.slice(0, 50);
+    const batch = outbox.slice(0, batchSize);
     inFlight = new Set(batch.map(c => c.changeId));
-    const res = await request<{ results: PushResult[] }>("POST", "/api/sync", { changes: batch, pending: outbox.length - batch.length });
+    const started = Date.now();
+    let res: { results: PushResult[] };
+    try { res = await request<{ results: PushResult[] }>("POST", "/api/sync", { changes: batch, pending: outbox.length - batch.length }); }
+    catch (e) { inFlight = new Set(); if (e instanceof SlowError) batchSize = Math.max(5, batchSize >> 1); throw e; }
+    if (Date.now() - started < 4_000) batchSize = Math.min(50, batchSize * 2);
     const remote: { collection: string; id: string; data: Rec | null }[] = [], rejected: SyncState["rejected"] = [];
     for (const r of res.results) {
       const ch = batch.find(c => c.changeId === r.changeId); if (!ch) continue;
@@ -126,7 +134,11 @@ async function push() {
 async function pull() {
   let received = 0;
   for (;;) {
-    const res = await request<{ records: { collection: string; id: string; rev: number; data: Rec }[]; cursor: number; more: boolean; devices: DeviceStatus[] }>("GET", `/api/sync?since=${cursor}&limit=500`);
+    const started = Date.now();
+    let res: { records: { collection: string; id: string; rev: number; data: Rec }[]; cursor: number; more: boolean; devices: DeviceStatus[] };
+    try { res = await request("GET", `/api/sync?since=${cursor}&limit=${pageSize}`); }
+    catch (e) { if (e instanceof SlowError) pageSize = Math.max(25, pageSize >> 1); throw e; }
+    if (Date.now() - started < 4_000) pageSize = Math.min(500, pageSize * 2);
     // A record still waiting in the outbox stays as typed here; sending it will merge it with the cloud's version.
     const take = res.records.filter(r => !outbox.some(o => o.collection === r.collection && o.id === r.id));
     for (const r of res.records) revs[k(r.collection, r.id)] = r.rev;
@@ -146,7 +158,8 @@ async function cycle() {
   if (running) { again = true; return; }
   running = true; again = false;
   if (timer) { clearTimeout(timer); timer = null; }
-  let delay = config.interval ?? 30_000;
+  // Quick refresh while someone is looking; slower when the window is in the background.
+  let delay = typeof document !== "undefined" && document.visibilityState === "hidden" ? 120_000 : config.interval ?? 30_000;
   try {
     if (typeof navigator !== "undefined" && !navigator.onLine) throw new Error("Pas de connexion internet.");
     set({ busy: true });
@@ -155,8 +168,10 @@ async function cycle() {
     backoff = 0;
     set({ busy: false, online: true, error: undefined, authLost: false, lastOkAt: nowIso(), offlineSince: undefined });
   } catch (e) {
-    backoff = Math.min(backoff ? backoff * 2 : 5_000, 300_000); delay = backoff;
-    set({ busy: false, online: false, error: (e as Error).message, authLost: e instanceof AuthError, offlineSince: state.offlineSince ?? nowIso() });
+    // A slow link keeps going right away with smaller pieces; a cut link is retried within a minute at most.
+    backoff = e instanceof SlowError ? 2_000 : Math.min(backoff ? backoff * 2 : 5_000, 60_000); delay = backoff;
+    const slow = e instanceof SlowError; // slow is not offline: the next piece leaves in 2 seconds
+    set({ busy: false, online: slow, error: (e as Error).message, authLost: e instanceof AuthError, offlineSince: slow ? state.offlineSince : state.offlineSince ?? nowIso() });
     if (e instanceof AuthError) delay = 300_000;
   } finally {
     running = false;

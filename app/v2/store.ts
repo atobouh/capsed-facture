@@ -24,6 +24,8 @@ export type Client = { id: string; name: string; contact: string; address: strin
 export type Company = { name: string; subtitle: string; address: string; phone: string; email: string; niu: string; rc: string; website: string; logo: string };
 export type Line = { id: string; contract: string; designation: string; destination: string; quantity: number; unitPrice: number };
 export type Invoice = { id: string; number: string; date: string; client: Client; company: Company; lines: Line[]; taxRate: number; advance: number; payment: string; note: string; taxMode?: TaxMode; discountRate?: number; purchaseOrder?: string; revisedAt?: string; history?: Invoice[] & { savedAt?: string }[]; template?: unknown; createdBy?: string;
+  /** Made before the app and typed in afterwards, with its original number and date. */
+  legacy?: boolean;
   /** Seen and approved by the Direction. Never required: an invoice not validated is used everywhere like any other. */
   validatedAt?: string; validatedBy?: string;
   /** Internal payment deadline in days. Never printed on the invoice. */
@@ -232,7 +234,13 @@ let seriesLetter = "";
 export function setSeriesLetter(l: string) { seriesLetter = l; }
 export const getSeriesLetter = () => seriesLetter;
 const seriesMax = (numbers: string[], prefix: string) => Math.max(0, ...numbers.map(n => { const m = n.startsWith(prefix) ? n.slice(prefix.length).match(/^(\d+)$/) : null; return m ? Number(m[1]) : 0; }));
-export function nextInvoiceNumber(d: Data, period: string) { const prefix = `${period}-${seriesLetter}`; return prefix + String(seriesMax(d.invoices.map(i => i.number), prefix) + 1).padStart(3, "0"); }
+/** Old invoices typed in with their original number do not move the automatic numbering; a number they already use is skipped. */
+export function nextInvoiceNumber(d: Data, period: string) {
+  const prefix = `${period}-${seriesLetter}`, used = new Set(d.invoices.map(i => i.number.trim().toLowerCase()));
+  let n = seriesMax(d.invoices.filter(i => !i.legacy).map(i => i.number), prefix) + 1;
+  while (used.has((prefix + String(n).padStart(3, "0")).toLowerCase())) n++;
+  return prefix + String(n).padStart(3, "0");
+}
 export function nextCreditNumber(d: Data, period: string) { const prefix = `AV-${period}-${seriesLetter}`; return prefix + String(seriesMax(d.credits.map(c => c.number), prefix) + 1).padStart(3, "0"); }
 export function emptyClient(): Client { return { id: "", name: "", contact: "", address: "", phone: "", email: "", niu: "", rc: "" }; }
 export function emptyLine(): Line { return { id: uid(), contract: "", designation: "", destination: "", quantity: 1, unitPrice: 0 }; }

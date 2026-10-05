@@ -1,6 +1,6 @@
 // CAPSED: keeps the Direction site (or the office app under /bureau/) on the device so it opens without network,
 // with the data saved at the last visit. Data always comes from /api (never cached here).
-const CACHE = "capsed-v1-" + self.registration.scope;
+const CACHE = "capsed-v2-" + self.registration.scope;
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(["./", "./styles.css", "./app.js", "./fonts/Geist-Variable.woff2", "./capsed-logo.png", "./favicon.svg"])).then(() => self.skipWaiting())); });
 self.addEventListener("activate", e => { e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 async function remember(req, res) {
@@ -13,7 +13,7 @@ async function remember(req, res) {
 }
 self.addEventListener("fetch", e => {
   const req = e.request, url = new URL(req.url);
-  if (req.method !== "GET" || url.origin !== location.origin || url.pathname.startsWith("/api/") || url.pathname.startsWith("/secours/")) return;
+  if (req.method !== "GET" || url.origin !== location.origin || url.pathname.startsWith("/api/") || url.pathname.startsWith("/secours/") || url.pathname.endsWith("/version.json")) return;
   // The Direction site's worker leaves the office app (/bureau/) to its own worker.
   if (new URL(self.registration.scope).pathname === "/" && url.pathname.startsWith("/bureau/")) return;
   if (req.mode === "navigate") {

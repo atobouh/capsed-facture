@@ -36,6 +36,8 @@ try {
     await btn(site, 'Ajouter une personne').click();
     await site.locator('.cx-modal input').first().fill(name);
     await site.locator('.cx-choice-item', { hasText: new RegExp('^' + role) }).first().click();
+    // Paul's password is chosen by the Direction.
+    if (name.startsWith('Paul')) { await site.locator('.cx-choice-item', { hasText: 'Je le choisis' }).click(); await site.locator('.cx-modal input').last().fill('Paul2026x'); }
     await btn(site, 'Créer son accès').click();
     const dd = site.locator('.cx-credential dd');
     await dd.nth(2).waitFor();
@@ -44,13 +46,7 @@ try {
     if (name.startsWith('Awa')) await shot(site, '04-credential');
     await btn(site, 'C’est noté').click();
   }
-  ok(awaPw && paulPw, `team passwords shown once (${awaPw}, ${paulPw})`);
-  await btn(site, 'Relier un ordinateur').click();
-  await site.locator('.cx-big-code').waitFor();
-  code = (await site.locator('.cx-big-code').textContent()).replace(/\D/g, '');
-  await shot(site, '05-device-code');
-  await btn(site, 'C’est noté').click();
-  ok(code.length === 6, 'computer code ' + code);
+  ok(awaPw && paulPw === 'Paul2026x', `team passwords shown (${awaPw}, chosen: ${paulPw})`);
   ok(await until(async () => (await site.evaluate(() => localStorage.getItem('capsed-site-sync-outbox'))) === '[]', 20000), 'Direction changes sent');
   // 2b. Edit a person (name, e-mail) and read the password again.
   const awaRow = site.locator('.cx-member', { hasText: 'Awa Ngo' });
@@ -66,6 +62,15 @@ try {
   await awaRow2.getByRole('button', { name: 'Fiche d’accès' }).click();
   ok((await site.locator('.cx-credential dd').nth(2).textContent()) === awaPw, 'access sheet shows the password any time');
   await btn(site, 'C’est noté').click();
+  // 2c. Password copied with its own icon.
+  await site.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  await awaRow2.getByRole('button', { name: /Copier le mot de passe/ }).click();
+  ok(await until(async () => (await site.evaluate(() => navigator.clipboard.readText().catch(() => ''))) === awaPw, 3000), 'copy icon copies just the password');
+  await btn(site, 'Relier un ordinateur').click();
+  await site.locator('.cx-big-code').waitFor();
+  code = (await site.locator('.cx-big-code').textContent()).replace(/\D/g, '');
+  await shot(site, '05-device-code');
+  ok(code.length === 6, 'computer code ' + code);
 
   // 3. Office: link the computer, sign in.
   await office.goto(OFFICE);
@@ -73,6 +78,9 @@ try {
   await shot(office, '10-enroll');
   await office.locator('#code').fill(code); await office.locator('#device-name').fill('Facturation 1');
   await btn(office, 'Relier l’ordinateur').click();
+  ok(await until(async () => (await site.locator('.cx-modal', { hasText: 'Ordinateur relié' }).count()) > 0, 20000), 'the Direction sees the computer linked without reloading');
+  await shot(site, '05b-device-linked');
+  await btn(site, 'Terminé').click();
   await office.locator('#login').waitFor({ timeout: 30000 });
   await shot(office, '11-office-login');
   await office.locator('#login').fill('awa'); await office.locator('#password').fill(awaPw);
@@ -120,10 +128,37 @@ try {
   ok(await until(async () => /Tout est envoyé/.test(await office.locator('.cx-sidebar .cx-sync').textContent()), 20000), 'office shows « Tout est envoyé »');
   await shot(office, '13-office-sent');
 
+  // 4b. An old invoice (made before the app), typed in with its original number and date.
+  const cur = new Date().toISOString().slice(0, 7), od = new Date(); od.setDate(1); od.setMonth(od.getMonth() - 4);
+  const oldMonth = od.toISOString().slice(0, 7), oldNumber = `${oldMonth}-015`;
+  async function addOld(number) {
+    await office.locator('.cx-sidebar nav button', { hasText: 'Factures' }).click();
+    await office.locator('.cx-page-head').getByRole('button', { name: 'Autres actions' }).click();
+    await office.getByRole('menuitem', { name: /Ajouter une ancienne facture/ }).click();
+    await office.locator('.cx-pick-list button').first().click();
+    await office.locator('.cx-form-grid input').first().fill(number);
+    await office.locator('.cx-form-grid input[type=date]').fill(`${oldMonth}-12`);
+    await btn(office, /Continuer/).click();
+  }
+  await addOld(oldNumber);
+  await office.locator('.cx-line textarea').first().fill('Dératisation (facture papier)');
+  const oi = office.locator('.cx-line input'); await oi.nth(0).fill('1'); await oi.nth(1).fill('80000');
+  await btn(office, /Continuer/).click(); await btn(office, /Continuer/).click();
+  await shot(office, '16-old-invoice-review');
+  await btn(office, /Enregistrer l’ancienne facture/).click(); await wait(500);
+  ok(/ancienne facture du/.test(await office.locator('.cx-page-head').first().textContent()), 'the old invoice opens, dated as on paper');
+  await office.locator('.cx-sidebar nav button', { hasText: 'Factures' }).click();
+  ok(await office.locator('.cx-doc-link', { hasText: oldNumber }).count() === 1 && await office.locator('.cx-legacy-tag').count() > 0, `old invoice ${oldNumber} saved with its own number and date, tagged « Ancienne »`);
+  await shot(office, '17-old-invoice-register');
+  await addOld(oldNumber);
+  ok(await office.locator('.cx-notice', { hasText: 'existe déjà' }).count() === 1, 'the same number twice is refused');
+  await btn(office, 'Quitter sans enregistrer').click();
+
   // 5. The Direction sees it.
   await site.locator('.cx-site-tabs button', { hasText: 'Factures' }).click();
   ok(await until(async () => { await site.evaluate(() => window.dispatchEvent(new Event('online'))); return (await site.locator('.cx-pay-card', { hasText: 'facture 2026-' }).count()) > 0; }, 40000, 1000), 'Direction sees the office invoice to validate');
   await shot(site, '14-site-factures');
+  ok(await until(async () => { await site.evaluate(() => window.dispatchEvent(new Event('online'))); return (await site.locator('.cx-pay-card', { hasText: oldNumber }).count()) > 0; }, 40000, 1000), 'Direction receives the old invoice, marked as such');
 
   const sent = () => until(async () => /Tout est envoyé/.test(await office.locator('.cx-sidebar .cx-sync').textContent()), 90000, 500);
   const poke = p => p.evaluate(() => window.dispatchEvent(new Event('online')));
@@ -138,6 +173,8 @@ try {
   await office.context().setOffline(false); await poke(office);
   ok(await sent(), 'back online: everything sent');
   ok(await until(async () => (await siteRows()) === 3, 40000, 1000), 'Direction sees the invoice made offline');
+  await office.locator('.cx-sidebar nav button', { hasText: 'Factures' }).click();
+  ok(await office.locator('.cx-doc-link', { hasText: new RegExp(`^${cur}-003$`) }).count() === 1, 'automatic numbering goes on as before (old invoice not counted)');
 
   // 7. A send cut after the cloud received it: sent again, nothing doubled.
   let cut = false;
@@ -247,6 +284,34 @@ try {
   ok(await until(async () => (await phone.locator('.cx-home-main .cx-row').count()) > 0, 15000), 'phone offline: the site still opens with its saved data');
   await shot(phone, '64-phone-offline');
   ok(await phone.getByText(/hors ligne/i).count() > 0, 'phone offline: says so');
+
+  // 14. A second office computer on a terrible link (about 20 kbit/s, 2 s latency), and the reply to its code is lost once.
+  await site.locator('.cx-site-tabs button', { hasText: 'Réglages' }).click();
+  await site.locator('.cx-row', { hasText: 'Équipe et accès' }).click();
+  await btn(site, 'Relier un ordinateur').click();
+  await site.locator('.cx-big-code').waitFor();
+  const code2 = (await site.locator('.cx-big-code').textContent()).replace(/\D/g, '');
+  const slowPc = await ctx({ width: 1366, height: 800 });
+  let lost = 0;
+  await slowPc.route('**/api/devices/enroll', async route => { if (lost++ === 0) { await route.fetch(); await route.abort('connectionreset'); } else await route.continue(); });
+  await slowPc.goto(OFFICE);
+  await slowPc.getByText('Relier cet ordinateur').waitFor();
+  const cdp2 = await slowPc.context().newCDPSession(slowPc);
+  await cdp2.send('Network.emulateNetworkConditions', { offline: false, latency: 2000, downloadThroughput: 2500, uploadThroughput: 2500 });
+  await slowPc.locator('#code').fill(code2); await slowPc.locator('#device-name').fill('Encaissement');
+  const tLink = Date.now();
+  await btn(slowPc, 'Relier l’ordinateur').click();
+  ok(await until(async () => (await slowPc.locator('#login').count()) > 0 || (await slowPc.getByText('Première récupération').count()) > 0, 60000, 500), `linked despite the lost reply (${lost} tries)`);
+  await shot(slowPc, '70-slow-first-download');
+  ok(await until(async () => (await slowPc.locator('#login').count()) > 0, 240000, 1000), `slow link: first download finished in ${Math.round((Date.now() - tLink) / 1000)} s, sign-in ready`);
+  ok(await until(async () => (await site.locator('.cx-modal', { hasText: 'Ordinateur relié' }).count()) > 0, 20000), 'the Direction sees the second computer linked');
+  const { devices } = await site.evaluate(() => fetch('/api/devices', { headers: { 'x-capsed': '1' } }).then(r => r.json()));
+  ok(devices.filter(d => d.name === 'Encaissement' && !d.revoked_at).length === 1, 'one computer, not two, after the retry');
+  await btn(site, 'Terminé').click();
+  await cdp2.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
+  await slowPc.locator('#login').fill('paul'); await slowPc.locator('#password').fill('Paul2026x');
+  await btn(slowPc, 'Se connecter').click();
+  ok(await until(async () => (await slowPc.locator('.cx-sidebar').count()) > 0, 15000), 'Paul signs in on the second computer with the password the Direction chose');
 } catch (e) { errs.push('STEP ' + e.message.split('\n')[0]); await shot(site, 'ERR-site').catch(() => {}); await shot(office, 'ERR-office').catch(() => {}); }
 console.log(log.join('\n')); console.log('\nERRORS:\n' + (errs.join('\n') || 'none'));
 await b.close();

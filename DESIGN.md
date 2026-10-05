@@ -13,6 +13,8 @@ Product truth lives in `PRODUCT.md`. This file records the visual system the app
     - Clients: client list beside the account, from 1180 px.
     - Demandes: list beside the detail.
   - Narrower windows open the same page full width. Base 14 px, controls 32 px.
+- **Old invoices** (« ⋯ » then « Ajouter une ancienne facture », office and Direction): the same 4-step composer with the original number and date. The number must be unique; automatic numbering ignores old invoices and skips any number they use. They carry an « Ancienne » tag and sync like any invoice.
+- **Start-up**: the page itself shows the CAPSED mark and a thin progress bar from the first frame; the Windows window stays hidden until the page is drawn, and opening the app twice brings the open window forward. App icon: plum rounded tile with the white open delta, drawn bolder at 16–48 px.
 - **Direction: a website**, with a phone layout and a desktop layout.
   - It uses normal page scroll: never `overflow:hidden` on html/body.
   - Phones: bottom navigation (Accueil, Factures, Situation, Réglages); the validation total bar sits above it. Forms open as bottom sheets.
@@ -27,6 +29,8 @@ Product truth lives in `PRODUCT.md`. This file records the visual system the app
   - Situation has one switch: « Les clients » (statement with HT, TVA and TTC, on screen and on paper) or « L’équipe » (what each person did in the office apps over a period, then the journal, exportable to Excel).
   - Payment deadline: 60 days by default, changed by the Direction in Réglages, and per invoice at step 3 of the composer. It is internal only: never printed on the invoice. Lateness (« N j de retard », « Relancer », the aging bar) counts from this deadline.
   - Réglages is an index of five pages, one question each: Équipe et accès (people, passwords, office computers), Règles et dérogations (payment deadline, closed months, every rule lifted with « Revenir en arrière »), Entreprise et factures, Données et sauvegarde (when each computer last sent data), Aide.
+  - Équipe et accès: each password is shown masked with an eye and a copy icon, and copies alone. A password is made by the app or chosen by the Direction (« Je le choisis », at least 6 characters, no space). Office computers only ever receive its hash.
+  - Linking a computer: the code window waits live (« En attente de l’ordinateur… ») and turns into « Ordinateur relié » by itself. Only the code expires (24 h, single use); the link does not.
   - Rules the Direction can lift (unlock a validated payment, restore a cancelled one, reopen a closed month) always ask for a reason, state the exact effect, are written in the journal and can be undone.
   - Freshness is always visible: the Direction site says « Situation au … » and when each office computer last sent data, and warns when one has sent nothing for a day or when the phone is offline. The office status bar says « Tout est envoyé · 14:32 » or how many changes wait to be sent.
   - Base 15 px, controls 40–44 px.

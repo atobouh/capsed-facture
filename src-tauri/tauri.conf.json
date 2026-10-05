@@ -17,21 +17,40 @@
         "minWidth": 1024,
         "minHeight": 680,
         "maximized": true,
-        "center": true
+        "center": true,
+        "visible": false,
+        "backgroundColor": "#F6F5F7"
       }
     ],
-    "security": { "csp": null }
+    "security": {
+      "csp": null
+    }
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": [
+      "nsis"
+    ],
     "publisher": "CAPSED SUARL",
     "shortDescription": "Facturation et encaissement",
     "copyright": "CAPSED SUARL",
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
     "windows": {
-      "webviewInstallMode": { "type": "embedBootstrapper" },
-      "nsis": { "installMode": "currentUser", "languages": ["French"], "displayLanguageSelector": false }
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": [
+          "French"
+        ],
+        "displayLanguageSelector": false
+      }
     }
   }
 }

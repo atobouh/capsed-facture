@@ -151,3 +151,18 @@ test("too many wrong passwords are slowed down", async () => {
   for (let i = 0; i < 11; i++) last = await call("/api/login", { method: "POST", body: { login: "paul", password: "x" }, headers: { "x-capsed": "1" } });
   assert.equal(last.status, 429);
 });
+
+test("a computer whose enrolment reply was lost can retry with the same attempt, nobody else can", async () => {
+  const c = await call("/api/devices/code", { method: "POST", body: {}, auth: "web" });
+  const attempt = "attempt-" + uid().replace(/[^a-z0-9]/gi, "").slice(0, 20);
+  const first = await call("/api/devices/enroll", { method: "POST", body: { code: c.body.code, name: "Encaissement", attempt } });
+  assert.equal(first.status, 200);
+  const again = await call("/api/devices/enroll", { method: "POST", body: { code: c.body.code, name: "Encaissement", attempt } });
+  assert.equal(again.status, 200); assert.equal(again.body.device.id, first.body.device.id, "same computer, not a second one");
+  assert.notEqual(again.body.token, first.body.token);
+  assert.equal((await call("/api/sync?since=0&limit=1", { headers: { authorization: "Bearer " + first.body.token } })).status, 401, "the lost token no longer works");
+  assert.equal((await call("/api/sync?since=0&limit=1", { headers: { authorization: "Bearer " + again.body.token } })).status, 200);
+  assert.equal((await call("/api/devices/enroll", { method: "POST", body: { code: c.body.code, name: "Autre", attempt: "attempt-someone-else-000" } })).status, 400, "another computer cannot reuse the code");
+  const { body } = await call("/api/devices", { auth: "web" });
+  assert.equal(body.devices.filter(d => d.name === "Encaissement").length, 1);
+});

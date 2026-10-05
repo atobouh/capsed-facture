@@ -18,7 +18,7 @@ type Nav = (r: OfficeRoute) => void;
 
 export function OfficeScreen({ role, by, route, nav }: { role: Role; by: string; route: OfficeRoute; nav: Nav }) {
   switch (route.name) {
-    case "compose": return <Composer key={`${route.id}-${route.extra}`} editId={route.id} clientId={route.extra && !route.extra.startsWith("req:") ? route.extra : undefined} requestId={route.extra?.startsWith("req:") ? route.extra.slice(4) : undefined} by={by}
+    case "compose": return <Composer key={`${route.id}-${route.extra}`} editId={route.id} legacy={route.extra === "ancienne"} clientId={route.extra && !route.extra.startsWith("req:") && route.extra !== "ancienne" ? route.extra : undefined} requestId={route.extra?.startsWith("req:") ? route.extra.slice(4) : undefined} by={by}
       onDone={id => nav({ name: "invoice", id })} onCancel={() => nav(route.id ? { name: "invoice", id: route.id } : { name: "register" })} />;
     case "invoice": return <InvoiceView id={route.id!} role={role} by={by} nav={nav} />;
     case "credit": return <CreditView id={route.id!} nav={nav} />;
@@ -46,7 +46,7 @@ function Register({ role, by, nav }: { role: Role; by: string; nav: Nav }) {
   return <div className={`cx-page${wide ? " cx-page-split" : ""}`}>
     <PageHead title="Factures" sub={closed ? `${monthLabel(month)} est clôturé` : undefined}
       tools={<><MonthStepper value={month} onChange={v => { commit(by, () => ({ month: v })); setSel(null); }} /><SearchBox value={q} onChange={setQ} placeholder="Chercher un client ou un numéro" /></>}
-      actions={<><Button disabled={!eligible || closed} onClick={() => setPicker(true)}>Créer un avoir</Button><Button kind="primary" icon={<Plus size={16} aria-hidden="true" />} disabled={closed} title={closed ? "Ce mois est clôturé" : "Ctrl+N"} onClick={() => nav({ name: "compose" })}>Nouvelle facture</Button></>} />
+      actions={<><MoreMenu iconOnly label="Autres actions" items={[{ label: "Ajouter une ancienne facture", hint: "Faite avant l’application, avec son numéro d’origine", onClick: () => nav({ name: "compose", extra: "ancienne" }) }]} /><Button disabled={!eligible || closed} onClick={() => setPicker(true)}>Créer un avoir</Button><Button kind="primary" icon={<Plus size={16} aria-hidden="true" />} disabled={closed} title={closed ? "Ce mois est clôturé" : "Ctrl+N"} onClick={() => nav({ name: "compose" })}>Nouvelle facture</Button></>} />
     <div className={wide ? "cx-split cx-split-panel" : ""}>
       <section className="cx-col" aria-label={`Factures de ${monthLabel(month)}`}>
         <dl className="cx-strip"><div><dt>Facturé en {monthLabel(month).split(" ")[0]}</dt><dd>{money(sum("total"))}</dd></div><div><dt>Encaissé</dt><dd>{money(sum("received"))}</dd></div><div><dt>Reste à recevoir</dt><dd className="cx-strong">{money(sum("due"))}</dd></div><div><dt>Pas encore remises au client</dt><dd>{undelivered} facture{undelivered > 1 ? "s" : ""}</dd></div></dl>
@@ -54,7 +54,7 @@ function Register({ role, by, nav }: { role: Role; by: string; nav: Nav }) {
         <div className="cx-card cx-card-flush cx-grow">
           {shownBills.length ? <table className="cx-table"><thead><tr><th>Numéro</th><th>Client</th><th className="cx-hide-880">Date</th><th className="cx-num">Montant</th><th className="cx-num">Reste à payer</th><th>Paiement</th><th>Remise au client</th></tr></thead><tbody>
             {shownBills.map(i => { const b = balance(i, d.payments, d.credits), dv = delivery(d, i.id); return <tr key={i.id} className={`cx-clickable${isCur("invoice", i.id) ? " cx-current" : ""}`} aria-selected={isCur("invoice", i.id) || undefined} onClick={() => open("invoice", i.id)}>
-              <td className="t-u"><button type="button" className="cx-doc-link" onClick={e => { e.stopPropagation(); open("invoice", i.id); }}>{i.number}</button></td><td className="cx-t-name t-n" data-label="Client">{i.client.name}</td><td className="t-d cx-hide-880" data-label="Date">{dateFr(i.date)}</td><td className="cx-num t-x" data-label="Montant">{money(b.total)}</td><td className="cx-num cx-t-amount t-a" data-label="Reste à payer">{money(b.due)}</td><td className="t-s" data-label="Paiement"><StatusChip status={b.status} /></td><td className={`t-x2${dv ? "" : " cx-warn-text"}`} data-label="Remise au client">{dv ? "Oui" : "Pas encore"}</td></tr>; })}
+              <td className="t-u"><button type="button" className="cx-doc-link" onClick={e => { e.stopPropagation(); open("invoice", i.id); }}>{i.number}</button>{i.legacy && <span className="cx-legacy-tag" title="Facture faite avant l’application">Ancienne</span>}</td><td className="cx-t-name t-n" data-label="Client">{i.client.name}</td><td className="t-d cx-hide-880" data-label="Date">{dateFr(i.date)}</td><td className="cx-num t-x" data-label="Montant">{money(b.total)}</td><td className="cx-num cx-t-amount t-a" data-label="Reste à payer">{money(b.due)}</td><td className="t-s" data-label="Paiement"><StatusChip status={b.status} /></td><td className={`t-x2${dv ? "" : " cx-warn-text"}`} data-label="Remise au client">{dv ? "Oui" : "Pas encore"}</td></tr>; })}
           </tbody></table> : <Empty title={q ? "Aucune facture ne correspond." : `Aucune facture en ${monthLabel(month)}.`} action={!q && !closed ? <Button kind="primary" onClick={() => nav({ name: "compose" })}>Créer la première facture</Button> : undefined}>{q ? "Essayez le nom du client ou le numéro." : null}</Empty>}
           <details className="cx-fold" open={!!q && !shownBills.length && shownNotes.length > 0}>
             <summary><span>Avoirs du mois <em>({shownNotes.length})</em></span>{!closed && <button type="button" className="cx-link-btn" onClick={e => { e.preventDefault(); setClosing(true); }}>Clôturer {monthLabel(month)}…</button>}</summary>
@@ -89,7 +89,7 @@ function InvoicePanel({ id, role, by, nav }: { id: string; role: Role; by: strin
   ];
   return <div className="cx-panel-body">
     <header className="cx-panel-head">
-      <h2>Facture {i.number} <StatusChip status={b.status} /></h2>
+      <h2>Facture {i.number} {i.legacy && <span className="cx-legacy-tag">Ancienne</span>}<StatusChip status={b.status} /></h2>
       <p>{i.client.name}, le {dateFr(i.date)}</p>
       <div className="cx-panel-actions">
         <Button kind="primary" icon={<Printer size={16} aria-hidden="true" />} onClick={() => window.print()}>Imprimer</Button>
@@ -130,7 +130,7 @@ export function InvoiceView({ id, role, by, nav, pane }: { id: string; role: Rol
     { label: "Voir le compte du client", onClick: () => nav({ name: "client", id: i.client.id }) },
   ];
   return <div className={pane ? "cx-detail" : "cx-page"}>
-    <PageHead pane={pane} back={pane ? undefined : { label: biller ? "Factures" : i.client.name, onClick: () => nav(biller ? { name: "register" } : { name: "client", id: i.client.id }) }} title={<>Facture {i.number}{b.status === "Payée" && <Stamp tone="good">Payée</Stamp>}</>} sub={`${i.client.name}, le ${dateFr(i.date)}`}
+    <PageHead pane={pane} back={pane ? undefined : { label: biller ? "Factures" : i.client.name, onClick: () => nav(biller ? { name: "register" } : { name: "client", id: i.client.id }) }} title={<>Facture {i.number}{i.legacy && <span className="cx-legacy-tag">Ancienne</span>}{b.status === "Payée" && <Stamp tone="good">Payée</Stamp>}</>} sub={`${i.client.name}, ${i.legacy ? "ancienne facture du" : "le"} ${dateFr(i.date)}`}
       actions={<><MoreMenu label="Autres actions" items={more} />
         {biller && <Button icon={<Pencil size={17} aria-hidden="true" />} disabled={closed} title={closed ? "Le mois de cette facture est clôturé" : undefined} onClick={() => nav({ name: "compose", id: i.id })}>Modifier</Button>}
         <Button kind={cashier && b.due > 0 ? "secondary" : "primary"} icon={<Printer size={18} aria-hidden="true" />} onClick={() => window.print()}>Imprimer</Button>

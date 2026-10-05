@@ -1,0 +1,74 @@
+name: Build the office desktop app (Windows)
+
+# Builds « CAPSED Bureau » for Windows and publishes the installer at
+# https://github.com/atobouh/capsed-facture/releases/download/bureau-latest/CAPSED-Bureau-installation.exe
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, claude/eloquent-feynman-lgb5tr]
+    paths:
+      - "src-tauri/**"
+      - "app/**"
+      - "static-src/**"
+      - "public/**"
+      - "scripts/build-static.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/desktop.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-build
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    env:
+      CAPSED_API: https://capsed.erdj5926.workers.dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm run install:ci
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Build the installer
+        run: npx tauri build
+
+      - name: Name the installer
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem src-tauri/target/release/bundle/nsis/*.exe | Select-Object -First 1
+          Copy-Item $exe.FullName "CAPSED-Bureau-installation.exe"
+          "Installer: $((Get-Item CAPSED-Bureau-installation.exe).Length / 1MB) MB" >> $env:GITHUB_STEP_SUMMARY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CAPSED-Bureau-Windows
+          path: CAPSED-Bureau-installation.exe
+
+      - name: Publish the download
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: bureau-latest
+          name: CAPSED Bureau pour Windows
+          body: |
+            Application de bureau CAPSED (facturation et encaissement), fonctionne sans internet.
+            1. Téléchargez CAPSED-Bureau-installation.exe et ouvrez-le. Si Windows affiche « Windows a protégé votre ordinateur », cliquez « Informations complémentaires » puis « Exécuter quand même ».
+            2. Au premier lancement, tapez le code à 6 chiffres donné par la Direction (Réglages, Équipe et accès, « Relier un ordinateur »).
+            Version construite depuis ${{ github.sha }}.
+          files: CAPSED-Bureau-installation.exe
+          make_latest: true

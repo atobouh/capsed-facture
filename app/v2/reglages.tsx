@@ -40,42 +40,79 @@ export function Reglages({ page, nav, by }: { page?: string; nav: Nav; by: strin
 async function withPassword(a: Account, password: string): Promise<Account> {
   if (!CLOUD) return { ...a, password };
   const { password: _p, ...rest } = a; void _p;
-  return { ...rest, ...(await makeHash(password)), passwordAt: nowIso() };
+  // Kept readable for the Direction (it can give it back); office computers only receive the hash.
+  return { ...rest, ...(await makeHash(password)), visiblePassword: password, passwordAt: nowIso() };
+}
+const shownPassword = (a: Account) => a.visiblePassword ?? a.password;
+const ROLE_OPTIONS: { value: Role; label: string; sub: string }[] = [{ value: "facturation", label: "Facturation", sub: "Factures, avoirs, clients" }, { value: "encaissement", label: "Encaissement", sub: "Paiements" }, { value: "bureau", label: "Facturation et encaissement", sub: "Tout le bureau, une seule connexion" }, { value: "responsable", label: "Direction", sub: "Ce site" }];
+function copy(text: string, done = "Copié.") { navigator.clipboard?.writeText(text).then(() => toast(done)).catch(() => toast("Copie impossible : recopiez-le à la main.", "warn")); }
+function PasswordLine({ a }: { a: Account }) {
+  const [show, setShow] = useState(false), pw = shownPassword(a);
+  if (!pw) return <small className="cx-pw-line">Mot de passe : choisi par la personne, non visible. « Nouveau mot de passe » en crée un que vous pourrez revoir.</small>;
+  return <small className="cx-pw-line">Mot de passe : <code translate="no">{show ? pw : "••••••••"}</code>
+    <button type="button" className="cx-link-btn" onClick={() => setShow(s => !s)}>{show ? "Masquer" : "Afficher"}</button>
+    <button type="button" className="cx-link-btn" onClick={() => copy(pw, "Mot de passe copié.")}><Copy size={13} aria-hidden="true" />Copier</button></small>;
 }
 function Team({ by }: { by: string }) {
-  const d = useData(), [add, setAdd] = useState(false), [sheet, setSheet] = useState<{ a: Account; password: string } | null>(null), [reset, setReset] = useState<Account | null>(null), [toggle, setToggle] = useState<Account | null>(null);
+  const d = useData(), [add, setAdd] = useState(false), [sheet, setSheet] = useState<{ a: Account; password?: string } | null>(null), [reset, setReset] = useState<Account | null>(null), [toggle, setToggle] = useState<Account | null>(null), [edit, setEdit] = useState<Account | null>(null);
   return <section className="cx-section" aria-labelledby="set-team">
-    <div className="cx-section-head cx-section-head-row"><div><h2 id="set-team">Équipe</h2><p>Chacun se connecte avec l’identifiant et le mot de passe que vous lui remettez.</p></div><Button icon={<UserPlus size={17} aria-hidden="true" />} onClick={() => setAdd(true)}>Ajouter une personne</Button></div>
-    <div className="cx-panel cx-list">{d.accounts.map(a => <div key={a.id} className={`cx-list-row cx-static${a.active ? "" : " cx-cancelled"}`}>
-      <span className="cx-list-main"><strong>{a.name}{!a.active && <span className="cx-chip">Désactivé</span>}</strong><small>{ROLE_LABEL[a.role]}. Identifiant : {a.login}</small></span>
-      <span className="cx-list-actions"><button type="button" className="cx-text-btn" onClick={() => setReset(a)}><KeyRound size={15} aria-hidden="true" />Nouveau mot de passe</button>{a.id !== by && <button type="button" className="cx-text-btn" onClick={() => setToggle(a)}>{a.active ? "Désactiver" : "Réactiver"}</button>}</span>
+    <div className="cx-section-head cx-section-head-row"><div><h2 id="set-team">Équipe</h2><p>Chacun se connecte avec l’identifiant et le mot de passe que vous lui remettez. Vous pouvez les revoir ici à tout moment.</p></div><Button icon={<UserPlus size={17} aria-hidden="true" />} onClick={() => setAdd(true)}>Ajouter une personne</Button></div>
+    <div className="cx-panel cx-list">{d.accounts.map(a => <div key={a.id} className={`cx-list-row cx-static cx-member${a.active ? "" : " cx-cancelled"}`}>
+      <span className="cx-list-main"><strong>{a.name}{!a.active && <span className="cx-chip">Désactivé</span>}</strong>
+        <small>{ROLE_LABEL[a.role]} · identifiant <span translate="no">{a.login}</span>{a.email ? ` · ${a.email}` : ""}</small>
+        <PasswordLine a={a} /></span>
+      <span className="cx-list-actions">
+        <button type="button" className="cx-text-btn" onClick={() => setEdit(a)}>Modifier</button>
+        <button type="button" className="cx-text-btn" onClick={() => setSheet({ a, password: shownPassword(a) })}>Fiche d’accès</button>
+        <button type="button" className="cx-text-btn" onClick={() => setReset(a)}><KeyRound size={15} aria-hidden="true" />Nouveau mot de passe</button>
+        {a.id !== by && <button type="button" className="cx-text-btn" onClick={() => setToggle(a)}>{a.active ? "Désactiver" : "Réactiver"}</button>}</span>
     </div>)}{!d.accounts.length && <p className="cx-fold-note">Personne pour l’instant.</p>}</div>
     {add && <AddMember by={by} onClose={() => setAdd(false)} onCreated={(a, password) => { setAdd(false); setSheet({ a, password }); }} />}
+    {edit && <EditMember a={edit} self={edit.id === by} by={by} onClose={() => setEdit(null)} />}
     {sheet && <CredentialSheet a={sheet.a} password={sheet.password} onClose={() => setSheet(null)} />}
     {reset && <Confirm title={`Nouveau mot de passe pour ${reset.name} ?`} confirm="Créer le mot de passe" cancel="Annuler" onClose={() => setReset(null)} onConfirm={async () => { const pw = generatePassword(), next = await withPassword(reset, pw); commit(by, x => ({ accounts: x.accounts.map(a => a.id === reset.id ? { ...next, passwordAt: nowIso() } : a) }), { text: `Nouveau mot de passe pour ${reset.name}` }); setSheet({ a: next, password: pw }); setReset(null); }}><p>L’ancien mot de passe ne marchera plus. Vous remettrez le nouveau à {reset.name}.</p></Confirm>}
     {toggle && <Confirm title={toggle.active ? `Désactiver ${toggle.name} ?` : `Réactiver ${toggle.name} ?`} confirm={toggle.active ? "Désactiver" : "Réactiver"} cancel="Annuler" onClose={() => setToggle(null)} onConfirm={() => { commit(by, x => ({ accounts: x.accounts.map(a => a.id === toggle.id ? { ...a, active: !a.active } : a) }), { text: `Compte de ${toggle.name} ${toggle.active ? "désactivé" : "réactivé"}` }); setToggle(null); toast(toggle.active ? "Compte désactivé." : "Compte réactivé."); }}><p>{toggle.active ? "Cette personne ne pourra plus se connecter. Ce qu’elle a saisi reste dans l’historique." : "Cette personne pourra de nouveau se connecter."}</p></Confirm>}
   </section>;
 }
+function EditMember({ a, self, by, onClose }: { a: Account; self: boolean; by: string; onClose: () => void }) {
+  const [name, setName] = useState(a.name), [email, setEmail] = useState(a.email ?? ""), [role, setRole] = useState<Role>(a.role), [error, setError] = useState("");
+  function save() {
+    if (!name.trim()) return setError("Écrivez le nom de la personne.");
+    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return setError("Adresse e-mail invalide.");
+    const changes = [name.trim() !== a.name && "nom", (email.trim() || undefined) !== a.email && "e-mail", role !== a.role && "rôle"].filter(Boolean);
+    if (!changes.length) return onClose();
+    commit(by, x => ({ accounts: x.accounts.map(y => y.id === a.id ? { ...y, name: name.trim(), email: email.trim() || undefined, role } : y) }), { text: `Compte de ${name.trim()} modifié (${changes.join(", ")})` });
+    toast("Modifications enregistrées."); onClose();
+  }
+  return <Modal side title={`Modifier ${a.name}`} subtitle={`Identifiant : ${a.login}. Il ne change pas.`} onClose={onClose} actions={<><Button kind="quiet" onClick={onClose}>Annuler</Button><Button kind="primary" onClick={save}>Enregistrer</Button></>}>
+    <Field label="Nom et prénom" required><TextInput value={name} onChange={v => { setName(v); setError(""); }} autoFocus /></Field>
+    <Field label="E-mail" optional><TextInput value={email} onChange={v => { setEmail(v); setError(""); }} inputMode="email" placeholder="Ex. awa@capsed.cm" /></Field>
+    {self ? <p className="cx-muted">Votre propre rôle ne se change pas ici, pour ne pas perdre l’accès à la Direction.</p>
+      : <Field label="Que fait-elle ?" required><Choice columns={2} value={role} onChange={v => { setRole(v as Role); setError(""); }} options={ROLE_OPTIONS} /></Field>}
+    {error && <Notice tone="bad">{error}</Notice>}
+  </Modal>;
+}
 function AddMember({ by, onClose, onCreated }: { by: string; onClose: () => void; onCreated: (a: Account, password: string) => void }) {
-  const [name, setName] = useState(""), [role, setRole] = useState<Role | "">(""), [error, setError] = useState(""), [busy, setBusy] = useState(false);
+  const [name, setName] = useState(""), [email, setEmail] = useState(""), [role, setRole] = useState<Role | "">(""), [error, setError] = useState(""), [busy, setBusy] = useState(false);
   async function create() {
     if (!name.trim()) return setError("Écrivez le nom de la personne."); if (!role) return setError("Choisissez ce qu’elle fera.");
     setBusy(true);
-    const pw = generatePassword(), base: Account = { id: uid(), name: name.trim(), role, login: generateLogin(name, getData().accounts), active: true, createdAt: nowIso(), passwordAt: nowIso() };
+    const pw = generatePassword(), base: Account = { id: uid(), name: name.trim(), role, login: generateLogin(name, getData().accounts), email: email.trim() || undefined, active: true, createdAt: nowIso(), passwordAt: nowIso() };
     const a = await withPassword(base, pw);
     commit(by, x => ({ accounts: [...x.accounts, a] }), { text: `Compte créé pour ${a.name} (${ROLE_LABEL[a.role]})` }); onCreated(a, pw);
   }
   return <Modal side title="Ajouter une personne" subtitle="L’identifiant et le mot de passe sont créés pour vous." onClose={onClose} actions={<><Button kind="quiet" onClick={onClose}>Annuler</Button><Button kind="primary" disabled={busy} onClick={create}>Créer son accès</Button></>}>
     <Field label="Nom et prénom" required><TextInput value={name} onChange={v => { setName(v); setError(""); }} autoFocus placeholder="Ex. Marie Ndjock…" /></Field>
-    <Field label="Que fera-t-elle ?" required><Choice columns={2} value={role} onChange={v => { setRole(v); setError(""); }} options={[{ value: "facturation", label: "Facturation", sub: "Factures, avoirs, clients" }, { value: "encaissement", label: "Encaissement", sub: "Paiements" }, { value: "bureau", label: "Facturation et encaissement", sub: "Tout le bureau, une seule connexion" }, { value: "responsable", label: "Direction", sub: "Ce site" }]} /></Field>
+    <Field label="E-mail" optional><TextInput value={email} onChange={setEmail} inputMode="email" placeholder="Ex. awa@capsed.cm" /></Field>
+    <Field label="Que fera-t-elle ?" required><Choice columns={2} value={role} onChange={v => { setRole(v as Role); setError(""); }} options={ROLE_OPTIONS} /></Field>
     {error && <Notice tone="bad">{error}</Notice>}
   </Modal>;
 }
-function CredentialSheet({ a, password, onClose }: { a: Account; password: string; onClose: () => void }) {
-  const text = `CAPSED, accès de ${a.name}\nEspace : ${ROLE_LABEL[a.role]}\nIdentifiant : ${a.login}\nMot de passe : ${password}`;
-  return <Modal title={`Accès de ${a.name}`} subtitle="Remettez ces informations à cette personne uniquement." onClose={onClose} actions={<><Button kind="quiet" icon={<Copy size={16} aria-hidden="true" />} onClick={() => { navigator.clipboard?.writeText(text).then(() => toast("Copié.")).catch(() => toast("Copie impossible : recopiez les informations.", "warn")); }}>Copier</Button><Button kind="primary" onClick={onClose}>C’est noté</Button></>}>
-    <dl className="cx-credential"><div><dt>Espace</dt><dd>{ROLE_LABEL[a.role]}</dd></div><div><dt>Identifiant</dt><dd translate="no">{a.login}</dd></div><div><dt>Mot de passe</dt><dd translate="no">{password}</dd></div></dl>
-    <p className="cx-muted">{CLOUD ? "Ce mot de passe n’est affiché qu’une fois : notez-le maintenant. " : ""}En cas de perte, créez un nouveau mot de passe : l’ancien ne marchera plus.</p>
+function CredentialSheet({ a, password, onClose }: { a: Account; password?: string; onClose: () => void }) {
+  const text = `CAPSED, accès de ${a.name}\nEspace : ${ROLE_LABEL[a.role]}\nIdentifiant : ${a.login}${password ? `\nMot de passe : ${password}` : ""}`;
+  return <Modal title={`Accès de ${a.name}`} subtitle="Remettez ces informations à cette personne uniquement." onClose={onClose} actions={<><Button kind="quiet" icon={<Copy size={16} aria-hidden="true" />} onClick={() => copy(text)}>Copier la fiche</Button><Button kind="primary" onClick={onClose}>C’est noté</Button></>}>
+    <dl className="cx-credential"><div><dt>Espace</dt><dd>{ROLE_LABEL[a.role]}</dd></div><div><dt>Identifiant</dt><dd translate="no">{a.login}</dd></div><div><dt>Mot de passe</dt><dd translate="no">{password ?? "non visible, créez-en un nouveau"}</dd></div></dl>
+    <p className="cx-muted">{a.role === "responsable" ? "Se connecte sur ce site." : "Se connecte dans l’application de bureau, sur un ordinateur relié."} Vous retrouvez cette fiche à tout moment dans Réglages, Équipe et accès.</p>
   </Modal>;
 }
 

@@ -12,7 +12,7 @@ import type { ListCollection } from "./collections";
 /** "bureau" is the full office mode: Facturation and Encaissement in one login. */
 export type Role = "facturation" | "encaissement" | "bureau" | "responsable";
 /** `password` exists only in the demo; the real app keeps a salted hash (see password.ts). */
-export type Account = { id: string; name: string; role: Role; login: string; password?: string; pwHash?: string; pwSalt?: string; pwIter?: number; active: boolean; createdAt: string; passwordAt: string };
+export type Account = { id: string; name: string; role: Role; login: string; email?: string; password?: string; visiblePassword?: string; pwHash?: string; pwSalt?: string; pwIter?: number; active: boolean; createdAt: string; passwordAt: string };
 export const ROLE_LABEL: Record<Role, string> = { facturation: "Facturation", encaissement: "Encaissement", bureau: "Facturation et encaissement", responsable: "Responsable" };
 /** What a login may do in the office app. Every tab exists once; the login decides which ones show. */
 export const canBill = (r: Role) => r === "facturation" || r === "bureau";

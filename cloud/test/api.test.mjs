@@ -121,6 +121,15 @@ test("only the Direction reopens a closed month or restores a cancelled payment"
   assert.ok((await push([change("settings", { id: "main", closedMonths: [] }, { base: s.body.results[0].rev })], "web")).body.results[0].ok);
 });
 
+test("the Direction can read a password again; office computers never receive it", async () => {
+  const r = await push([change("accounts", { ...awa, email: "awa@capsed.cm", visiblePassword: "CAP-7777", pwHash: "x", pwSalt: "AAAAAAAAAAAAAAAAAAAAAA==" })], "web");
+  assert.equal(r.body.results[0].record.visiblePassword, "CAP-7777");
+  const web = await call("/api/sync?since=0", { auth: "web" }), dev = await call("/api/sync?since=0", { auth: "device" });
+  assert.equal(web.body.records.find(x => x.id === awa.id).data.visiblePassword, "CAP-7777");
+  const seen = dev.body.records.find(x => x.id === awa.id).data;
+  assert.equal(seen.visiblePassword, undefined); assert.equal(seen.email, "awa@capsed.cm"); assert.ok(seen.pwHash);
+});
+
 test("revoked computer is refused", async () => {
   assert.ok((await call("/api/devices/revoke", { method: "POST", body: { id: device.id }, auth: "web" })).body.ok);
   assert.equal((await call("/api/sync", { auth: "device" })).status, 401);

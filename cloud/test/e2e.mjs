@@ -52,6 +52,20 @@ try {
   await btn(site, 'C’est noté').click();
   ok(code.length === 6, 'computer code ' + code);
   ok(await until(async () => (await site.evaluate(() => localStorage.getItem('capsed-site-sync-outbox'))) === '[]', 20000), 'Direction changes sent');
+  // 2b. Edit a person (name, e-mail) and read the password again.
+  const awaRow = site.locator('.cx-member', { hasText: 'Awa Ngo' });
+  await awaRow.getByRole('button', { name: 'Modifier' }).click();
+  await site.locator('.cx-modal input').first().fill('Awa Ngo Mballa');
+  await site.locator('.cx-modal input').nth(1).fill('awa@capsed.cm');
+  await site.locator('.cx-modal footer').getByRole('button', { name: 'Enregistrer' }).click();
+  const awaRow2 = site.locator('.cx-member', { hasText: 'Awa Ngo Mballa' });
+  ok(await until(async () => (await awaRow2.textContent()).includes('awa@capsed.cm'), 5000), 'name and e-mail changed');
+  await awaRow2.getByRole('button', { name: 'Afficher' }).click();
+  ok((await awaRow2.locator('.cx-pw-line code').textContent()) === awaPw, 'the Direction reads the password again');
+  await shot(site, '06-team-edited');
+  await awaRow2.getByRole('button', { name: 'Fiche d’accès' }).click();
+  ok((await site.locator('.cx-credential dd').nth(2).textContent()) === awaPw, 'access sheet shows the password any time');
+  await btn(site, 'C’est noté').click();
 
   // 3. Office: link the computer, sign in.
   await office.goto(OFFICE);
@@ -85,6 +99,24 @@ try {
     await wait(500);
   }
   await issue('Désherbage chimique', 15, 30000);
+  // A long invoice runs over several A4 pages, totals on the last one.
+  await office.keyboard.press('Control+n');
+  await office.locator('.cx-pick-list button').first().click();
+  await btn(office, /Continuer/).click();
+  for (let k = 0; k < 26; k++) {
+    if (k) await btn(office, 'Ajouter un article').click();
+    const line = office.locator('.cx-line').nth(k);
+    await line.locator('textarea').first().fill(`Traitement phytosanitaire\nConteneur MSNU ${923100 + k}-6`);
+    const ins = line.locator('input'); await ins.nth(0).fill('1'); await ins.nth(1).fill('45000');
+  }
+  await btn(office, /Continuer/).click(); await btn(office, /Continuer/).click();
+  const pages = await office.locator('.cx-review .document-page').count();
+  ok(pages >= 2 && pages <= 4, `26 lines make ${pages} pages`);
+  const rows = await office.locator('.cx-review .document-page').evaluateAll(ps => ps.map(pg => pg.querySelectorAll('tbody tr').length));
+  ok(rows.reduce((a, n) => a + n, 0) === 26 && rows.slice(1, -1).every(n => n >= 8) && rows.at(-1) >= 1, `lines per page ${rows.join(', ')}, none lost`);
+  ok(await office.locator('.cx-review .document-page').last().locator('.receipt-totals').count() === 1 && await office.locator('.cx-review .receipt-totals').count() === 1, 'totals only on the last page');
+  await shot(office, '15-long-invoice', true);
+  await btn(office, /Émettre la facture/).click(); await wait(500);
   ok(await until(async () => /Tout est envoyé/.test(await office.locator('.cx-sidebar .cx-sync').textContent()), 20000), 'office shows « Tout est envoyé »');
   await shot(office, '13-office-sent');
 
@@ -105,7 +137,7 @@ try {
   await shot(office, '20-office-offline');
   await office.context().setOffline(false); await poke(office);
   ok(await sent(), 'back online: everything sent');
-  ok(await until(async () => (await siteRows()) === 2, 40000, 1000), 'Direction sees the invoice made offline');
+  ok(await until(async () => (await siteRows()) === 3, 40000, 1000), 'Direction sees the invoice made offline');
 
   // 7. A send cut after the cloud received it: sent again, nothing doubled.
   let cut = false;
@@ -115,7 +147,7 @@ try {
   ok(await sent(), 'after a cut answer, the send is retried and completes');
   ok(cut, 'the cut happened');
   await office.unroute('**/api/sync');
-  ok(await until(async () => (await siteRows()) === 3, 40000, 1000), 'exactly 3 invoices on the Direction side, no double');
+  ok(await until(async () => (await siteRows()) === 4, 40000, 1000), 'exactly 4 invoices on the Direction side, no double');
   const numbers = await site.locator('.cx-bills .cx-rows .cx-row .cx-row-main strong').allTextContents();
   ok(new Set(numbers).size === numbers.length, 'invoice numbers unique: ' + numbers.join(', '));
 

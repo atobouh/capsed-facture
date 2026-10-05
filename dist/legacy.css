@@ -381,3 +381,4 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .invoice-delivery-status strong{display:inline-flex;align-items:center;gap:6px}
 .delivery-reset{border:0;background:transparent;color:#58667b;font-size:12px;text-decoration:underline;text-underline-offset:3px;padding:6px}
 @media(max-width:650px){.client-record-actions{gap:10px}.payment-entry-actions{width:100%;justify-content:flex-start;margin-left:42px}.payment-entry{flex-wrap:wrap}.invoice-delivery-status{gap:8px}}
+.receipt-title-next{margin-bottom:16px}.receipt-title-next>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

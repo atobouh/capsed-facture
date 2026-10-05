@@ -8,7 +8,7 @@ import { checkPassword, makeHash, sameString } from "../../app/v2/password";
 
 interface Env { DB: D1Database; ASSETS: Fetcher; RECOVERY_KEY?: string }
 type Rec = Record<string, unknown>;
-type Account = { id: string; name: string; role: Role; login: string; active: boolean; pwHash?: string; pwSalt?: string; pwIter?: number; password?: string; passwordAt?: string; createdAt?: string };
+type Account = { id: string; name: string; role: Role; login: string; active: boolean; email?: string; visiblePassword?: string; pwHash?: string; pwSalt?: string; pwIter?: number; password?: string; passwordAt?: string; createdAt?: string };
 type Actor = { account: Account; device: { id: string; name: string; letter: string } | null };
 type Change = { changeId: string; collection: CollectionName; id: string; data: Rec; base?: number; at?: string; by?: string };
 
@@ -42,6 +42,11 @@ async function readJson<T>(req: Request): Promise<T> {
 class HttpError extends Error { constructor(public status: number, message: string) { super(message); } }
 
 // ——— Records ———
+/** The Direction can read each person's password again (their choice); office computers only ever get the hash. */
+const forDevice = (collection: string, data: Rec | null | undefined) => {
+  if (!data || collection !== "accounts" || !("visiblePassword" in data)) return data;
+  const { visiblePassword: _v, ...rest } = data; void _v; return rest;
+};
 const publicAccount = (a: Account) => ({ id: a.id, name: a.name, role: a.role, login: a.login, active: a.active });
 async function getRecord(env: Env, collection: string, id: string) {
   const row = await env.DB.prepare("SELECT data, rev FROM records WHERE collection = ? AND id = ?").bind(collection, id).first<{ data: string; rev: number }>();
@@ -145,7 +150,7 @@ async function recovery(env: Env, req: Request, key: string) {
     const form = await req.formData(), id = String(form.get("account") ?? ""), password = String(form.get("password") ?? "");
     const a = heads.find(x => x.id === id);
     if (!a || password.length < 6) return page(`<h1>Mot de passe non changé</h1><p>Choisissez un compte et un mot de passe d’au moins 6 caractères.</p><p><a href="">Recommencer</a></p>`, 400);
-    await writeRecord(env, { collection: "accounts", id: a.id, data: { ...a, ...(await makeHash(password)), active: true, passwordAt: now() }, by: null, device: null, note: "lien de secours" });
+    await writeRecord(env, { collection: "accounts", id: a.id, data: { ...a, ...(await makeHash(password)), visiblePassword: password, active: true, passwordAt: now() }, by: null, device: null, note: "lien de secours" });
     await env.DB.prepare("DELETE FROM sessions WHERE account_id = ?").bind(a.id).run();
     await event(env, a.id, `Mot de passe de ${a.name} réinitialisé par le lien de secours`);
     return page(`<h1>C’est fait</h1><p>${esc(a.name)} peut se connecter avec l’identifiant <strong>${esc(a.login)}</strong> et le nouveau mot de passe.</p><p><a href="/">Ouvrir le site</a></p>`);
@@ -168,7 +173,7 @@ async function api(env: Env, req: Request, url: URL): Promise<Response> {
     const b = await readJson<{ name?: string; login?: string; password?: string }>(req);
     const name = b.name?.trim() ?? "", login = b.login?.trim().toLowerCase() ?? "";
     if (!name || !/^[a-z0-9._-]{2,40}$/.test(login) || (b.password ?? "").length < 6) return fail(400, "Nom, identifiant (lettres et chiffres) et mot de passe d’au moins 6 caractères.");
-    const a: Account = { id: uuid(), name, role: "responsable", login, active: true, createdAt: now(), passwordAt: now(), ...(await makeHash(b.password!)) };
+    const a: Account = { id: uuid(), name, role: "responsable", login, active: true, createdAt: now(), passwordAt: now(), ...(await makeHash(b.password!)), visiblePassword: b.password };
     await writeRecord(env, { collection: "accounts", id: a.id, data: a, by: a.id, device: null, note: "premier compte" });
     await event(env, a.id, `Compte Direction créé pour ${a.name}`);
     return json({ account: publicAccount(a) }, 200, await startSession(env, a));
@@ -213,7 +218,7 @@ async function api(env: Env, req: Request, url: URL): Promise<Response> {
       if (web) csrf();
       const b = await readJson<{ changes?: Change[]; pending?: number }>(req), changes = (b.changes ?? []).slice(0, MAX_BATCH);
       const results = [];
-      for (const ch of changes) results.push(await applyChange(env, web ?? { device: device! }, ch));
+      for (const ch of changes) { const r = await applyChange(env, web ?? { device: device! }, ch); results.push(device && "record" in r ? { ...r, record: forDevice(ch.collection, r.record as Rec | null) } : r); }
       if (device) await env.DB.prepare("UPDATE devices SET last_push = ?, pending = ? WHERE id = ?").bind(now(), Math.max(0, Number(b.pending) || 0), device.id).run();
       return json({ results, serverTime: now() }, 200, h);
     }
@@ -221,7 +226,7 @@ async function api(env: Env, req: Request, url: URL): Promise<Response> {
     const { results } = await env.DB.prepare("SELECT collection, id, data, rev FROM records WHERE rev > ? ORDER BY rev LIMIT ?").bind(since, limit + 1).all<{ collection: string; id: string; data: string; rev: number }>();
     const rows = results.slice(0, limit);
     if (device) await env.DB.prepare("UPDATE devices SET last_pull = ? WHERE id = ?").bind(now(), device.id).run();
-    return json({ records: rows.map(r => ({ collection: r.collection, id: r.id, rev: r.rev, data: JSON.parse(r.data) })), cursor: rows.at(-1)?.rev ?? since, more: results.length > limit, devices: await devicesStatus(env), serverTime: now(), device: device ?? undefined }, 200, h);
+    return json({ records: rows.map(r => ({ collection: r.collection, id: r.id, rev: r.rev, data: device ? forDevice(r.collection, JSON.parse(r.data)) : JSON.parse(r.data) })), cursor: rows.at(-1)?.rev ?? since, more: results.length > limit, devices: await devicesStatus(env), serverTime: now(), device: device ?? undefined }, 200, h);
   }
 
   // Direction only below.

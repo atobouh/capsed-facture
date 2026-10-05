@@ -48,3 +48,7 @@ next-env.d.ts
 dist-site/
 dist-office/
 cloud/.wrangler/
+
+# Desktop app build output
+src-tauri/target/
+src-tauri/gen/

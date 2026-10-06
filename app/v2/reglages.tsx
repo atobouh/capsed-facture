@@ -9,6 +9,7 @@ import { CLOUD, MODE, ROLE_LABEL, accountName, ago, commit, generateLogin, gener
 import type { Account, Override, Role } from "./store";
 import { useSync } from "./sync";
 import { ManualOverlay } from "./app";
+import { useInstall } from "./install";
 import { exportAll } from "./export-all";
 import { ImportClients } from "./import-clients";
 import { fetchJson } from "./net";
@@ -297,11 +298,26 @@ const GUIDES: [string, string][] = [
   ["Hors connexion", "Le bureau travaille sans internet et envoie tout au retour de la connexion. En haut de chaque page, la date des données affichées."],
   ["Mot de passe oublié", "Pour l’équipe : Réglages, Équipe et accès, « Nouveau mot de passe ». Pour la Direction : la personne qui a installé l’application dispose d’un lien de secours."],
 ];
+function InstallHelp() {
+  const { installed, ios, canPrompt, install } = useInstall();
+  return <div className="cx-card cx-install-help">
+    <h3>CAPSED comme une application</h3>
+    {installed ? <p>CAPSED est installé sur cet appareil : ouvrez-le depuis son icône.</p> : <>
+      <p>Une icône sur l’écran d’accueil : CAPSED s’ouvre directement, dans sa propre fenêtre, même avec peu de réseau.</p>
+      {canPrompt ? <Button kind="primary" onClick={() => void install()}>Installer CAPSED</Button> : <ul>
+        <li><b>Android (Chrome)</b> : menu <b>⋮</b> en haut à droite, puis « Installer l’application » ou « Ajouter à l’écran d’accueil ».</li>
+        <li><b>iPhone (Safari)</b> : bouton <b>Partager</b> en bas, puis « Sur l’écran d’accueil ».{ios ? "" : " Sur iPhone, utilisez Safari."}</li>
+        <li><b>Ordinateur (Chrome ou Edge)</b> : l’icône d’installation à droite de la barre d’adresse.</li></ul>}
+      <p className="cx-muted">Sur iPhone, l’application demande de se connecter une fois.</p>
+    </>}
+  </div>;
+}
 function Help() {
   const [manual, setManual] = useState(false);
   return <section className="cx-section">
     <div className="cx-section-head cx-section-head-row"><div><h2>Le manuel complet</h2><p>Chaque rôle pas à pas, avec des images, et que faire pour chaque message. À partager avec l’équipe : guide.capsed-facture.pages.dev</p></div>
       <Button kind="primary" icon={<BookOpen size={17} aria-hidden="true" />} onClick={() => CLOUD ? setManual(true) : window.open("https://guide.capsed-facture.pages.dev/", "_blank", "noopener")}>Ouvrir le manuel</Button></div>
+    {MODE === "site" && <InstallHelp />}
     <ol className="cx-help">{GUIDES.map(([t, s], i) => <li key={t}><span>{i + 1}</span><div><h3>{t}</h3><p>{s}</p></div></li>)}</ol>
     {manual && <ManualOverlay src="guide/direction.html" onClose={() => setManual(false)} />}
   </section>;

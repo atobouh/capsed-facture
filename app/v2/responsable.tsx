@@ -82,7 +82,7 @@ function Overview({ nav, by }: { nav: Nav; by: string }) {
   return <div className="cx-page cx-home">
     <div className="cx-home-side">
       <section className="cx-hero" aria-label="Total à recevoir">
-        <p className="cx-hero-top"><span>Il reste à recevoir</span><span className="cx-hero-fresh">{d.officeOnline ? <><i aria-hidden="true" />Bureau {ago(s.receivedAt)}</> : <><WifiOff size={13} aria-hidden="true" />Bureau hors ligne</>}</span></p>
+        <p className="cx-hero-top"><span>Il reste à recevoir</span><span className="cx-hero-fresh">{d.officeOnline ? <><i aria-hidden="true" />{s.receivedAt ? `Bureau ${ago(s.receivedAt)}` : "Rien reçu du bureau pour l’instant"}</> : <><WifiOff size={13} aria-hidden="true" />Bureau hors ligne</>}</span></p>
         <p className="cx-hero-amount">{money(total).replace(/\s*FCFA$/, "")} <small>FCFA</small></p>
         {total > 0 && <><div className="cx-aging" aria-hidden="true"><span style={{ flexGrow: total - late }} />{late > 0 && <span className="cx-aging-late" style={{ flexGrow: late }} />}</div>
         <p className="cx-aging-legend"><span><i />À jour {money(total - late)}</span><span><i className="cx-aging-late" />En retard {money(late)}</span></p></>}

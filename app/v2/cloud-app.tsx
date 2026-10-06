@@ -2,7 +2,8 @@
  *  - the Direction website (online, data from the cloud, kept on the phone for bad connections);
  *  - the office desktop app (works offline, linked to the cloud with a code from the Direction). */
 import { useCallback, useEffect, useState } from "react";
-import { Eye, EyeOff, RefreshCw } from "lucide-react";
+import { Eye, EyeOff, RefreshCw, Share } from "lucide-react";
+import { useInstall } from "./install";
 import { Button, Field, Notice, ToastHost } from "./ui";
 import { HOME, HelpPanel, OfficeShell, SignInBrand, SiteShell } from "./app";
 import { OfficeScreen } from "./office";
@@ -40,20 +41,30 @@ function Loading({ title, detail, error, onRetry }: { title: string; detail?: st
   return <Screen><div className="cx-signin-form" role="status"><h2>{title}</h2>{detail && <p className="cx-muted">{detail}</p>}{error && <Notice tone="warn">{error}</Notice>}{onRetry && <Button icon={<RefreshCw size={16} aria-hidden="true" />} onClick={onRetry}>Réessayer</Button>}</div></Screen>;
 }
 
-// ——— New version published: offered on screen, applied with one click ———
+// ——— A new version of the site: fetched in the background, used the next time the site is opened or come back to ———
 const RUNNING = (() => { try { return new URL(import.meta.url).searchParams.get("v") ?? ""; } catch { return ""; } })();
-function useNewVersion() {
-  const [ready, setReady] = useState(false);
+function useSilentUpdate() {
   useEffect(() => {
     // The desktop app carries its own files; it is updated by installing the new version.
     if (!RUNNING || "__TAURI_INTERNALS__" in window) return;
-    const look = () => { if (document.visibilityState === "visible") fetch("version.json", { cache: "no-store" }).then(r => (r.ok ? r.json() : null) as Promise<{ v?: string } | null>).then(j => { if (j?.v && j.v !== RUNNING) setReady(true); }).catch(() => { /* hors ligne */ }); };
-    const t = setInterval(look, 5 * 60_000), first = setTimeout(look, 20_000);
-    document.addEventListener("visibilitychange", look);
-    return () => { clearInterval(t); clearTimeout(first); document.removeEventListener("visibilitychange", look); };
+    let pending = "", hiddenAt = 0;
+    // The new page and its files go into the copy kept on the device (service worker), so even offline the next opening is the new version.
+    const warm = (v: string) => Promise.all(["./", `app.js?v=${v}`, `styles.css?v=${v}`].map(u => fetch(u, { cache: "reload" }).catch(() => null)));
+    const look = () => fetch("version.json", { cache: "no-store" }).then(r => (r.ok ? r.json() : null) as Promise<{ v?: string } | null>)
+      .then(j => { if (j?.v && j.v !== RUNNING && j.v !== pending) { pending = j.v; void warm(j.v); } }).catch(() => { /* hors ligne */ });
+    // Never in the middle of something: a form, the invoice composer, the lock or the manual open means « later ».
+    const busy = () => !!document.querySelector(".cx-modal, .cx-wizard, .cx-lock, .cx-manual, .cx-updating");
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") { hiddenAt = Date.now(); void look(); return; }
+      if (pending && hiddenAt && Date.now() - hiddenAt > 30_000 && !busy()) { location.reload(); return; }
+      void look();
+    };
+    const t = setInterval(look, 10 * 60_000), first = setTimeout(look, 20_000);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => { clearInterval(t); clearTimeout(first); document.removeEventListener("visibilitychange", onVisibility); };
   }, []);
-  return ready;
 }
+
 // The desktop app downloads its new version by itself (src-tauri/src/update.rs) and installs it when it closes.
 type TauriBridge = { invoke: <T>(cmd: string, args?: Record<string, unknown>) => Promise<T> };
 const tauri = () => (window as unknown as { __TAURI_INTERNALS__?: TauriBridge }).__TAURI_INTERNALS__;
@@ -70,7 +81,8 @@ function useDesktopUpdate() {
 type DesktopUpdate = { version: string; notes?: string | null; failedBefore?: boolean };
 const DOWNLOAD = "https://github.com/atobouh/capsed-facture/releases/download/bureau-latest/CAPSED-Bureau-installation.exe";
 function UpdateBar() {
-  const ready = useNewVersion(), desktop = useDesktopUpdate(), [installing, setInstalling] = useState<"" | "running" | "failed">("");
+  useSilentUpdate();
+  const desktop = useDesktopUpdate(), [installing, setInstalling] = useState<"" | "running" | "failed">("");
   async function install() {
     setInstalling("running"); syncNow();
     // A moment for the last changes to be saved on this computer (and sent if online); then the installer closes the app,
@@ -94,8 +106,23 @@ function UpdateBar() {
   if (desktop) return <div className={`cx-update-bar${desktop.failedBefore ? " cx-update-failed" : ""}`} role="status">
     <span>{desktop.failedBefore ? `La mise à jour ${desktop.version} ne s’est pas installée la dernière fois.` : `Nouvelle version ${desktop.version} prête. Elle s’installe quand vous fermez CAPSED Bureau.`}{desktop.notes ? <small>Nouveautés : {desktop.notes}</small> : null}</span>
     <Button kind="primary" onClick={install}>{desktop.failedBefore ? "Réessayer" : "Installer maintenant"}</Button></div>;
-  if (!ready) return null;
-  return <div className="cx-update-bar" role="status"><span>Une nouvelle version est prête.</span><Button kind="primary" onClick={() => location.reload()}>Mettre à jour</Button></div>;
+  return null;
+}
+
+const LATER = "capsed-install-later";
+function InstallCard() {
+  const { installed, ios, canPrompt, install } = useInstall();
+  const [hidden, setHidden] = useState(() => { const t = Number(read(LATER)); return !!t && Date.now() - t < 30 * 864e5; });
+  if (installed || hidden || (!canPrompt && !ios)) return null;
+  const later = () => { write(LATER, String(Date.now())); setHidden(true); };
+  return <aside className="cx-install" aria-label="Installer CAPSED">
+    <img src="capsed-apple-180.png" alt="" />
+    <div><strong>Installer CAPSED sur ce téléphone</strong>
+      {ios ? <p>Dans Safari : touchez <b>Partager</b> <Share size={15} className="cx-ios-share" aria-label="(icône Partager)" /> en bas, puis <b>« Sur l’écran d’accueil »</b>. CAPSED aura son icône, comme une application.</p>
+        : <p>Une icône sur l’écran d’accueil, l’ouverture directe sans chercher le site, même avec peu de réseau.</p>}
+      <div className="cx-install-actions">{!ios && <Button kind="primary" size="sm" onClick={() => void install()}>Installer</Button>}<Button kind="quiet" size="sm" onClick={later}>{ios ? "Compris" : "Plus tard"}</Button></div>
+    </div>
+  </aside>;
 }
 
 // ——— Direction website ———
@@ -138,6 +165,7 @@ export function CloudSiteApp() {
   return <div className="cx-app cx-role-responsable">
     <SiteShell me={account} route={route} nav={nav} onHelp={() => setHelp(true)} onSignOut={signOut}><ResponsableScreen route={route as RRoute} nav={nav as (r: RRoute) => void} by={me.id} /></SiteShell>
     {help && <HelpPanel role="responsable" route={route.name} onClose={() => setHelp(false)} />}
+    {route.name === "clients" && <InstallCard />}
     <UpdateBar />
     <ToastHost />
   </div>;

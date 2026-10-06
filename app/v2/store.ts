@@ -81,7 +81,7 @@ export const timeFr = (d: string) => new Date(d).toLocaleString("fr-FR", { day: 
 export const monthLabel = (m: string) => new Date(m + "-01T12:00:00").toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
 export const daysSince = (d: string) => Math.max(0, Math.floor((Date.now() - new Date(d.length === 10 ? d + "T12:00:00" : d).getTime()) / 864e5));
 export const hoursSince = (iso: string) => (Date.now() - new Date(iso).getTime()) / 36e5;
-export function ago(d: string) { const m = Math.floor((Date.now() - new Date(d).getTime()) / 60000); if (m < 1) return "à l’instant"; if (m < 60) return `il y a ${m} min`; const h = Math.floor(m / 60); if (h < 24) return `il y a ${h} h`; const j = Math.floor(h / 24); return j === 1 ? "hier" : `il y a ${j} jours`; }
+export function ago(d: string) { const t = new Date(d).getTime(); if (!d || Number.isNaN(t)) return "jamais"; const m = Math.floor((Date.now() - t) / 60000); if (m < 1) return "à l’instant"; if (m < 60) return `il y a ${m} min`; const h = Math.floor(m / 60); if (h < 24) return `il y a ${h} h`; const j = Math.floor(h / 24); return j === 1 ? "hier" : `il y a ${j} jours`; }
 export const DEFAULT_TERM = 60;
 export const addDays = (date: string, n: number) => { const t = new Date(date + "T12:00:00"); t.setDate(t.getDate() + n); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`; };
 /** Payment deadline: the invoice's own, else the Direction's default. Internal only, never on the paper. */

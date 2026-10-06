@@ -58,24 +58,42 @@ function useNewVersion() {
 type TauriBridge = { invoke: <T>(cmd: string, args?: Record<string, unknown>) => Promise<T> };
 const tauri = () => (window as unknown as { __TAURI_INTERNALS__?: TauriBridge }).__TAURI_INTERNALS__;
 function useDesktopUpdate() {
-  const [ready, setReady] = useState<{ version: string } | null>(null);
+  const [ready, setReady] = useState<DesktopUpdate | null>(null);
   useEffect(() => {
     const t = tauri(); if (!t) return;
-    const look = () => t.invoke<{ version: string } | null>("update_ready").then(r => setReady(r ?? null)).catch(() => { /* ancienne version */ });
+    const look = () => t.invoke<DesktopUpdate | null>("update_ready").then(r => setReady(r ?? null)).catch(() => { /* ancienne version */ });
     const timer = setInterval(look, 60_000); void look();
     return () => clearInterval(timer);
   }, []);
   return ready;
 }
+type DesktopUpdate = { version: string; notes?: string | null; failedBefore?: boolean };
+const DOWNLOAD = "https://github.com/atobouh/capsed-facture/releases/download/bureau-latest/CAPSED-Bureau-installation.exe";
 function UpdateBar() {
-  const ready = useNewVersion(), desktop = useDesktopUpdate(), [busy, setBusy] = useState(false);
-  if (desktop) return <div className="cx-update-bar" role="status"><span>Nouvelle version {desktop.version} prête. Elle s’installe quand vous fermez CAPSED Bureau.</span>
-    <Button kind="primary" disabled={busy} onClick={async () => {
-      setBusy(true); syncNow();
-      // A moment for the last changes to be saved on this computer (and sent if online), then the small installer runs and the app reopens.
-      await new Promise(r => setTimeout(r, 2500));
-      void tauri()?.invoke("install_update_now");
-    }}>{busy ? "Installation…" : "Installer maintenant"}</Button></div>;
+  const ready = useNewVersion(), desktop = useDesktopUpdate(), [installing, setInstalling] = useState<"" | "running" | "failed">("");
+  async function install() {
+    setInstalling("running"); syncNow();
+    // A moment for the last changes to be saved on this computer (and sent if online); then the installer closes the app,
+    // installs the new version and opens it again.
+    await new Promise(r => setTimeout(r, 2500));
+    const ok = await tauri()?.invoke<boolean>("install_update_now").catch(() => false);
+    if (!ok) setInstalling("failed");
+  }
+  if (desktop && installing) return <div className="cx-updating" role="alertdialog" aria-modal="true" aria-labelledby="updating-title">
+    <img src="favicon.svg" alt="" />
+    {installing === "running" ? <>
+      <h2 id="updating-title">Mise à jour de CAPSED Bureau</h2>
+      <p>Version {desktop.version}. L’application se ferme, une petite fenêtre d’installation apparaît, puis CAPSED Bureau se rouvre tout seul. Moins d’une minute ; vos données ne sont pas touchées.</p>
+      <i className="cx-updating-bar" aria-hidden="true" />
+    </> : <>
+      <h2 id="updating-title">La mise à jour n’a pas pu démarrer</h2>
+      <p>Rien n’est perdu. Installez la version {desktop.version} à la main : téléchargez <b>{DOWNLOAD}</b>, ouvrez le fichier, puis rouvrez CAPSED Bureau.</p>
+      <Button kind="primary" onClick={() => setInstalling("")}>Continuer à travailler</Button>
+    </>}
+  </div>;
+  if (desktop) return <div className={`cx-update-bar${desktop.failedBefore ? " cx-update-failed" : ""}`} role="status">
+    <span>{desktop.failedBefore ? `La mise à jour ${desktop.version} ne s’est pas installée la dernière fois.` : `Nouvelle version ${desktop.version} prête. Elle s’installe quand vous fermez CAPSED Bureau.`}{desktop.notes ? <small>Nouveautés : {desktop.notes}</small> : null}</span>
+    <Button kind="primary" onClick={install}>{desktop.failedBefore ? "Réessayer" : "Installer maintenant"}</Button></div>;
   if (!ready) return null;
   return <div className="cx-update-bar" role="status"><span>Une nouvelle version est prête.</span><Button kind="primary" onClick={() => location.reload()}>Mettre à jour</Button></div>;
 }

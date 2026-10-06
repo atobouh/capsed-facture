@@ -1,9 +1,16 @@
 name: Build the office desktop app (Windows)
 
-# Builds « CAPSED Bureau » for Windows and publishes the installer at
-# https://github.com/atobouh/capsed-facture/releases/download/bureau-latest/CAPSED-Bureau-installation.exe
+# Builds « CAPSED Bureau » for Windows.
+# Installed apps only update from the release « bureau-latest » (and the download link points there). A build is published
+# there only on purpose: a push to main (the pull request merged), the « Run workflow » button, or a commit whose message
+# contains [publier]. Every other build goes to « bureau-test », which no installed app watches.
 on:
   workflow_dispatch:
+    inputs:
+      notes:
+        description: "Nouveautés, en une phrase (affichées dans l’application)"
+        required: false
+        default: ""
   push:
     branches: [main, claude/eloquent-feynman-lgb5tr]
     paths:
@@ -49,6 +56,26 @@ jobs:
         with:
           workspaces: src-tauri
 
+      - name: Channel
+        id: channel
+        shell: bash
+        env:
+          MESSAGE: ${{ github.event.head_commit.message }}
+          INPUT_NOTES: ${{ github.event.inputs.notes }}
+        run: |
+          FIRST=$(printf '%s' "$MESSAGE" | head -n 1)
+          if [ "$GITHUB_REF" = "refs/heads/main" ] || [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] || printf '%s' "$MESSAGE" | grep -q '\[publier\]'; then
+            echo "tag=bureau-latest" >> "$GITHUB_OUTPUT"
+            NOTES="$INPUT_NOTES"
+            if [ -z "$NOTES" ] && printf '%s' "$FIRST" | grep -q '\[publier\]'; then NOTES=$(printf '%s' "$FIRST" | sed 's/\[publier\]//; s/^ *//; s/ *$//'); fi
+            echo "notes=$NOTES" >> "$GITHUB_OUTPUT"
+            echo "### Publiée pour l’équipe (bureau-latest)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "tag=bureau-test" >> "$GITHUB_OUTPUT"
+            echo "notes=" >> "$GITHUB_OUTPUT"
+            echo "### Version de test (bureau-test) : les ordinateurs installés ne la reçoivent pas" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Version
         shell: bash
         run: |
@@ -61,11 +88,14 @@ jobs:
 
       - name: Name the installer
         shell: pwsh
+        env:
+          CHANNEL: ${{ steps.channel.outputs.tag }}
+          NOTES: ${{ steps.channel.outputs.notes }}
         run: |
           $exe = Get-ChildItem src-tauri/target/release/bundle/nsis/*.exe | Select-Object -First 1
           Copy-Item $exe.FullName "CAPSED-Bureau-installation.exe"
           $hash = (Get-FileHash "CAPSED-Bureau-installation.exe" -Algorithm SHA256).Hash.ToLower()
-          @{ version = $env:APP_VERSION; url = "https://github.com/atobouh/capsed-facture/releases/download/bureau-latest/CAPSED-Bureau-installation.exe"; sha256 = $hash; date = (Get-Date -Format o) } | ConvertTo-Json | Set-Content -Encoding utf8NoBOM latest.json
+          @{ version = $env:APP_VERSION; url = "https://github.com/atobouh/capsed-facture/releases/download/$env:CHANNEL/CAPSED-Bureau-installation.exe"; sha256 = $hash; notes = $env:NOTES; date = (Get-Date -Format o) } | ConvertTo-Json | Set-Content -Encoding utf8NoBOM latest.json
           Get-Content latest.json
           "Installer: $((Get-Item CAPSED-Bureau-installation.exe).Length / 1MB) MB" >> $env:GITHUB_STEP_SUMMARY
 
@@ -77,8 +107,9 @@ jobs:
       - name: Publish the download
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: bureau-latest
-          name: CAPSED Bureau pour Windows
+          tag_name: ${{ steps.channel.outputs.tag }}
+          name: ${{ steps.channel.outputs.tag == 'bureau-latest' && 'CAPSED Bureau pour Windows' || 'CAPSED Bureau, version de test (non distribuée)' }}
+          prerelease: ${{ steps.channel.outputs.tag != 'bureau-latest' }}
           body: |
             Application de bureau CAPSED (facturation et encaissement), fonctionne sans internet.
             1. Téléchargez CAPSED-Bureau-installation.exe et ouvrez-le. Si Windows affiche « Windows a protégé votre ordinateur », cliquez « Informations complémentaires » puis « Exécuter quand même ».
@@ -87,4 +118,4 @@ jobs:
           files: |
             CAPSED-Bureau-installation.exe
             latest.json
-          make_latest: true
+          make_latest: ${{ steps.channel.outputs.tag == 'bureau-latest' }}

@@ -20,11 +20,17 @@ struct Latest {
     version: String,
     url: String,
     sha256: String,
+    #[serde(default)]
+    notes: Option<String>,
 }
 
 #[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct Ready {
     version: String,
+    notes: Option<String>,
+    /// An installation of this same version was already started and the app is still on the old one.
+    failed_before: bool,
     #[serde(skip)]
     path: PathBuf,
 }
@@ -50,17 +56,23 @@ fn agent() -> ureq::Agent {
 }
 
 /// One check: a newer version is downloaded and verified, then marked ready.
+fn updates_dir<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
+    Ok(app.path().app_local_data_dir().map_err(|e| e.to_string())?.join("mises-a-jour"))
+}
+
 fn check<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     let current = app.package_info().version.to_string();
     let latest: Latest = agent().get(LATEST).call().map_err(|e| e.to_string())?.into_json().map_err(|e| e.to_string())?;
     if !newer(&latest.version, &current) {
+        // Up to date: the installers kept for earlier updates are no longer needed.
+        let _ = std::fs::remove_dir_all(updates_dir(app)?);
         return Ok(());
     }
     let state = app.state::<Updates>();
     if state.ready.lock().unwrap().as_ref().map(|r| r.version == latest.version).unwrap_or(false) {
         return Ok(());
     }
-    let dir = app.path().app_local_data_dir().map_err(|e| e.to_string())?.join("mises-a-jour");
+    let dir = updates_dir(app)?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let path = dir.join(format!("CAPSED-Bureau-{}.exe", latest.version));
     if !(path.exists() && sha256_of(&path).map(|h| h == latest.sha256.to_lowercase()).unwrap_or(false)) {
@@ -72,7 +84,8 @@ fn check<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
         }
         std::fs::write(&path, &body).map_err(|e| e.to_string())?;
     }
-    *state.ready.lock().unwrap() = Some(Ready { version: latest.version, path });
+    let failed_before = std::fs::read_to_string(dir.join("tentative.txt")).map(|v| v.trim() == latest.version).unwrap_or(false);
+    *state.ready.lock().unwrap() = Some(Ready { version: latest.version, notes: latest.notes, failed_before, path });
     Ok(())
 }
 
@@ -92,20 +105,15 @@ pub fn start<R: Runtime>(app: &AppHandle<R>) {
     });
 }
 
-/// Starts the installer a few seconds later (once this app has closed and saved everything).
-fn launch(path: &PathBuf, args: &str) -> bool {
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        let line = format!("ping -n 4 127.0.0.1 >nul & \"{}\" {}", path.display(), args);
-        return std::process::Command::new("cmd").args(["/C", &line]).creation_flags(CREATE_NO_WINDOW).spawn().is_ok();
+/// Starts the installer itself (no command prompt in between: a path in quotes is passed exactly as it is).
+/// It closes this app if it is still open, installs over it and keeps the data folder.
+/// The version tried is written down, so a failed attempt is reported instead of being offered again silently.
+fn launch(path: &PathBuf, args: &[&str]) -> bool {
+    if let Some(dir) = path.parent() {
+        let version = path.file_stem().and_then(|s| s.to_str()).unwrap_or("").trim_start_matches("CAPSED-Bureau-").to_string();
+        let _ = std::fs::write(dir.join("tentative.txt"), version);
     }
-    #[cfg(not(windows))]
-    {
-        let _ = (path, args);
-        false
-    }
+    std::process::Command::new(path).args(args).spawn().is_ok()
 }
 
 /// When the app closes with an update ready, it installs silently; the next opening is the new version.
@@ -114,7 +122,7 @@ pub fn on_exit<R: Runtime>(app: &AppHandle<R>) {
     let ready = state.ready.lock().unwrap().clone();
     let mut launched = state.launched.lock().unwrap();
     if let (false, Some(r)) = (*launched, ready) {
-        *launched = launch(&r.path, "/S /UPDATE");
+        *launched = launch(&r.path, &["/S", "/UPDATE"]);
     }
 }
 
@@ -128,7 +136,7 @@ pub fn update_ready(state: tauri::State<'_, Updates>) -> Option<Ready> {
 pub fn install_update_now<R: Runtime>(app: AppHandle<R>, state: tauri::State<'_, Updates>) -> bool {
     let ready = state.ready.lock().unwrap().clone();
     let Some(r) = ready else { return false };
-    let ok = launch(&r.path, "/P /UPDATE /R");
+    let ok = launch(&r.path, &["/P", "/UPDATE", "/R"]);
     if ok {
         *state.launched.lock().unwrap() = true;
         app.exit(0);

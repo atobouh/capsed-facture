@@ -55,3 +55,4 @@ cloud/pages/.wrangler/
 # Desktop app build output
 src-tauri/target/
 src-tauri/gen/
+node_modules/

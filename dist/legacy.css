@@ -391,3 +391,13 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .receipt-totals-aligned p>strong{text-align:center;padding:0 7px}
 .receipt-totals-aligned .receipt-total{padding:7px 0}
 .receipt-totals-aligned~.receipt-payment .receipt-signature{width:44%}
+
+/* Situation de facturation: TTC and hors taxe invoices, each block with its subtotal. */
+.statement-report-block{margin-bottom:18px}
+.statement-report-title{font-size:12px;font-weight:600;margin:0 0 6px;color:#242932}
+.statement-report-table th:nth-child(1){width:13%}
+.statement-report-table th:nth-child(2){width:17%;text-align:left}
+.statement-report-table th:nth-child(3),.statement-report-table td:nth-child(3){text-align:left}
+.statement-report-table th:nth-child(3){width:auto}
+.statement-report-table .statement-report-subtotal td{font-weight:600;border-top:1px solid #777b84;border-bottom:0}
+.statement-report-table .statement-report-subtotal td+td{text-align:right}

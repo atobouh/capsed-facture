@@ -3,6 +3,7 @@ import { ChevronRight, FilePlus2, Plus, ClipboardCheck, Clock, Lock, Phone, Prin
 import { Button, Choice, Confirm, DateInput, Empty, Field, Modal, Monogram, MoneyInput, MonthStepper, MoreMenu, Notice, PageHead, Paper, Row, SearchBox, Stamp, StatusChip, TextArea, TextInput, Timeline, matches, toast } from "./ui";
 import { RequestState, Situation } from "./office";
 import { TeamReport } from "./team";
+import { InvoiceReport } from "./invoice-report";
 import { LiftDialog, Reglages } from "./reglages";
 import { liftRule } from "./overrides";
 import Composer from "./composer";
@@ -39,10 +40,10 @@ const newPayments = (s: Snapshot) => s.payments.filter(p => !p.lockedAt && !p.ca
 export function pendingCount(d: { snapshot: Snapshot }) { return newInvoices(d.snapshot).length + newPayments(d.snapshot).length; }
 /** Situation: the clients' statement (HT and TTC) or what the team did, one switch, nothing else. */
 function GlobalSituation({ clientId }: { clientId: string }) {
-  const d = useData(), [view, setView] = useState<"clients" | "equipe">("clients");
+  const d = useData(), [view, setView] = useState<"clients" | "factures" | "equipe">("clients");
   return <>
-    {!clientId && <div className="cx-seg cx-noprint" role="group" aria-label="Situation à afficher">{([["clients", "Les clients"], ["equipe", "L’équipe"]] as const).map(([k, label]) => <button type="button" key={k} aria-pressed={view === k} onClick={() => setView(k)}>{label}</button>)}</div>}
-    {view === "equipe" && !clientId ? <TeamReport /> : <Situation data={{ ...d.snapshot, format: d.format }} clientId={clientId} />}
+    {!clientId && <div className="cx-seg cx-noprint" role="group" aria-label="Situation à afficher">{([["clients", "Les clients"], ["factures", "Les factures"], ["equipe", "L’équipe"]] as const).map(([k, label]) => <button type="button" key={k} aria-pressed={view === k} onClick={() => setView(k)}>{label}</button>)}</div>}
+    {view === "equipe" && !clientId ? <TeamReport /> : view === "factures" && !clientId ? <InvoiceReport data={{ invoices: d.snapshot.invoices, format: d.format }} /> : <Situation data={{ ...d.snapshot, format: d.format }} clientId={clientId} />}
   </>;
 }
 

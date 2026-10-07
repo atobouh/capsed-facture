@@ -10,6 +10,7 @@ import { ClientAccount, ClientForm, ClientsDirectory } from "./clients";
 import type { OfficeRoute } from "./clients";
 import Composer from "./composer";
 import { ImportPdf } from "./import-pdf";
+import { OfficeInvoiceReport } from "./invoice-report";
 import { findIssues } from "./checks";
 import { CreditModal, CreditPicker, PaymentModal } from "./payments";
 import { CLOUD, REQUEST_LABEL, accountName, balance, canBill, canCash, commit, receives, dateFr, dateValid, delivery, dueDateOf, overdueDays, termOf, methodName, monthLabel, money, nowIso, timeFr, todayIso, useData } from "./store";
@@ -22,6 +23,7 @@ export function OfficeScreen({ role, by, route, nav }: { role: Role; by: string;
   switch (route.name) {
     case "compose": return <Composer key={`${route.id}-${route.extra}`} editId={route.id} legacy={route.extra === "ancienne"} clientId={route.extra && !route.extra.startsWith("req:") && route.extra !== "ancienne" ? route.extra : undefined} requestId={route.extra?.startsWith("req:") ? route.extra.slice(4) : undefined} by={by}
       onDone={id => nav({ name: "invoice", id })} onCancel={() => nav(route.id ? { name: "invoice", id: route.id } : { name: "register" })} />;
+    case "report": return canBill(role) ? <OfficeInvoiceReport onBack={() => nav({ name: "register" })} /> : <ClientsDirectory role={role} by={by} nav={nav} />;
     case "import": return canBill(role) ? <ImportPdf by={by} onBack={() => nav({ name: "register" })} onOpen={id => nav({ name: "invoice", id })} /> : <ClientsDirectory role={role} by={by} nav={nav} />;
     case "invoice": return <InvoiceView id={route.id!} role={role} by={by} nav={nav} />;
     case "credit": return <CreditView id={route.id!} nav={nav} />;
@@ -50,7 +52,7 @@ function Register({ role, by, nav }: { role: Role; by: string; nav: Nav }) {
   return <div className={`cx-page${wide ? " cx-page-split" : ""}`}>
     <PageHead title="Factures" sub={closed ? `${monthLabel(month)} est clôturé` : undefined}
       tools={<><MonthStepper value={month} onChange={v => { commit(by, () => ({ month: v })); setSel(null); }} /><SearchBox value={q} onChange={setQ} placeholder="Chercher un client ou un numéro" /></>}
-      actions={<><MoreMenu iconOnly label="Autres actions" items={[{ label: "Ajouter une ancienne facture", hint: "Faite avant l’application, avec son numéro d’origine", onClick: () => nav({ name: "compose", extra: "ancienne" }) }, { label: "Importer d’anciennes factures (PDF)", hint: "Plusieurs PDF à la fois, vérifiées avant d’être gardées", onClick: () => nav({ name: "import" }) }]} /><Button disabled={!eligible || closed} onClick={() => setPicker(true)}>Créer un avoir</Button><Button kind="primary" icon={<Plus size={16} aria-hidden="true" />} disabled={closed} title={closed ? "Ce mois est clôturé" : "Ctrl+N"} onClick={() => nav({ name: "compose" })}>Nouvelle facture</Button></>} />
+      actions={<><MoreMenu iconOnly label="Autres actions" items={[{ label: "Ajouter une ancienne facture", hint: "Faite avant l’application, avec son numéro d’origine", onClick: () => nav({ name: "compose", extra: "ancienne" }) }, { label: "Situation de facturation", hint: "Factures TTC et hors taxe d’une période, à imprimer ou exporter", onClick: () => nav({ name: "report" }) }, { label: "Importer d’anciennes factures (PDF)", hint: "Plusieurs PDF à la fois, vérifiées avant d’être gardées", onClick: () => nav({ name: "import" }) }]} /><Button disabled={!eligible || closed} onClick={() => setPicker(true)}>Créer un avoir</Button><Button kind="primary" icon={<Plus size={16} aria-hidden="true" />} disabled={closed} title={closed ? "Ce mois est clôturé" : "Ctrl+N"} onClick={() => nav({ name: "compose" })}>Nouvelle facture</Button></>} />
     <div className={wide ? "cx-split cx-split-panel" : ""}>
       <section className="cx-col" aria-label={`Factures de ${monthLabel(month)}`}>
         <dl className="cx-strip"><div><dt>Facturé en {monthLabel(month).split(" ")[0]}</dt><dd>{money(sum("total"))}</dd></div><div><dt>Encaissé</dt><dd>{money(sum("received"))}</dd></div><div><dt>Reste à recevoir</dt><dd className="cx-strong">{money(sum("due"))}</dd></div><div><dt>Pas encore remises au client</dt><dd>{undelivered} facture{undelivered > 1 ? "s" : ""}</dd></div></dl>

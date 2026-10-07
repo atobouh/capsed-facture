@@ -142,6 +142,27 @@ test("the Direction can read a password again; office computers never receive it
   assert.equal(seen.visiblePassword, undefined); assert.equal(seen.email, "awa@capsed.cm"); assert.ok(seen.pwHash);
 });
 
+test("only the Direction deletes; office computers get a stub; a payment made offline on it goes to the bin; restore brings it back", async () => {
+  const bill = { id: uid(), number: "2026-10-007", date: "2026-10-06", client: { id: "c1", name: "EFMK" }, lines: [{ id: "l", designation: "Dératisation", quantity: 1, unitPrice: 80000 }], taxRate: 0, taxMode: "ht", advance: 0, createdBy: awa.id };
+  const rev = (await push([change("invoices", bill, { by: awa.id })], "device")).body.results[0].rev;
+  const at = new Date().toISOString();
+  assert.equal((await push([change("invoices", { ...bill, deletedAt: at }, { by: awa.id, base: rev })], "device")).body.results[0].ok, false, "the team cannot delete");
+  const del = await push([change("invoices", { ...bill, deletedAt: at, deletedBy: dirId, deleteReason: "saisie en double" }, { base: rev })], "web");
+  assert.ok(del.body.results[0].ok); const delRev = del.body.results[0].rev;
+  const office = (await call(`/api/sync?since=${rev}`, { auth: "device" })).body.records.find(r => r.id === bill.id).data;
+  assert.deepEqual(Object.keys(office).sort(), ["date", "deletedAt", "id", "number"], "office computers only get a stub");
+  const web = (await call(`/api/sync?since=${rev}`, { auth: "web" })).body.records.find(r => r.id === bill.id).data;
+  assert.equal(web.deleteReason, "saisie en double"); assert.equal(web.lines.length, 1, "the Direction keeps it whole");
+  const edit = await push([change("invoices", { ...bill, note: "x" }, { by: awa.id, base: rev })], "device");
+  assert.equal(edit.body.results[0].ok, false, "a deleted invoice no longer changes from the office");
+  const late = await push([change("payments", { id: uid(), invoiceId: bill.id, amount: 1000, date: "2026-10-06", method: "OM", reference: "", by: paul.id }, { by: paul.id })], "device");
+  assert.ok(late.body.results[0].ok, "nothing is lost"); assert.ok(late.body.results[0].record.deletedAt, "but it lands in the bin with its invoice");
+  const back = await push([change("invoices", bill, { base: delRev })], "web");
+  assert.ok(back.body.results[0].ok); assert.equal(back.body.results[0].record.deletedAt, undefined); assert.equal(back.body.results[0].record.deleteReason, undefined);
+  const again = (await call(`/api/sync?since=${delRev}`, { auth: "device" })).body.records.find(r => r.id === bill.id).data;
+  assert.equal(again.lines.length, 1, "restored: whole again on office computers");
+});
+
 test("revoked computer is refused", async () => {
   assert.ok((await call("/api/devices/revoke", { method: "POST", body: { id: device.id }, auth: "web" })).body.ok);
   assert.equal((await call("/api/sync", { auth: "device" })).status, 401);

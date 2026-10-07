@@ -43,6 +43,9 @@ const REQUEST_REPLY = new Set(["receivedAt", "readAt", "resolvedAt", "resolvedBy
 /** Returns a reason in French when the change is not allowed for this role, null when it is. */
 export function refuse(collection: CollectionName, role: Role, actorId: string, current: Rec | null, next: Rec): string | null {
   if (role === "responsable") return null;
+  // Deleting and restoring belong to the Direction; a deleted record no longer changes from the office.
+  if (current?.deletedAt) return "Supprimé par la Direction : la modification n’est pas prise en compte.";
+  if (next.deletedAt) return "Seule la Direction supprime.";
   const diff = changed(current, next);
   switch (collection) {
     case "clients": case "credits": case "deliveries":

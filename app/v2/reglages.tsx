@@ -1,6 +1,7 @@
 /** Réglages: five short pages instead of one long one. Each page answers one question. */
 import { useEffect, useState } from "react";
-import { BookOpen, Building2, Check, ChevronRight, Copy, Download, Eye, EyeOff, FileUp, Database, KeyRound, Monitor, ShieldCheck, UserPlus, Users, WifiOff } from "lucide-react";
+import { BookOpen, Building2, Check, ChevronRight, Copy, Download, Eye, EyeOff, FileUp, Database, KeyRound, Monitor, ShieldCheck, UserPlus, Users, WifiOff, Trash2 } from "lucide-react";
+import { BinPage } from "./corbeille";
 import { Button, Choice, Confirm, Empty, Field, Modal, Notice, PageHead, Row, TextArea, TextInput, toast } from "./ui";
 import { BackupSettings, CompanySettings, FormatSettings, TermSettings } from "./settings";
 import { ACTIONS, liftRule, undoOverride } from "./overrides";
@@ -20,6 +21,7 @@ const PAGES = [
   { key: "equipe", title: "Équipe et accès", sub: CLOUD ? "Personnes, mots de passe, ordinateurs du bureau" : "Personnes et mots de passe", icon: <Users size={18} aria-hidden="true" /> },
   { key: "regles", title: "Règles et dérogations", sub: "Délai de paiement, mois clôturés, retour en arrière", icon: <ShieldCheck size={18} aria-hidden="true" /> },
   { key: "entreprise", title: "Entreprise et factures", sub: "Coordonnées et en-tête imprimés", icon: <Building2 size={18} aria-hidden="true" /> },
+  { key: "corbeille", title: "Éléments supprimés", sub: "Clients, factures et paiements supprimés, à restaurer", icon: <Trash2 size={18} aria-hidden="true" /> },
   { key: "donnees", title: "Données et sauvegarde", sub: CLOUD ? "Envois des postes, sauvegarde, restauration" : "Sauvegarde et restauration", icon: <Database size={18} aria-hidden="true" /> },
   { key: "aide", title: "Aide", sub: "Les gestes essentiels et quoi faire en cas de souci", icon: <BookOpen size={18} aria-hidden="true" /> },
 ];
@@ -34,6 +36,7 @@ export function Reglages({ page, nav, by }: { page?: string; nav: Nav; by: strin
     <PageHead back={{ label: "Réglages", onClick: () => nav({ name: "reglages" }) }} title={p.title} />
     {p.key === "equipe" && <><Team by={by} />{CLOUD && <Devices />}{MODE === "site" && <Sessions />}</>}
     {p.key === "regles" && <Rules by={by} />}
+    {p.key === "corbeille" && <BinPage by={by} />}
     {p.key === "entreprise" && <><CompanySettings by={by} /><FormatSettings by={by} /></>}
     {p.key === "donnees" && <>{CLOUD && <SyncStatus />}<ExportAll /><ClientImport by={by} /><BackupSettings by={by} />{MODE === "demo" && <DemoTools />}</>}
     {p.key === "aide" && <Help />}

@@ -87,3 +87,12 @@
 .delivery-reset{border:0;background:transparent;color:#58667b;font-size:12px;text-decoration:underline;text-underline-offset:3px;padding:6px}
 @media(max-width:650px){.client-record-actions{gap:10px}.payment-entry-actions{width:100%;justify-content:flex-start;margin-left:42px}.payment-entry{flex-wrap:wrap}.invoice-delivery-status{gap:8px}}
 .receipt-title-next{margin-bottom:16px}.receipt-title-next>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Invoice totals line up with the table: labels start under « Quantité », amounts sit in the « Montant HT » column,
+   centred like the line amounts above them (columns 39 / 17 / 10 / 16 / 18 %). The signature stays centred under them. */
+.receipt-totals-aligned{width:44%}
+.receipt-totals-aligned p{display:grid;grid-template-columns:26fr 18fr;gap:0;align-items:baseline}
+.receipt-totals-aligned p>span{padding-left:7px}
+.receipt-totals-aligned p>strong{text-align:center;padding:0 7px}
+.receipt-totals-aligned .receipt-total{padding:7px 0}
+.receipt-totals-aligned~.receipt-payment .receipt-signature{width:44%}

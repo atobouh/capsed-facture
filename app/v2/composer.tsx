@@ -9,16 +9,29 @@ import { DEFAULT_TERM, METHODS, addDays, balance, commit, termOf, dateFr, dateVa
 import type { Client, Invoice, Line } from "./store";
 import { words } from "./words";
 
-type Draft = { number: string; clientId: string; date: string; lines: Line[]; taxRate: number; taxMode: TaxMode; discountRate: number; advance: number; payment: string; note: string; purchaseOrder: string; paymentTerm: number };
+export type Draft = { number: string; clientId: string; date: string; lines: Line[]; taxRate: number; taxMode: TaxMode; discountRate: number; advance: number; payment: string; note: string; purchaseOrder: string; paymentTerm: number };
 const STEPS = ["Client et facture", "Articles et prestations", "Remise, TVA et règlement", "Vérifier et émettre"];
 
 /** The 4-step invoice flow. `validated`: made by the Direction, so it does not come back to validate.
  *  `legacy`: an invoice made before the app, typed in with its original number and date. */
-export default function Composer({ editId, clientId, requestId, by, validated, legacy: newLegacy, onDone, onCancel }: { editId?: string; clientId?: string; requestId?: string; by: string; validated?: boolean; legacy?: boolean; onDone: (invoiceId: string) => void; onCancel: () => void }) {
+/** A new invoice record, as the composer saves it (also used to save old invoices read from their PDF). */
+export function newInvoiceRecord(cur: ReturnType<typeof getData>, draft: Draft, client: Client, by: string, extra: Partial<Invoice>): Invoice {
+  const lines = draft.lines.filter(l => l.designation.trim()).map(l => ({ ...l }));
+  return { date: draft.date, client: { ...client }, company: { ...cur.company, logo: "" }, lines, taxRate: draft.taxRate, taxMode: draft.taxMode, discountRate: draft.discountRate, purchaseOrder: draft.purchaseOrder.trim(), advance: draft.advance, payment: draft.payment, note: draft.note, paymentTerm: draft.paymentTerm, template: { document: fixedModel(cur.format) }, id: uid(), number: draft.number.trim(), createdBy: by, ...extra };
+}
+/** A number already used, by an invoice or by one the Direction deleted (deleted numbers are never given again). */
+export function numberTaken(d: ReturnType<typeof getData>, n: string) {
+  const k = n.trim().toLowerCase();
+  return d.invoices.find(i => i.number.trim().toLowerCase() === k) ?? (d.bin ?? []).find(b => b.collection === "invoices" && String(b.data.number ?? "").trim().toLowerCase() === k)?.data as Invoice | undefined;
+}
+export const emptyDraft = (legacy = false): Draft => ({ number: "", clientId: "", date: legacy ? (getData().month < todayIso().slice(0, 7) ? getData().month + "-01" : "") : todayIso(), lines: [emptyLine()], taxRate: 19.25, taxMode: "ht", discountRate: 0, advance: 0, payment: "Espèces", note: "", purchaseOrder: "", paymentTerm: getData().paymentTerm ?? DEFAULT_TERM });
+
+/** `initial`, `readClient`, `source`: an old invoice read from a PDF, to check before saving. */
+export default function Composer({ editId, clientId, requestId, by, validated, legacy: newLegacy, initial, readClient, source, startStep, onDone, onCancel }: { editId?: string; clientId?: string; requestId?: string; by: string; validated?: boolean; legacy?: boolean; initial?: Partial<Draft>; readClient?: Partial<Client>; source?: { file: string; warnings: string[] }; startStep?: number; onDone: (invoiceId: string) => void; onCancel: () => void }) {
   const d = useData(), editing = d.invoices.find(i => i.id === editId), legacy = editing ? !!editing.legacy : !!newLegacy;
   const [draft, setDraft] = useState<Draft>(() => editing ? { number: editing.number, clientId: editing.client.id, date: editing.date, lines: editing.lines.map(l => ({ ...l })), taxRate: editing.taxRate, taxMode: invoiceTotals(editing).taxMode, discountRate: editing.discountRate || 0, advance: editing.advance, payment: normalizePayment(editing.payment), note: editing.note, purchaseOrder: editing.purchaseOrder || "", paymentTerm: termOf(editing) }
-    : { number: "", clientId: clientId ?? getData().requests.find(r => r.id === requestId)?.clientId ?? "", date: legacy ? (getData().month < todayIso().slice(0, 7) ? getData().month + "-01" : "") : todayIso(), lines: [emptyLine()], taxRate: 19.25, taxMode: "ht", discountRate: 0, advance: 0, payment: "Espèces", note: "", purchaseOrder: "", paymentTerm: getData().paymentTerm ?? DEFAULT_TERM });
-  const [step, setStep] = useState(0), [error, setError] = useState(""), [q, setQ] = useState(""), [form, setForm] = useState<Client | null>(null), [showContract, setShowContract] = useState<Record<string, boolean>>({});
+    : { ...emptyDraft(legacy), clientId: clientId ?? getData().requests.find(r => r.id === requestId)?.clientId ?? "", ...initial });
+  const [step, setStep] = useState(startStep ?? 0), [error, setError] = useState(""), [q, setQ] = useState(readClient?.name ?? ""), [form, setForm] = useState<Client | null>(null), [showContract, setShowContract] = useState<Record<string, boolean>>({});
   const set = (p: Partial<Draft>) => { setDraft(v => ({ ...v, ...p })); setError(""); };
   const setLine = (id: string, p: Partial<Line>) => set({ lines: draft.lines.map(l => l.id === id ? { ...l, ...p } : l) });
   const chosen = d.clients.find(c => c.id === draft.clientId), totals = invoiceTotals(draft), period = draft.date.slice(0, 7);
@@ -29,10 +42,10 @@ export default function Composer({ editId, clientId, requestId, by, validated, l
     if (!chosen) return [0, "Choisissez un client."];
     if (chosen.archived && !editing) return [0, "Ce client est archivé. Réactivez-le avant de créer une facture."];
     if (legacy && !editing) {
-      const n = draft.number.trim(), same = d.invoices.find(i => i.number.trim().toLowerCase() === n.toLowerCase());
+      const n = draft.number.trim(), same = numberTaken(d, n);
       if (!n) return [0, "Écrivez le numéro de l’ancienne facture, tel qu’il est imprimé dessus."];
       if (n.length > 40) return [0, "Ce numéro est trop long (40 caractères au plus)."];
-      if (same) return [0, `Le numéro ${n} existe déjà : facture de ${same.client.name} du ${dateFr(same.date)}.`];
+      if (same) return [0, same.client ? `Le numéro ${n} existe déjà : facture de ${same.client.name} du ${dateFr(same.date)}.` : `Le numéro ${n} a déjà servi (facture supprimée par la Direction).`];
     }
     if (!dateValid(draft.date)) return [0, legacy ? "Choisissez la date de l’ancienne facture." : "Choisissez une date valide."];
     if (legacy && draft.date > todayIso()) return [0, "Une ancienne facture a une date passée."];
@@ -67,7 +80,7 @@ export default function Composer({ editId, clientId, requestId, by, validated, l
       toast("Modifications enregistrées. Le numéro et la version précédente sont conservés.");
     } else {
       invoice = { ...data, id: uid(), number: legacy ? draft.number.trim() : nextInvoiceNumber(cur, period), createdBy: by, ...(legacy ? { legacy: true } : {}), ...(validated ? { validatedAt: nowIso(), validatedBy: by } : {}) };
-      commit(by, x => ({ invoices: [...x.invoices, invoice], month: period, requests: request ? x.requests.map(r => r.id === request.id ? { ...r, readAt: r.readAt ?? nowIso(), resolvedAt: nowIso(), resolvedBy: by, linkedId: invoice.id, response: `Facture ${invoice.number} créée, ${money(invoiceTotals(invoice).ttc)}.` } : r) : x.requests }), { text: legacy ? `Ancienne facture ${invoice.number} du ${dateFr(invoice.date)} ajoutée, ${money(invoiceTotals(invoice).ttc)}` : `Facture ${invoice.number} émise, ${money(invoiceTotals(invoice).ttc)}`, clientId: invoice.client.id, invoiceId: invoice.id });
+      commit(by, x => ({ invoices: [...x.invoices, invoice], month: period, requests: request ? x.requests.map(r => r.id === request.id ? { ...r, readAt: r.readAt ?? nowIso(), resolvedAt: nowIso(), resolvedBy: by, linkedId: invoice.id, response: `Facture ${invoice.number} créée, ${money(invoiceTotals(invoice).ttc)}.` } : r) : x.requests }), { text: legacy ? `Ancienne facture ${invoice.number} du ${dateFr(invoice.date)} ${source ? "reprise de son PDF" : "ajoutée"}, ${money(invoiceTotals(invoice).ttc)}` : `Facture ${invoice.number} émise, ${money(invoiceTotals(invoice).ttc)}`, clientId: invoice.client.id, invoiceId: invoice.id });
       toast(legacy ? `Ancienne facture ${invoice.number} ajoutée.` : `Facture ${invoice.number} émise.${request ? " La demande du responsable est marquée comme traitée." : ""}`);
     }
     onDone(invoice.id);
@@ -84,6 +97,8 @@ export default function Composer({ editId, clientId, requestId, by, validated, l
     {editing && <p className="cx-muted">Le numéro {editing.number} reste identique. La version précédente est conservée.</p>}
   </aside>;
 
+  // The Direction deleted this invoice while it was open here: nothing to save over.
+  if (editId && !editing) return <section className="cx-wizard"><Notice tone="warn" title="Cette facture a été supprimée par la Direction">Vos changements ne peuvent pas être enregistrés. La Direction peut la restaurer si besoin.</Notice><Button onClick={onCancel}>Retour</Button></section>;
   return <section className="cx-wizard">
     <header className="cx-wizard-head cx-noprint">
       <div><h1>{editing ? `Modifier la facture ${editing.number}` : legacy ? "Ajouter une ancienne facture" : "Nouvelle facture"}</h1><p>Étape {step + 1} sur 4 : {STEPS[step]}</p></div>
@@ -91,7 +106,8 @@ export default function Composer({ editId, clientId, requestId, by, validated, l
     </header>
     <ol className="cx-steps cx-noprint">{STEPS.map((s, i) => <li key={s} className={i < step ? "cx-done" : i === step ? "cx-now" : ""}><button type="button" disabled={i > step} onClick={() => { setStep(i); setError(""); }}><span>{i < step ? <Check size={18} strokeWidth={3} aria-label="fait" /> : i + 1}</span>{s}</button></li>)}</ol>
     {request && <Notice title="Demande du responsable">{request.message || "Créer une facture pour ce client."}{request.amount ? ` Montant indiqué : ${money(request.amount)}.` : ""}</Notice>}
-    {legacy && !editing && step === 0 && <Notice title="Facture faite avant l’application">Gardez son numéro et sa date d’origine. Elle compte dans le compte du client comme les autres, et ne change pas la numérotation automatique des nouvelles factures.</Notice>}
+    {source && <Notice tone={source.warnings.length ? "warn" : "info"} title={`Lue dans « ${source.file} »`}>Vérifiez chaque étape avant d’enregistrer : le PDF n’est pas gardé.{source.warnings.length ? <> À regarder : {source.warnings.join(" ")}</> : null}{readClient?.name && !draft.clientId ? <> Client lu sur le PDF : <strong>{readClient.name}</strong>. Choisissez-le dans la liste, ou « Nouveau client » (ses coordonnées lues sont reprises).</> : null}</Notice>}
+    {legacy && !editing && step === 0 && !source && <Notice title="Facture faite avant l’application">Gardez son numéro et sa date d’origine. Elle compte dans le compte du client comme les autres, et ne change pas la numérotation automatique des nouvelles factures.</Notice>}
     {error && <Notice tone="bad" title="À corriger avant de continuer">{error}</Notice>}
     <div className={step < 3 ? "cx-compose" : ""}>
       <div className="cx-compose-body">
@@ -100,7 +116,7 @@ export default function Composer({ editId, clientId, requestId, by, validated, l
             <div className="cx-section-title"><h2>Le client</h2></div>
             {chosen ? <div className="cx-chosen"><span className="cx-monogram">{chosen.name.slice(0, 2).toUpperCase()}</span><div><strong>{chosen.name}</strong><span>{[chosen.address, chosen.niu && `NIU ${chosen.niu}`].filter(Boolean).join(", ") || "Coordonnées à compléter"}</span></div>
               <div className="cx-chosen-actions"><Button size="sm" kind="quiet" icon={<Pencil size={15} />} onClick={() => setForm({ ...chosen })}>Modifier les coordonnées</Button><Button size="sm" kind="link" onClick={() => set({ clientId: "" })}>Changer de client</Button></div></div>
-              : <><div className="cx-search-row"><SearchBox value={q} onChange={setQ} placeholder="Tapez le nom du client" autoFocus /><Button icon={<UserPlus size={18} />} onClick={() => setForm({ ...emptyClient(), name: q })}>Nouveau client</Button></div>
+              : <><div className="cx-search-row"><SearchBox value={q} onChange={setQ} placeholder="Tapez le nom du client" autoFocus /><Button icon={<UserPlus size={18} />} onClick={() => setForm({ ...emptyClient(), ...readClient, name: q })}>Nouveau client</Button></div>
                 <div className="cx-pick-list">{clients.map(c => <button type="button" key={c.id} onClick={() => set({ clientId: c.id })}><span className="cx-monogram">{c.name.slice(0, 2).toUpperCase()}</span><span><strong>{c.name}</strong><small>{[c.address, c.phone].filter(Boolean).join(", ")}</small></span></button>)}{!clients.length && <p className="cx-muted">Aucun client ne correspond. Utilisez « Nouveau client ».</p>}</div></>}
           </div>
           <div className="cx-card">

@@ -158,7 +158,7 @@ try {
   await site.locator('.cx-site-tabs button', { hasText: 'Factures' }).click();
   ok(await until(async () => { await site.evaluate(() => window.dispatchEvent(new Event('online'))); return (await site.locator('.cx-pay-card', { hasText: 'facture 2026-' }).count()) > 0; }, 40000, 1000), 'Direction sees the office invoice to validate');
   await shot(site, '14-site-factures');
-  ok(await until(async () => { await site.evaluate(() => window.dispatchEvent(new Event('online'))); return (await site.locator('.cx-pay-card', { hasText: oldNumber }).count()) > 0; }, 40000, 1000), 'Direction receives the old invoice, marked as such');
+  ok(await until(async () => { await site.evaluate(() => window.dispatchEvent(new Event('online'))); return site.evaluate(n => (JSON.parse(localStorage.getItem('capsed-site-data') ?? '{}').invoices ?? []).some(i => i.number === n && i.legacy), oldNumber); }, 40000, 1000) && await site.locator('.cx-pay-card', { hasText: oldNumber }).count() === 0, 'Direction receives the old invoice, with nothing to validate');
 
   const sent = () => until(async () => /Tout est envoyé/.test(await office.locator('.cx-sidebar .cx-sync').textContent()), 90000, 500);
   const poke = p => p.evaluate(() => window.dispatchEvent(new Event('online')));

@@ -56,6 +56,9 @@ function diff(prev: Data, next: Data, by: string): Change[] {
     const old = new Map(a.map(r => [keyOf(c, r), r]));
     for (const r of b) { const id = keyOf(c, r), o = old.get(id); if (o === r || (o && JSON.stringify(o) === JSON.stringify(r))) continue; out.push(mk(c, id, r)); }
   }
+  // Deleted or edited in the bin (Direction only): the record travels with its deletion mark.
+  const before = new Map((prev.bin ?? []).map(x => [x.collection + ":" + x.data.id, x.data]));
+  for (const x of next.bin ?? []) { const o = before.get(x.collection + ":" + x.data.id); if (o === x.data || (o && JSON.stringify(o) === JSON.stringify(x.data))) continue; out.push(mk(x.collection, x.data.id, x.data)); }
   if (SETTINGS_FIELDS.some(f => prev[f] !== next[f] && JSON.stringify(prev[f]) !== JSON.stringify(next[f])))
     out.push(mk("settings", "main", { id: "main", ...Object.fromEntries(SETTINGS_FIELDS.map(f => [f, next[f]])) }));
   return out;

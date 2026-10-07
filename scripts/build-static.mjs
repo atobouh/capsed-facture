@@ -71,6 +71,8 @@ await mkdir(path.join(dist, "fonts"), { recursive: true });
 for (const f of await readdir(path.join(root, "public", "fonts"))) await copyFile(path.join(root, "public", "fonts", f), path.join(dist, "fonts", f));
 
 if (mode !== "demo") await copyFile(path.join(root, "static-src", "sw.js"), path.join(dist, "sw.js"));
+// Reading old invoices from their PDF (office): pdf.js is loaded only when someone imports, never at start-up.
+if (mode !== "site") for (const f of ["pdf.min.mjs", "pdf.worker.min.mjs"]) await copyFile(path.join(root, "node_modules", "pdfjs-dist", "build", f), path.join(dist, f));
 // The desktop app shows this small card the moment it is clicked, while the main window gets ready.
 if (mode === "office") await copyFile(path.join(root, "static-src", "splash.html"), path.join(dist, "splash.html"));
 // The open site checks this small file to offer the new version as soon as it is published.

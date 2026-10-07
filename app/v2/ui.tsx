@@ -6,7 +6,7 @@ import { DocumentPages } from "../document-renderer";
 import { fixedModel } from "../invoice-format";
 import CreditPaper from "../credit-note";
 import AccountStatement from "../account-statement";
-import type { StatementPeriod } from "../statement-period";
+import type { StatementFilter, StatementPeriod } from "../statement-period";
 import type { DocumentModel } from "../document-model";
 import { words } from "./words";
 import { STATUS_TONE, num, timeFr, accountName, getData, monthLabel } from "./store";
@@ -169,6 +169,6 @@ export function Paper({ invoice, title }: { invoice: Invoice; title?: string }) 
 export function CreditPaperView({ credit }: { credit: CreditNote }) {
   return <FitPaper label={`Avoir ${credit.number}`}><CreditPaper credit={credit} /></FitPaper>;
 }
-export function StatementPaper({ d, clientId, period }: { d: Pick<Data, "clients" | "invoices" | "payments" | "credits" | "format">; clientId: string; period: StatementPeriod }) {
-  return <FitPaper label={clientId ? "Situation du client" : "Situation des clients"}><AccountStatement clients={d.clients} invoices={d.invoices} payments={d.payments} credits={d.credits} clientId={clientId} format={d.format} period={period} /></FitPaper>;
+export function StatementPaper({ d, clientId, period, filter }: { d: Pick<Data, "clients" | "invoices" | "payments" | "credits" | "format">; clientId: string; period: StatementPeriod; filter?: StatementFilter }) {
+  return <FitPaper label={clientId ? "Situation du client" : "Situation des clients"}><AccountStatement clients={d.clients} invoices={d.invoices} payments={d.payments} credits={d.credits} clientId={clientId} format={d.format} period={period} filter={filter} /></FitPaper>;
 }

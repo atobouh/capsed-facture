@@ -9,6 +9,8 @@ import Composer from "./composer";
 import { exportInvoice } from "../receipt-export";
 import { words } from "./words";
 import { CancelPayment } from "./payments";
+import { DeleteDialog } from "./corbeille";
+import type { BinTarget } from "./corbeille";
 import { findIssues, numberKey } from "./checks";
 import type { Invoice, Payment } from "./store";
 import { METHODS, REQUEST_LABEL, ROLE_LABEL, accountName, accountTotals, ago, balance, commit, dateFr, delivery, getData, methodName, money, monthLabel, overdueDays, dueDateOf, nowIso, timeFr, todayIso, uid, useData } from "./store";
@@ -29,8 +31,10 @@ export function ResponsableScreen({ route, nav, by }: { route: RRoute; nav: Nav;
     default: return <Overview nav={nav} by={by} />;
   }
 }
-/** New invoices and payments the Direction has not validated yet. Validation is never required: nothing waits on it. */
-const newInvoices = (s: Snapshot) => s.invoices.filter(i => !i.validatedAt).sort((a, b) => a.date.localeCompare(b.date) || a.number.localeCompare(b.number));
+/** New invoices and payments the Direction has not validated yet. Validation is never required: nothing waits on it.
+ *  Old invoices (made before the app, typed in or read from their PDF) are checked by whoever adds them: nothing to validate,
+ *  unless something needs a look (a number used twice, a month already closed). */
+const newInvoices = (s: Snapshot) => { const issues = findIssues(s); return s.invoices.filter(i => !i.validatedAt && (!i.legacy || issues.sameNumber.has(i.id) || issues.afterClose.has(i.id))).sort((a, b) => a.date.localeCompare(b.date) || a.number.localeCompare(b.number)); };
 const newPayments = (s: Snapshot) => s.payments.filter(p => !p.lockedAt && !p.cancelledAt).sort((a, b) => a.date.localeCompare(b.date));
 export function pendingCount(d: { snapshot: Snapshot }) { return newInvoices(d.snapshot).length + newPayments(d.snapshot).length; }
 /** Situation: the clients' statement (HT and TTC) or what the team did, one switch, nothing else. */
@@ -111,7 +115,7 @@ function Overview({ nav, by }: { nav: Nav; by: string }) {
 }
 
 function ClientStory({ id, nav, by }: { id: string; nav: Nav; by: string }) {
-  const d = useData(), s = d.snapshot, c = s.clients.find(x => x.id === id), [ask, setAsk] = useState(false);
+  const d = useData(), s = d.snapshot, c = s.clients.find(x => x.id === id), [ask, setAsk] = useState(false), [del, setDel] = useState(false);
   if (!c) return <Empty title="Client introuvable." action={<Button onClick={() => nav({ name: "clients" })}>Accueil</Button>} />;
   const items = s.invoices.filter(i => i.client.id === c.id).sort((a, b) => b.date.localeCompare(a.date)), a = accountTotals(items, s.payments, s.credits);
   const open = items.filter(i => balance(i, s.payments, s.credits).due > 0), done = items.filter(i => !balance(i, s.payments, s.credits).due);
@@ -122,7 +126,7 @@ function ClientStory({ id, nav, by }: { id: string; nav: Nav; by: string }) {
   const paid = Math.max(0, a.total - a.credited - a.due);
   return <div className="cx-page cx-story">
     <PageHead back={{ label: "Accueil", onClick: () => nav({ name: "clients" }) }} title={c.name} sub={[c.contact, c.phone].filter(Boolean).join(" · ") || undefined}
-      actions={<>{c.phone && <a className="cx-btn cx-btn-secondary" href={`tel:${c.phone.replace(/\s/g, "")}`}><Phone size={15} aria-hidden="true" /><span>Appeler</span></a>}<MoreMenu iconOnly label="Autres actions" items={[{ label: "Voir le relevé du client", onClick: () => nav({ name: "situation", id: c.id }) }]} /></>} />
+      actions={<>{c.phone && <a className="cx-btn cx-btn-secondary" href={`tel:${c.phone.replace(/\s/g, "")}`}><Phone size={15} aria-hidden="true" /><span>Appeler</span></a>}<MoreMenu iconOnly label="Autres actions" items={[{ label: "Voir le relevé du client", onClick: () => nav({ name: "situation", id: c.id }) }, { label: "Supprimer le client", hint: "Restaurable", onClick: () => setDel(true) }]} /></>} />
     <div className="cx-story-grid">
       <div className="cx-story-side">
         <section className="cx-card cx-sum" aria-label="Solde du client">
@@ -147,15 +151,17 @@ function ClientStory({ id, nav, by }: { id: string; nav: Nav; by: string }) {
       </div>
     </div>
     {ask && <RequestForm kind="paiement" client={c} by={by} onClose={() => setAsk(false)} />}
+    {del && <DeleteDialog target={{ collection: "clients", id: c.id }} by={by} onClose={() => setDel(false)} onDone={() => nav({ name: "clients" })} />}
   </div>;
 }
 function PaymentRow({ p, by }: { p: Snapshot["payments"][number]; by: string }) {
-  const d = useData(), i = d.snapshot.invoices.find(x => x.id === p.invoiceId), [ask, setAsk] = useState(false), [lift, setLift] = useState<"unlock-payment" | "restore-payment" | null>(null);
+  const d = useData(), i = d.snapshot.invoices.find(x => x.id === p.invoiceId), [ask, setAsk] = useState(false), [lift, setLift] = useState<"unlock-payment" | "restore-payment" | null>(null), [del, setDel] = useState(false);
   return <div className={`cx-list-row cx-static${p.cancelledAt ? " cx-cancelled" : ""}`}>
     <span className="cx-list-main"><strong>{money(p.amount)} · {methodName(p.method)}</strong><small>{dateFr(p.date)} · facture {i?.number}{p.reference ? ` · ${p.reference}` : ""} · saisi par {accountName(p.by)}</small>{p.changedAfterLock && !p.lockedAt && <span className="cx-chip cx-tone-warn">Modifié après validation</span>}</span>
     <span className="cx-list-actions">{p.cancelledAt ? <><Stamp tone="bad">Annulé</Stamp><button type="button" className="cx-text-btn" onClick={() => setLift("restore-payment")}>Rétablir</button></>
       : p.lockedAt ? <><Stamp tone="good"><Lock size={12} aria-hidden="true" />Validé</Stamp><button type="button" className="cx-text-btn" onClick={() => setLift("unlock-payment")}>Déverrouiller</button></>
-      : <Button size="sm" disabled={!d.officeOnline} title={!d.officeOnline ? "Le bureau est hors ligne" : undefined} onClick={() => setAsk(true)}>Valider</Button>}</span>
+      : <Button size="sm" disabled={!d.officeOnline} title={!d.officeOnline ? "Le bureau est hors ligne" : undefined} onClick={() => setAsk(true)}>Valider</Button>}<button type="button" className="cx-text-btn" onClick={() => setDel(true)}>Supprimer</button></span>
+    {del && <DeleteDialog target={{ collection: "payments", id: p.id }} by={by} onClose={() => setDel(false)} />}
     {ask && <Confirm title={`Valider ce paiement de ${money(p.amount)} ?`} confirm="Valider le paiement" cancel="Pas maintenant" onClose={() => setAsk(false)} onConfirm={() => { setAsk(false); if (validate([], [p.id], by)) toast("Paiement validé."); }}><p>Une fois validé, l’encaissement ne pourra plus le corriger ni l’annuler. Vous pourrez le déverrouiller si besoin.</p></Confirm>}
     {lift === "unlock-payment" && <LiftDialog title={`Déverrouiller ce paiement de ${money(p.amount)} ?`} effect="L’encaissement pourra de nouveau le corriger ou l’annuler. Il reviendra dans vos éléments à valider." confirm="Déverrouiller" onClose={() => setLift(null)} onConfirm={r => { liftRule(by, "unlock-payment", p.id, r); setLift(null); toast("Paiement déverrouillé."); }} />}
     {lift === "restore-payment" && <LiftDialog title={`Rétablir ce paiement de ${money(p.amount)} ?`} effect="Il comptera de nouveau dans le solde du client. Son annulation reste dans l’historique." confirm="Rétablir le paiement" onClose={() => setLift(null)} onConfirm={r => { liftRule(by, "restore-payment", p.id, r); setLift(null); toast("Paiement rétabli."); }} />}
@@ -294,12 +300,12 @@ function Invoices({ nav, by }: { nav: Nav; by: string }) {
 
 /** One invoice for the Direction: the whole A4 document, what is paid, whether it was handed over. */
 function InvoiceSheet({ id, fromList, nav, by }: { id: string; fromList: boolean; nav: Nav; by: string }) {
-  const d = useData(), s = d.snapshot, i = s.invoices.find(x => x.id === id), [ask, setAsk] = useState(false), [fix, setFix] = useState(false);
+  const d = useData(), s = d.snapshot, i = s.invoices.find(x => x.id === id), [ask, setAsk] = useState(false), [fix, setFix] = useState(false), [del, setDel] = useState<BinTarget | null>(null);
   if (!i) return <Empty title="Facture introuvable." action={<Button onClick={() => nav({ name: "factures" })}>Toutes les factures</Button>} />;
   const b = balance(i, s.payments, s.credits), dv = delivery(s, i.id), client = s.clients.find(c => c.id === i.client.id) ?? i.client, pays = s.payments.filter(p => p.invoiceId === i.id);
   return <div className="cx-page cx-story">
     <PageHead back={fromList ? { label: "Factures", onClick: () => nav({ name: "factures" }) } : { label: i.client.name, onClick: () => nav({ name: "client", id: i.client.id }) }} title={`Facture ${i.number}`} sub={`${i.client.name}, ${i.legacy ? "ancienne facture du" : "émise le"} ${dateFr(i.date)}`}
-      actions={<><Button icon={<Printer size={16} aria-hidden="true" />} onClick={() => window.print()}>Imprimer</Button><MoreMenu iconOnly label="Autres actions" items={[{ label: "Exporter en Excel", onClick: () => exportInvoice(i, words) }, { label: `Voir le client ${i.client.name}`, onClick: () => nav({ name: "client", id: i.client.id }) }]} /></>} />
+      actions={<><Button icon={<Printer size={16} aria-hidden="true" />} onClick={() => window.print()}>Imprimer</Button><MoreMenu iconOnly label="Autres actions" items={[{ label: "Exporter en Excel", onClick: () => exportInvoice(i, words) }, { label: `Voir le client ${i.client.name}`, onClick: () => nav({ name: "client", id: i.client.id }) }, { label: "Supprimer la facture", hint: "Restaurable", onClick: () => setDel({ collection: "invoices", id: i.id }) }]} /></>} />
     {(() => { const issues = findIssues(s); return (issues.sameNumber.has(i.id) || issues.afterClose.has(i.id)) && <div className="cx-flags-block cx-noprint"><InvoiceFlags i={i} issues={issues} onFix={() => setFix(true)} /></div>; })()}
     {fix && <FixNumber invoice={i} by={by} onClose={() => setFix(false)} />}
     <div className="cx-story-grid">
@@ -327,5 +333,6 @@ function InvoiceSheet({ id, fromList, nav, by }: { id: string; fromList: boolean
       </div>
     </div>
     {ask && <RequestForm kind="paiement" client={client as Client} invoiceId={i.id} by={by} onClose={() => setAsk(false)} />}
+    {del && <DeleteDialog target={del} by={by} onClose={() => setDel(null)} onDone={() => nav(fromList ? { name: "factures" } : { name: "client", id: i.client.id })} />}
   </div>;
 }

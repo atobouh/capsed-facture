@@ -13,3 +13,10 @@ export const SETTINGS_FIELDS = ["company", "format", "paymentTerm", "closedMonth
 export const DEVICE_LETTERS = ["", "B", "C", "E", "F", "G", "H"];
 /** The Direction site issues its own series so it never collides with an office computer working offline. */
 export const DIRECTION_LETTER = "D";
+/** What the Direction can delete. A deleted record is never erased: the cloud keeps it in full for the Direction's « Corbeille »,
+ *  and office computers only receive a stub (enough to keep its number taken), so it leaves their screens. */
+export const BIN_COLLECTIONS = ["clients", "invoices", "payments", "credits"] as const;
+export type BinCollection = typeof BIN_COLLECTIONS[number];
+export const isBinCollection = (c: string): c is BinCollection => (BIN_COLLECTIONS as readonly string[]).includes(c);
+/** The part of a deleted record an office computer receives. */
+export const DELETED_STUB_FIELDS = ["id", "number", "date", "legacy", "invoiceId", "deletedAt"];

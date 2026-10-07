@@ -5,8 +5,8 @@ import { balance as v1Balance } from "../client-account";
 import { defaultFormat, restoreFormat } from "../invoice-format";
 import type { InvoiceFormat } from "../invoice-format";
 import type { CreditNote } from "../credit-note";
-import { DATA_KEY, SETTINGS_FIELDS, keyOf } from "./collections";
-import type { ListCollection } from "./collections";
+import { DATA_KEY, SETTINGS_FIELDS, isBinCollection, keyOf } from "./collections";
+import type { BinCollection, ListCollection } from "./collections";
 
 /* Data stays compatible with the first prototype ("capsed-facture-v1"), so its backups restore here. */
 /** "bureau" is the full office mode: Facturation and Encaissement in one login. */
@@ -50,6 +50,10 @@ export type Request = {
 export type Event = { id: string; at: string; by: string; text: string; clientId?: string; invoiceId?: string };
 /** A rule the Direction lifted: what changed, why, and how to put it back. */
 export type Override = { id: string; at: string; by: string; action: string; label: string; reason: string; target: { collection: string; id: string }; before: Record<string, unknown>; after: Record<string, unknown>; undoneAt?: string; undoneBy?: string; undoReason?: string };
+/** Deleted by the Direction: out of every list, balance and statement, kept here and restorable.
+ *  `deletedWith`: removed together with this invoice (its credit notes, its cancelled payments) and restored with it. */
+export type Deleted = { deletedAt: string; deletedBy?: string; deleteReason?: string; deletedWith?: string };
+export type BinItem = { collection: BinCollection; data: Record<string, unknown> & { id: string } & Deleted };
 export type Snapshot = { clients: Client[]; invoices: Invoice[]; payments: Payment[]; credits: CreditNote[]; deliveries: Delivery[]; receivedAt: string };
 export type Data = {
   version: 2; company: Company; format: InvoiceFormat; clients: Client[]; invoices: Invoice[]; payments: Payment[]; credits: CreditNote[];
@@ -58,6 +62,8 @@ export type Data = {
   /** Default internal payment deadline in days, set by the Direction. */
   paymentTerm?: number;
   overrides?: Override[];
+  /** What the Direction deleted. On office computers only stubs (number, date) arrive here, so numbers stay taken. */
+  bin?: BinItem[];
 };
 
 /** demo: everything in this browser (GitHub Pages). site: the Direction website, data from the cloud.
@@ -148,14 +154,14 @@ export function fromBackup(d: Record<string, unknown>, keep?: Data): Data {
   const core = { clients, invoices: fixed, payments, credits, invoiceDeliveries };
   return {
     ...base, ...core, version: 2, company: (d.company as Company) ?? base.company, format: d.format || d.models ? restoreFormat(d) : base.format, closedMonths, month: (d.month as string) ?? base.month,
-    requests: (d.requests as Request[]) ?? base.requests, events: (d.events as Event[]) ?? base.events, accounts: (d.accounts as Account[]) ?? base.accounts,
+    bin: (d.bin as BinItem[]) ?? base.bin ?? [], requests: (d.requests as Request[]) ?? base.requests, events: (d.events as Event[]) ?? base.events, accounts: (d.accounts as Account[]) ?? base.accounts,
     officeOnline: true, snapshot: { ...structuredClone(core), deliveries: structuredClone(invoiceDeliveries), receivedAt: nowIso() },
   };
 }
 /** A real installation starts empty: everything comes from the cloud or is typed in. */
 function emptyData(): Data {
   const core = { clients: [], invoices: [], payments: [], credits: [], invoiceDeliveries: [] };
-  return { version: 2, company, format: defaultFormat, ...core, closedMonths: [], month: todayIso().slice(0, 7), requests: [], events: [], accounts: [], overrides: [], officeOnline: true, snapshot: { ...core, deliveries: [], receivedAt: "" } };
+  return { version: 2, company, format: defaultFormat, ...core, closedMonths: [], month: todayIso().slice(0, 7), requests: [], events: [], accounts: [], overrides: [], bin: [], officeOnline: true, snapshot: { ...core, deliveries: [], receivedAt: "" } };
 }
 function load(): Data {
   try {
@@ -190,6 +196,7 @@ export function applyRemote(items: { collection: string; id: string; data: Recor
   if (!items.length) return;
   const d = getData(), next: Data = { ...d };
   const lists = new Map<string, Record<string, unknown>[]>();
+  let bin: BinItem[] | null = null;
   for (const it of items) {
     if (it.collection === "settings") {
       if (it.data) for (const k of SETTINGS_FIELDS) if (it.data[k] !== undefined) (next as Record<string, unknown>)[k] = it.data[k];
@@ -198,9 +205,17 @@ export function applyRemote(items: { collection: string; id: string; data: Recor
     const key = DATA_KEY[it.collection as ListCollection]; if (!key) continue;
     if (!lists.has(key)) lists.set(key, [...((next as Record<string, unknown>)[key] as Record<string, unknown>[] ?? [])]);
     const arr = lists.get(key)!, idx = arr.findIndex(r => keyOf(it.collection as ListCollection, r) === it.id);
+    // Deleted by the Direction: out of the list, into the bin. Restored: out of the bin, back in the list.
+    if (isBinCollection(it.collection)) {
+      bin ??= [...(next.bin ?? [])];
+      const b = bin.findIndex(x => x.collection === it.collection && x.data.id === it.id);
+      if (b >= 0) bin.splice(b, 1);
+      if (it.data?.deletedAt) { if (idx >= 0) arr.splice(idx, 1); bin.push({ collection: it.collection, data: it.data as BinItem["data"] }); continue; }
+    }
     if (!it.data) { if (idx >= 0) arr.splice(idx, 1); }
     else if (idx >= 0) arr[idx] = it.data; else arr.push(it.data);
   }
+  if (bin) next.bin = bin;
   for (const [key, arr] of lists) (next as Record<string, unknown>)[key] = key === "events" ? arr.sort((a, b) => String(b.at).localeCompare(String(a.at))) : arr;
   setData(next);
 }
@@ -239,13 +254,16 @@ export function setSeriesLetter(l: string) { seriesLetter = l; }
 export const getSeriesLetter = () => seriesLetter;
 const seriesMax = (numbers: string[], prefix: string) => Math.max(0, ...numbers.map(n => { const m = n.startsWith(prefix) ? n.slice(prefix.length).match(/^(\d+)$/) : null; return m ? Number(m[1]) : 0; }));
 /** Old invoices typed in with their original number do not move the automatic numbering; a number they already use is skipped. */
+/** A deleted invoice keeps its number: it is never given again. */
+const binned = (d: Data, c: BinCollection) => (d.bin ?? []).filter(b => b.collection === c).map(b => b.data);
 export function nextInvoiceNumber(d: Data, period: string) {
-  const prefix = `${period}-${seriesLetter}`, used = new Set(d.invoices.map(i => i.number.trim().toLowerCase()));
-  let n = seriesMax(d.invoices.filter(i => !i.legacy).map(i => i.number), prefix) + 1;
+  const all = [...d.invoices, ...binned(d, "invoices")] as { number?: string; legacy?: boolean }[];
+  const prefix = `${period}-${seriesLetter}`, used = new Set(all.map(i => String(i.number ?? "").trim().toLowerCase()));
+  let n = seriesMax(all.filter(i => !i.legacy).map(i => String(i.number ?? "")), prefix) + 1;
   while (used.has((prefix + String(n).padStart(3, "0")).toLowerCase())) n++;
   return prefix + String(n).padStart(3, "0");
 }
-export function nextCreditNumber(d: Data, period: string) { const prefix = `AV-${period}-${seriesLetter}`; return prefix + String(seriesMax(d.credits.map(c => c.number), prefix) + 1).padStart(3, "0"); }
+export function nextCreditNumber(d: Data, period: string) { const prefix = `AV-${period}-${seriesLetter}`; return prefix + String(seriesMax([...d.credits.map(c => c.number), ...binned(d, "credits").map(c => String(c.number ?? ""))], prefix) + 1).padStart(3, "0"); }
 export function emptyClient(): Client { return { id: "", name: "", contact: "", address: "", phone: "", email: "", niu: "", rc: "" }; }
 export function emptyLine(): Line { return { id: uid(), contract: "", designation: "", destination: "", quantity: 1, unitPrice: 0 }; }
 export function accountName(id?: string) { if (!id) return "—"; if (id === "system") return "Système"; return getData().accounts.find(a => a.id === id)?.name ?? "Équipe"; }

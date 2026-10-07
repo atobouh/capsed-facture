@@ -3,12 +3,13 @@ import { Check, FileText, Pencil, Plus, Printer, Undo2 } from "lucide-react";
 import { invoiceTotals } from "../invoice-math";
 import { exportInvoice } from "../receipt-export";
 import { downloadStatement, exportStatementExcel } from "../account-statement";
-import { periodTitle, periodTotals } from "../statement-period";
-import type { StatementPeriod } from "../statement-period";
+import { filterInvoices, periodTotals, statementTitle } from "../statement-period";
+import type { StatementFilter, StatementPeriod } from "../statement-period";
 import { Button, Confirm, CreditPaperView, DateInput, Empty, Field, Modal, MonthStepper, MoreMenu, Notice, PageHead, Paper, Row, SearchBox, Stamp, StatementPaper, StatusChip, TextArea, Timeline, matches, toast, useWide } from "./ui";
 import { ClientAccount, ClientForm, ClientsDirectory } from "./clients";
 import type { OfficeRoute } from "./clients";
 import Composer from "./composer";
+import { ImportPdf } from "./import-pdf";
 import { findIssues } from "./checks";
 import { CreditModal, CreditPicker, PaymentModal } from "./payments";
 import { CLOUD, REQUEST_LABEL, accountName, balance, canBill, canCash, commit, receives, dateFr, dateValid, delivery, dueDateOf, overdueDays, termOf, methodName, monthLabel, money, nowIso, timeFr, todayIso, useData } from "./store";
@@ -21,6 +22,7 @@ export function OfficeScreen({ role, by, route, nav }: { role: Role; by: string;
   switch (route.name) {
     case "compose": return <Composer key={`${route.id}-${route.extra}`} editId={route.id} legacy={route.extra === "ancienne"} clientId={route.extra && !route.extra.startsWith("req:") && route.extra !== "ancienne" ? route.extra : undefined} requestId={route.extra?.startsWith("req:") ? route.extra.slice(4) : undefined} by={by}
       onDone={id => nav({ name: "invoice", id })} onCancel={() => nav(route.id ? { name: "invoice", id: route.id } : { name: "register" })} />;
+    case "import": return canBill(role) ? <ImportPdf by={by} onBack={() => nav({ name: "register" })} onOpen={id => nav({ name: "invoice", id })} /> : <ClientsDirectory role={role} by={by} nav={nav} />;
     case "invoice": return <InvoiceView id={route.id!} role={role} by={by} nav={nav} />;
     case "credit": return <CreditView id={route.id!} nav={nav} />;
     case "clients": return <ClientsDirectory role={role} by={by} nav={nav} />;
@@ -48,7 +50,7 @@ function Register({ role, by, nav }: { role: Role; by: string; nav: Nav }) {
   return <div className={`cx-page${wide ? " cx-page-split" : ""}`}>
     <PageHead title="Factures" sub={closed ? `${monthLabel(month)} est clôturé` : undefined}
       tools={<><MonthStepper value={month} onChange={v => { commit(by, () => ({ month: v })); setSel(null); }} /><SearchBox value={q} onChange={setQ} placeholder="Chercher un client ou un numéro" /></>}
-      actions={<><MoreMenu iconOnly label="Autres actions" items={[{ label: "Ajouter une ancienne facture", hint: "Faite avant l’application, avec son numéro d’origine", onClick: () => nav({ name: "compose", extra: "ancienne" }) }]} /><Button disabled={!eligible || closed} onClick={() => setPicker(true)}>Créer un avoir</Button><Button kind="primary" icon={<Plus size={16} aria-hidden="true" />} disabled={closed} title={closed ? "Ce mois est clôturé" : "Ctrl+N"} onClick={() => nav({ name: "compose" })}>Nouvelle facture</Button></>} />
+      actions={<><MoreMenu iconOnly label="Autres actions" items={[{ label: "Ajouter une ancienne facture", hint: "Faite avant l’application, avec son numéro d’origine", onClick: () => nav({ name: "compose", extra: "ancienne" }) }, { label: "Importer d’anciennes factures (PDF)", hint: "Plusieurs PDF à la fois, vérifiées avant d’être gardées", onClick: () => nav({ name: "import" }) }]} /><Button disabled={!eligible || closed} onClick={() => setPicker(true)}>Créer un avoir</Button><Button kind="primary" icon={<Plus size={16} aria-hidden="true" />} disabled={closed} title={closed ? "Ce mois est clôturé" : "Ctrl+N"} onClick={() => nav({ name: "compose" })}>Nouvelle facture</Button></>} />
     <div className={wide ? "cx-split cx-split-panel" : ""}>
       <section className="cx-col" aria-label={`Factures de ${monthLabel(month)}`}>
         <dl className="cx-strip"><div><dt>Facturé en {monthLabel(month).split(" ")[0]}</dt><dd>{money(sum("total"))}</dd></div><div><dt>Encaissé</dt><dd>{money(sum("received"))}</dd></div><div><dt>Reste à recevoir</dt><dd className="cx-strong">{money(sum("due"))}</dd></div><div><dt>Pas encore remises au client</dt><dd>{undelivered} facture{undelivered > 1 ? "s" : ""}</dd></div></dl>
@@ -170,20 +172,21 @@ function CreditView({ id, nav, pane }: { id: string; nav: Nav; pane?: boolean })
 
 /** Statement for a period. Direction: any client or all; Encaissement: one client. Chosen inline, shown whole. */
 export function Situation({ data, clientId: initial, fixedClient, onBack }: { data: Pick<Data, "clients" | "invoices" | "payments" | "credits" | "format">; clientId: string; fixedClient?: boolean; onBack?: () => void }) {
-  const year = todayIso().slice(0, 4), [clientId, setClientId] = useState(initial), [period, setPeriod] = useState<StatementPeriod>({ from: year + "-01-01", to: todayIso() });
+  const year = todayIso().slice(0, 4), [clientId, setClientId] = useState(initial), [period, setPeriod] = useState<StatementPeriod>({ from: year + "-01-01", to: todayIso() }), [filter, setFilter] = useState<StatementFilter>("toutes");
   const valid = dateValid(period.from) && dateValid(period.to) && period.from <= period.to, client = data.clients.find(c => c.id === clientId);
   return <div className="cx-page">
-    <PageHead back={onBack ? { label: client?.name ?? "Retour", onClick: onBack } : undefined} title={client ? `Relevé de ${client.name}` : "Situation de tous les clients"} sub={valid ? periodTitle(period) : undefined}
-      actions={valid ? <><MoreMenu label="Exporter" items={[{ label: "Excel", onClick: () => exportStatementExcel(data.clients, data.invoices, data.payments, data.credits, clientId, period) }, { label: "CSV", onClick: () => downloadStatement(data.clients, data.invoices, data.payments, data.credits, clientId, period) }]} /><Button kind="primary" icon={<Printer size={18} aria-hidden="true" />} onClick={() => window.print()}>Imprimer</Button></> : undefined} />
+    <PageHead back={onBack ? { label: client?.name ?? "Retour", onClick: onBack } : undefined} title={client ? `Relevé de ${client.name}` : "Situation de tous les clients"} sub={valid ? statementTitle(period, filter) : undefined}
+      actions={valid ? <><MoreMenu label="Exporter" items={[{ label: "Excel", onClick: () => exportStatementExcel(data.clients, data.invoices, data.payments, data.credits, clientId, period, filter) }, { label: "CSV", onClick: () => downloadStatement(data.clients, data.invoices, data.payments, data.credits, clientId, period, filter) }]} /><Button kind="primary" icon={<Printer size={18} aria-hidden="true" />} onClick={() => window.print()}>Imprimer</Button></> : undefined} />
     <div className="cx-toolbar cx-noprint">
       {!fixedClient && <label className="cx-select"><span>Pour</span><select value={clientId} onChange={e => setClientId(e.target.value)}><option value="">Tous les clients</option>{data.clients.filter(c => !c.archived).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
       <label className="cx-month"><span>Du</span><DateInput value={period.from} onChange={v => setPeriod(p => ({ ...p, from: v }))} /></label>
       <label className="cx-month"><span>Au</span><DateInput value={period.to} min={period.from} onChange={v => setPeriod(p => ({ ...p, to: v }))} /></label>
       <div className="cx-quick"><button type="button" className="cx-pill" onClick={() => setPeriod({ from: todayIso().slice(0, 8) + "01", to: todayIso() })}>Ce mois-ci</button><button type="button" className="cx-pill" onClick={() => setPeriod({ from: year + "-01-01", to: todayIso() })}>Cette année</button></div>
     </div>
-    {valid && (() => { const t = periodTotals(clientId ? data.invoices.filter(i => i.client.id === clientId) : data.invoices, data.payments, data.credits, period);
+    <div className="cx-seg cx-noprint" role="group" aria-label="Factures à montrer">{(["toutes", "impayees", "payees"] as const).map(k => <button type="button" key={k} aria-pressed={filter === k} onClick={() => setFilter(k)}>{k === "toutes" ? "Toutes" : k === "impayees" ? "Non payées" : "Payées"}</button>)}</div>
+    {valid && (() => { const shown = filterInvoices(data.invoices, data.payments, data.credits, period, filter), t = periodTotals(clientId ? shown.filter(i => i.client.id === clientId) : shown, data.payments, data.credits, period);
       return <dl className="cx-strip cx-noprint" aria-label="Totaux de la période"><div><dt>Facturé HT</dt><dd>{money(t.ht)}</dd></div><div><dt>TVA</dt><dd>{money(t.tax)}</dd></div><div><dt>Facturé TTC</dt><dd>{money(t.total)}</dd></div><div><dt>Reçu</dt><dd>{money(t.received)}</dd></div><div><dt>Reste à recevoir</dt><dd className="cx-strong">{money(t.due)}</dd></div></dl>; })()}
-    {valid ? <StatementPaper d={data} clientId={clientId} period={period} /> : <Notice tone="bad">La date de début doit être avant la date de fin.</Notice>}
+    {valid ? <StatementPaper d={data} clientId={clientId} period={period} filter={filter} /> : <Notice tone="bad">La date de début doit être avant la date de fin.</Notice>}
   </div>;
 }
 

@@ -110,6 +110,15 @@
 @media print{.receipt-page-number,.doc-page-number{display:none!important}}
 .receipt-title-next{margin-bottom:16px}.receipt-title-next>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
+/* Invoice totals line up with the table: labels start under « Quantité », amounts sit in the « Montant HT » column,
+   centred like the line amounts above them (columns 39 / 17 / 10 / 16 / 18 %). The signature stays centred under them. */
+.receipt-totals-aligned{width:44%}
+.receipt-totals-aligned p{display:grid;grid-template-columns:26fr 18fr;gap:0;align-items:baseline}
+.receipt-totals-aligned p>span{padding-left:7px}
+.receipt-totals-aligned p>strong{text-align:center;padding:0 7px}
+.receipt-totals-aligned .receipt-total{padding:7px 0}
+.receipt-totals-aligned~.receipt-payment .receipt-signature{width:44%}
+
 @font-face{font-family:'Geist';font-style:normal;font-weight:100 900;font-display:swap;src:url(fonts/Geist-Variable.woff2) format('woff2')}
 @font-face{font-family:'Playfair Display';font-style:normal;font-weight:700;font-display:swap;src:url(fonts/PlayfairDisplay-700-latin-ext.woff2) format('woff2');unicode-range:U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF}
 @font-face{font-family:'Playfair Display';font-style:normal;font-weight:700;font-display:swap;src:url(fonts/PlayfairDisplay-700-latin.woff2) format('woff2');unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD}
@@ -910,6 +919,9 @@ button.cx-list-row:hover,label.cx-list-row:hover{background:var(--hover)}
 .cx-updating-bar::after{content:"";position:absolute;inset:0 auto 0 0;width:40%;border-radius:3px;background:#fff;animation:cx-boot-bar 1s ease-in-out infinite}
 @keyframes cx-boot-bar{from{transform:translateX(-100%)}to{transform:translateX(250%)}}
 @media (prefers-reduced-motion:reduce){.cx-updating-bar::after{animation:none;width:100%}}
+.cx-updating-known{width:260px}.cx-updating-known::after{display:none}
+.cx-updating-known b{display:block;height:100%;border-radius:3px;background:#fff;transition:width .3s}
+.cx-updating .cx-updating-small{font-size:13px;color:#E2D3E8;max-width:420px}
 /* Install the site like an app */
 .cx-install{position:fixed;z-index:55;left:12px;right:12px;bottom:calc(84px + env(safe-area-inset-bottom));display:flex;gap:12px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:0 14px 36px #1b18202e;padding:12px 14px;max-width:520px;margin:0 auto}
 .cx-install img{width:44px;height:44px;border-radius:11px;flex:none}
@@ -922,3 +934,7 @@ button.cx-list-row:hover,label.cx-list-row:hover{background:var(--hover)}
 .cx-install-help h3{margin:0 0 4px;font-size:16px}
 .cx-install-help p{margin:4px 0 10px}
 .cx-install-help ul{margin:6px 0 8px;padding-left:18px;display:grid;gap:4px}
+/* Old invoices from their PDFs */
+.cx-dropzone{display:flex;flex-direction:column;align-items:center;gap:10px;margin:16px 0;padding:28px 16px;border:2px dashed var(--line);border-radius:14px;background:var(--surface);color:var(--muted);text-align:center}
+.cx-dropzone p{margin:0}
+.cx-dropzone.cx-drag{border-color:var(--plum);background:var(--plum-tint)}

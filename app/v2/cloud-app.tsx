@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Eye, EyeOff, RefreshCw, Share } from "lucide-react";
 import { useInstall } from "./install";
+import { putOff, tauri, useDesktopUpdate } from "./desktop-update";
 import { Button, Field, Notice, ToastHost } from "./ui";
 import { HOME, HelpPanel, OfficeShell, SignInBrand, SiteShell } from "./app";
 import { OfficeScreen } from "./office";
@@ -65,47 +66,50 @@ function useSilentUpdate() {
   }, []);
 }
 
-// The desktop app downloads its new version by itself (src-tauri/src/update.rs) and installs it when it closes.
-type TauriBridge = { invoke: <T>(cmd: string, args?: Record<string, unknown>) => Promise<T> };
-const tauri = () => (window as unknown as { __TAURI_INTERNALS__?: TauriBridge }).__TAURI_INTERNALS__;
-function useDesktopUpdate() {
-  const [ready, setReady] = useState<DesktopUpdate | null>(null);
-  useEffect(() => {
-    const t = tauri(); if (!t) return;
-    const look = () => t.invoke<DesktopUpdate | null>("update_ready").then(r => setReady(r ?? null)).catch(() => { /* ancienne version */ });
-    const timer = setInterval(look, 60_000); void look();
-    return () => clearInterval(timer);
-  }, []);
-  return ready;
-}
-type DesktopUpdate = { version: string; notes?: string | null; failedBefore?: boolean };
+// The desktop app says when a new version exists (src-tauri/src/update.rs); it is downloaded and installed only on « Installer ».
 const DOWNLOAD = "https://github.com/atobouh/capsed-facture/releases/download/bureau-latest/CAPSED-Bureau-installation.exe";
+const mb = (n: number) => (n / 1048576).toLocaleString("fr-FR", { maximumFractionDigits: 1 });
 function UpdateBar() {
   useSilentUpdate();
-  const desktop = useDesktopUpdate(), [installing, setInstalling] = useState<"" | "running" | "failed">("");
+  const { available: desktop, putOff: hidden } = useDesktopUpdate();
+  const [step, setStep] = useState<"" | "download" | "install" | "failed">(""), [error, setError] = useState(""), [progress, setProgress] = useState<[number, number]>([0, 0]);
+  useEffect(() => {
+    if (step !== "download") return;
+    const t = setInterval(() => void tauri()?.invoke<[number, number]>("update_progress").then(p => setProgress(p)).catch(() => null), 400);
+    return () => clearInterval(t);
+  }, [step]);
   async function install() {
-    setInstalling("running"); syncNow();
-    // A moment for the last changes to be saved on this computer (and sent if online); then the installer closes the app,
-    // installs the new version and opens it again.
-    await new Promise(r => setTimeout(r, 2500));
-    const ok = await tauri()?.invoke<boolean>("install_update_now").catch(() => false);
-    if (!ok) setInstalling("failed");
+    // The last changes are saved on this computer already; they are also sent now if there is internet.
+    syncNow(); setError(""); setProgress([0, 0]); setStep("download");
+    const bridge = tauri();
+    const message = bridge ? await bridge.invoke("install_update").then(() => "", (e: unknown) => String(e || "La mise à jour n’a pas pu se faire.")) : "CAPSED Bureau n’est pas ouvert ici.";
+    if (message === "annulé") setStep("");
+    else if (message) { setError(message); setStep("failed"); }
+    else setStep("install"); // the app is closing; the installer takes over
   }
-  if (desktop && installing) return <div className="cx-updating" role="alertdialog" aria-modal="true" aria-labelledby="updating-title">
+  if (desktop && step) return <div className="cx-updating" role="alertdialog" aria-modal="true" aria-labelledby="updating-title">
     <img src="favicon.svg" alt="" />
-    {installing === "running" ? <>
-      <h2 id="updating-title">Mise à jour de CAPSED Bureau</h2>
-      <p>Version {desktop.version}. L’application se ferme, une petite fenêtre d’installation apparaît, puis CAPSED Bureau se rouvre tout seul. Moins d’une minute ; vos données ne sont pas touchées.</p>
+    {step === "download" ? <>
+      <h2 id="updating-title">Téléchargement de la version {desktop.version}</h2>
+      <p>{progress[1] ? `${Math.min(100, Math.round(progress[0] / progress[1] * 100))} % · ${mb(progress[0])} sur ${mb(progress[1])} Mo` : progress[0] ? `${mb(progress[0])} Mo reçus` : "Connexion…"}</p>
+      <i className={`cx-updating-bar${progress[1] ? " cx-updating-known" : ""}`} aria-hidden="true">{progress[1] ? <b style={{ width: `${Math.min(100, progress[0] / progress[1] * 100)}%` }} /> : null}</i>
+      <p className="cx-updating-small">Ensuite l’application se ferme, une petite fenêtre d’installation apparaît, puis CAPSED Bureau se rouvre tout seul. Vos données ne sont pas touchées.</p>
+      <Button kind="ghost-light" onClick={() => void tauri()?.invoke("cancel_update")}>Annuler</Button>
+    </> : step === "install" ? <>
+      <h2 id="updating-title">Installation de la version {desktop.version}</h2>
+      <p>CAPSED Bureau se rouvre tout seul dans un instant.</p>
       <i className="cx-updating-bar" aria-hidden="true" />
     </> : <>
-      <h2 id="updating-title">La mise à jour n’a pas pu démarrer</h2>
-      <p>Rien n’est perdu. Installez la version {desktop.version} à la main : téléchargez <b>{DOWNLOAD}</b>, ouvrez le fichier, puis rouvrez CAPSED Bureau.</p>
-      <Button kind="primary" onClick={() => setInstalling("")}>Continuer à travailler</Button>
+      <h2 id="updating-title">La mise à jour n’a pas pu se faire</h2>
+      <p>{error} Rien n’est perdu : vous continuez sur la version actuelle.</p>
+      <p className="cx-updating-small">Pour l’installer à la main : téléchargez <b>{DOWNLOAD}</b>, ouvrez le fichier, puis rouvrez CAPSED Bureau.</p>
+      <Button kind="primary" onClick={() => setStep("")}>Continuer à travailler</Button>
     </>}
   </div>;
-  if (desktop) return <div className={`cx-update-bar${desktop.failedBefore ? " cx-update-failed" : ""}`} role="status">
-    <span>{desktop.failedBefore ? `La mise à jour ${desktop.version} ne s’est pas installée la dernière fois.` : `Nouvelle version ${desktop.version} prête. Elle s’installe quand vous fermez CAPSED Bureau.`}{desktop.notes ? <small>Nouveautés : {desktop.notes}</small> : null}</span>
-    <Button kind="primary" onClick={install}>{desktop.failedBefore ? "Réessayer" : "Installer maintenant"}</Button></div>;
+  if (desktop && !hidden) return <div className={`cx-update-bar${desktop.failedBefore ? " cx-update-failed" : ""}`} role="status">
+    <span>{desktop.failedBefore ? `La mise à jour ${desktop.version} ne s’est pas installée la dernière fois.` : `Nouvelle version ${desktop.version} disponible.`}{desktop.notes ? <small>Nouveautés : {desktop.notes}</small> : null}</span>
+    <Button kind="quiet" onClick={putOff}>Plus tard</Button>
+    <Button kind="primary" onClick={install}>{desktop.failedBefore ? "Réessayer" : "Installer"}</Button></div>;
   return null;
 }
 

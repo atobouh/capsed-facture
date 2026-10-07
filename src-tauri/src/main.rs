@@ -6,7 +6,7 @@ mod update;
 
 use std::time::Duration;
 use tauri::webview::PageLoadEvent;
-use tauri::{AppHandle, Manager, RunEvent, Runtime};
+use tauri::{AppHandle, Manager, Runtime};
 
 /// The main window is ready: show it (maximized, in front) and close the small opening card.
 fn reveal<R: Runtime>(app: &AppHandle<R>) {
@@ -25,7 +25,7 @@ fn reveal<R: Runtime>(app: &AppHandle<R>) {
 fn main() {
     tauri::Builder::default()
         .manage(update::Updates::default())
-        .invoke_handler(tauri::generate_handler![update::update_ready, update::install_update_now])
+        .invoke_handler(tauri::generate_handler![update::update_ready, update::update_progress, update::install_update, update::cancel_update])
         // Opening the app a second time brings the open window to the front instead of a second copy.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             reveal(app);
@@ -50,11 +50,6 @@ fn main() {
             update::start(app.handle());
             Ok(())
         })
-        .build(tauri::generate_context!())
-        .expect("CAPSED Bureau n'a pas pu démarrer")
-        .run(|app, event| {
-            if let RunEvent::Exit = event {
-                update::on_exit(app);
-            }
-        });
+        .run(tauri::generate_context!())
+        .expect("CAPSED Bureau n'a pas pu démarrer");
 }

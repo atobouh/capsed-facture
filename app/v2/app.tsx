@@ -8,6 +8,7 @@ import { ResponsableScreen, pendingCount } from "./responsable";
 import type { RRoute } from "./responsable";
 import { CLOUD, ROLE_LABEL, ago, canBill, canCash, getData, receives, timeFr, useData } from "./store";
 import { FreshnessBar, SyncLine } from "./freshness";
+import { showAgain, useDesktopUpdate } from "./desktop-update";
 import type { Account, Role } from "./store";
 
 const SESSION = "capsed-v2-session";
@@ -157,11 +158,12 @@ export function HelpPanel({ role, route, onClose }: { role: Role; route: string;
   // The full office mode reuses the Facturation and Encaissement help.
   const keys: Role[] = role === "bureau" ? ["facturation", "encaissement"] : [role];
   const [title, steps] = keys.map(k => HELP[`${k}:${route}`]).find(Boolean) ?? HELP[`${keys[0]}:${HOME[keys[0]].name}`];
-  const [manual, setManual] = useState(false), page = GUIDE_PAGE[role];
+  const [manual, setManual] = useState(false), page = GUIDE_PAGE[role], update = useDesktopUpdate();
   // The full manual (guide/): inside the site and the office app, so it opens even without internet; the demo links to it online.
   const openManual = () => { if (CLOUD) setManual(true); else window.open(`${GUIDE_ONLINE}${page}.html`, "_blank", "noopener"); };
   if (manual) return <ManualOverlay src={`guide/${page}.html`} onClose={() => { setManual(false); onClose(); }} />;
   return <Modal title={title} subtitle="Les gestes essentiels" onClose={onClose} actions={<><Button kind="quiet" onClick={openManual}>Manuel complet</Button><Button kind="primary" onClick={onClose}>J’ai compris</Button></>}>
+    {update.available && update.putOff && <Notice tone="info" title={`Nouvelle version ${update.available.version} disponible`}>Vous l’avez remise à plus tard. <Button kind="link" onClick={() => { showAgain(); onClose(); }}>L’installer maintenant</Button></Notice>}
     <ol className="cx-help">{steps.map(([t, s], i) => <li key={t}><span>{i + 1}</span><div><h3>{t}</h3><p>{s}</p></div></li>)}</ol>
   </Modal>;
 }

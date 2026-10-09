@@ -188,11 +188,13 @@ function referenceAt(lines: TextLine[], i: number): string {
   if (same) return looks(same) ? same : "";
   // The label alone: its words (« REFERENCE », « FACTURE ») give the width of the box; the value is under it.
   const label = l.items.slice(at).filter((it, k, all) => k === 0 || (REF_LABEL.test(joinItems(all.slice(0, k + 1))) && !/\d/.test(it.s)));
-  const from = label[0].x - 60, to = Math.max(...label.map(it => it.x + it.w)) + 60;
+  // Word gives columns approximate positions: the box is taken wide.
+  const from = label[0].x - 60, to = Math.max(...label.map(it => it.x + it.w)) + 120;
   for (let k = i + 1; k <= i + 3 && k < lines.length && lines[k].page === l.page; k++) {
     // Another box's label on the same line (« A FACTURER ») is not part of the reference.
-    const under = joinItems(lines[k].items.filter(it => it.x + it.w > from && it.x < to && !OTHER_LABEL.test(it.s)));
-    if (under && looks(under)) return under;
+    const under = joinItems(lines[k].items.filter(it => it.x + it.w > from && it.x <= to && !OTHER_LABEL.test(it.s)));
+    // The first text under the label is the reference, or there is none: never the client's address further down.
+    if (under) return looks(under) && /[\w.]\s*[/-]\s*\w/.test(under) ? under : "";
   }
   return "";
 }

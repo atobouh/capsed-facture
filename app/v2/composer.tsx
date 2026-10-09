@@ -126,7 +126,7 @@ export default function Composer({ editId, clientId, requestId, by, validated, l
             <div className="cx-form-grid">
               {legacy && !editing && <Field label="Numéro d’origine" required hint="Tel qu’il est imprimé sur la facture."><TextInput value={draft.number} onChange={v => set({ number: v })} placeholder="Ex. 2026-06-015" autoFocus={!!chosen} /></Field>}
               <Field label="Date de facture" required hint={legacy ? "La date d’origine. Les mois clôturés restent protégés." : editing ? "La date reste dans le mois du numéro." : "Les mois clôturés restent protégés."}><DateInput value={draft.date} onChange={v => set({ date: v })} /></Field>
-              {(legacy || draft.reference) && <Field label="Référence de la facture" optional hint="Telle qu’elle est imprimée. Vide : le numéro sert de référence."><TextInput value={draft.reference} onChange={v => set({ reference: v })} placeholder="Ex. N/Réf/0003/26/Fact/CAPSED" /></Field>}
+              {draft.reference && <Field label="Référence de la facture" hint="Reprise telle quelle du document importé. Elle ne se modifie pas."><input className="cx-input" value={draft.reference} readOnly aria-readonly="true" /></Field>}
               <Field label="Numéro de bon de commande" optional><TextInput value={draft.purchaseOrder} onChange={v => set({ purchaseOrder: v })} placeholder="Ex. BC-2026-014" /></Field>
             </div>
             <Field label="Type de facture" required><Choice value={draft.taxMode} onChange={v => set({ taxMode: v, taxRate: v === "ttc" && !draft.taxRate ? 19.25 : draft.taxRate })} options={[{ value: "ht", label: "Facture hors taxe", sub: "Sans TVA" }, { value: "ttc", label: "Facture TTC", sub: "La TVA s’ajoute après la remise" }]} /></Field>

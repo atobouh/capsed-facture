@@ -38,6 +38,8 @@ export default function Composer({ editId, clientId, requestId, by, validated, l
   const number = editing?.number ?? (legacy ? draft.number.trim() || "—" : dateValid(draft.date) ? nextInvoiceNumber(d, period) : "—");
   const request = d.requests.find(r => r.id === requestId);
 
+  // An old invoice keeps its quantities as printed, volumes in m³ included (up to 3 decimals). New ones use whole quantities.
+  const quantityOk = (q: number) => legacy ? Number.isFinite(q) && Math.abs(q * 1000 - Math.round(q * 1000)) < 1e-6 : Number.isSafeInteger(q);
   function check(upTo: number): [number, string] | null {
     if (!chosen) return [0, "Choisissez un client."];
     if (chosen.archived && !editing) return [0, "Ce client est archivé. Réactivez-le avant de créer une facture."];
@@ -54,7 +56,7 @@ export default function Composer({ editId, clientId, requestId, by, validated, l
     if (editing && draft.clientId !== editing.client.id && (d.payments.some(p => p.invoiceId === editing.id && !p.cancelledAt) || d.credits.some(c => c.invoiceId === editing.id))) return [0, "Cette facture a des paiements ou des avoirs : conservez le même client."];
     if (upTo < 1) return null;
     const lines = draft.lines.filter(l => l.designation.trim());
-    if (!lines.length || draft.lines.some(l => !l.designation.trim() && l.unitPrice > 0) || lines.some(l => !Number.isSafeInteger(l.quantity) || l.quantity <= 0 || !Number.isSafeInteger(l.unitPrice) || l.unitPrice < 0)) return [1, "Chaque article doit avoir une désignation, une quantité entière positive et un prix entier."];
+    if (!lines.length || draft.lines.some(l => !l.designation.trim() && l.unitPrice > 0) || lines.some(l => !quantityOk(l.quantity) || l.quantity <= 0 || !Number.isSafeInteger(l.unitPrice) || l.unitPrice < 0)) return [1, legacy ? "Chaque article doit avoir une désignation, une quantité positive (jusqu’à 3 décimales, un volume par exemple) et un prix entier." : "Chaque article doit avoir une désignation, une quantité entière positive et un prix entier."];
     if (upTo < 2) return null;
     if (!Number.isFinite(draft.taxRate) || draft.taxRate < 0 || draft.taxRate > 100 || !Number.isFinite(draft.discountRate) || draft.discountRate < 0 || draft.discountRate > 100) return [2, "La TVA et la remise doivent être comprises entre 0 et 100 %."];
     if (!Number.isSafeInteger(draft.paymentTerm) || draft.paymentTerm < 0 || draft.paymentTerm > 365) return [2, "Le délai de paiement doit être un nombre de jours entre 0 et 365."];
@@ -132,13 +134,13 @@ export default function Composer({ editId, clientId, requestId, by, validated, l
         </>}
         {step === 1 && <div className="cx-card">
           <div className="cx-section-title"><h2>Articles et prestations</h2><span className="cx-muted">{chosen?.name}</span></div>
-          {draft.lines.some(l => !Number.isInteger(l.quantity)) && <Notice tone="warn">Cette ancienne facture contient une quantité décimale. Choisissez une quantité entière ; le montant sera recalculé et l’ancienne version conservée.</Notice>}
+          {!legacy && draft.lines.some(l => !Number.isInteger(l.quantity)) && <Notice tone="warn">Cette ancienne facture contient une quantité décimale. Choisissez une quantité entière ; le montant sera recalculé et l’ancienne version conservée.</Notice>}
           {draft.lines.map((l, k) => <fieldset key={l.id} className="cx-line">
             <legend>Article {k + 1}</legend>
             <div className="cx-line-grid">
               <Field label="Désignation" required hint="Plusieurs lignes possibles (ex. numéros de conteneurs)."><TextArea rows={3} value={l.designation} onChange={v => setLine(l.id, { designation: v })} placeholder={"Traitement phytosanitaire\nConteneur MSNU 923173-6"} /></Field>
               <Field label="Destination" optional><TextArea rows={3} value={l.destination} onChange={v => setLine(l.id, { destination: v })} placeholder={"Kolkata\nNorfolk"} /></Field>
-              <Field label="Quantité" required><NumberInput value={l.quantity} onChange={v => setLine(l.id, { quantity: v })} placeholder="1" /></Field>
+              <Field label="Quantité" required><NumberInput value={l.quantity} onChange={v => setLine(l.id, { quantity: v })} placeholder="1" decimals={legacy} /></Field>
               <Field label="Prix unitaire hors taxe" required><MoneyInput value={l.unitPrice} onChange={v => setLine(l.id, { unitPrice: v })} /></Field>
               {(l.contract || showContract[l.id]) && <Field label="Référence de contrat" optional wide><TextInput value={l.contract} onChange={v => setLine(l.id, { contract: v })} placeholder="Ex. CTE1207111" /></Field>}
             </div>

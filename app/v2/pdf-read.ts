@@ -11,7 +11,7 @@ export type ReadInvoice = {
   number: string; date: string; client: Partial<Client>; purchaseOrder: string; payment: string;
   lines: Line[]; taxMode: "ht" | "ttc"; taxRate: number; discountRate: number; advance: number;
   /** The totals printed on the PDF, to compare with what the lines give. */
-  printed: { ht?: number; tax?: number; ttc?: number };
+  printed: { ht?: number; tax?: number; ttc?: number; total?: number };
   warnings: string[];
 };
 
@@ -26,17 +26,20 @@ function loadPdfJs() {
 }
 
 /** The text of a PDF, as lines from top to bottom, page after page. */
-export async function pdfLines(data: ArrayBuffer): Promise<TextLine[]> {
+export async function pdfLines(data: ArrayBuffer, onPage?: (page: number, pages: number) => void): Promise<TextLine[]> {
   const lib = await loadPdfJs(), doc = await lib.getDocument({ data: new Uint8Array(data), isEvalSupported: false }).promise;
   const items: Item[] = [];
   try {
     for (let n = 1; n <= doc.numPages; n++) {
+      onPage?.(n, doc.numPages);
       const content = await (await doc.getPage(n)).getTextContent();
-      for (const it of content.items) if (it.str?.trim() && it.transform) items.push({ s: it.str, x: it.transform[4], y: it.transform[5], w: it.width ?? 0, page: n });
+      for (const it of content.items) { const str = clean(it.str ?? ""); if (str.trim() && it.transform) items.push({ s: str, x: it.transform[4], y: it.transform[5], w: it.width ?? 0, page: n }); }
     }
   } finally { await doc.destroy(); }
   return toLines(items);
 }
+/** Invisible characters some exports (Google Docs) put around every word. */
+export const clean = (s: string) => s.replace(/[\u200b-\u200d\u2060\ufeff]/g, "");
 export function toLines(items: Item[]): TextLine[] {
   const sorted = [...items].sort((a, b) => a.page - b.page || b.y - a.y || a.x - b.x), lines: TextLine[] = [];
   for (const it of sorted) {
@@ -63,6 +66,14 @@ function trailingAmounts(text: string): number[] {
   return out;
 }
 const lastAmount = (text: string) => trailingAmounts(text).at(-1);
+/** A quantity as printed: « 3 », « 03 », « 56,077 » (m³), « 150 ,246 », « 1 500 ». Decimals are kept. */
+export function quantityOf(token: string): number | null {
+  const t = token.replace(/[\s\u00a0\u202f]/g, "").replace(/\(.*\)$/, "");
+  if (/^\d+,\d+$/.test(t)) return Number(t.replace(",", "."));
+  if (/^\d+\.\d{1,2}$|^\d+\.\d{4,}$/.test(t)) return Number(t);
+  if (/^\d{1,3}(\.\d{3})+$|^\d+$/.test(t)) return Number(t.replace(/\./g, ""));
+  return null;
+}
 const MONTHS = ["janvier", "fevrier", "mars", "avril", "mai", "juin", "juillet", "aout", "septembre", "octobre", "novembre", "decembre"];
 const plain = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 const iso = (y: number, m: number, d: number) => { const t = new Date(Date.UTC(y, m - 1, d)); return t.getUTCFullYear() === y && t.getUTCMonth() === m - 1 && t.getUTCDate() === d ? `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}` : ""; };
@@ -78,11 +89,11 @@ export function dateOf(text: string): string {
 const NUMBER_TOKEN = /\b([A-Z]{0,4}\d[\w]*(?:[-/][\w]+)+|\d{3,})\b/i;
 
 // ——— The invoice ———
-type Col = "designation" | "destination" | "quantity" | "unitPrice" | "amount";
-const HEADER: [Col, RegExp][] = [["designation", /d[ée]signation|libell[ée]|description|prestation/i], ["destination", /destination|lieu/i], ["quantity", /quantit[ée]|qt[ée]|nombre|volume/i], ["unitPrice", /p\.?\s*u\b|prix/i], ["amount", /montant|total/i]];
+type Col = "contract" | "container" | "designation" | "destination" | "quantity" | "unitPrice" | "amount";
+const HEADER: [Col, RegExp][] = [["contract", /contrat/i], ["container", /conteneur|container/i], ["designation", /d[ée]signation|libell[ée]|description|prestation/i], ["destination", /destination|lieu/i], ["quantity", /quantit[ée]|qt[ée]|nombre|volume/i], ["unitPrice", /p\.?\s*u\b|prix/i], ["amount", /montant|total/i]];
 const isHeader = (l: TextLine) => /d[ée]signation|description/i.test(l.text) && /(montant|total|prix)/i.test(l.text);
 const END = /^(montant\s*(ht|de\s*d[ée]part|hors)|total|sous[-\s]?total|remise|tva\b|net\s*[àa]\s*payer|arr[êe]t[ée]e)/i;
-const FOOTER = /merci pour votre confiance|\bcapital\b|\bcnps\b|page \d+\s*\/\s*\d+/i;
+const FOOTER = /merci pour votre confiance|remercions de votre confiance|\bcapital\b|\bcnps\b|page \d+\s*\/\s*\d+/i;
 
 function readTable(lines: TextLine[], warnings: string[]): Line[] {
   const rows: { y: number; page: number; cells: Record<Col, string[]>; amount?: number }[] = [], loose: { line: TextLine; cells: Record<Col, string[]> }[] = [];
@@ -98,12 +109,14 @@ function readTable(lines: TextLine[], warnings: string[]): Line[] {
     if (!cols) continue;
     if (i > 0 && l.page !== lines[i - 1].page) { cols = null; continue; } // a new page: wait for its own header
     if (END.test(l.text) || FOOTER.test(l.text)) { cols = null; continue; }
-    const cells = { designation: [], destination: [], quantity: [], unitPrice: [], amount: [] } as Record<Col, string[]>;
-    const desig = cols.find(c => c.col === "designation"), firstOther = Math.min(...cols.filter(c => c !== desig).map(c => c.x));
+    // A second header line such as « (M³) » under « VOLUME ».
+    if (l.items.every(it => /^\(.*\)$/.test(it.s.trim()))) continue;
+    const cells = { contract: [], container: [], designation: [], destination: [], quantity: [], unitPrice: [], amount: [] } as Record<Col, string[]>;
+    const desig = cols.find(c => c.col === "designation"), right = cols.filter(c => desig && c.x > desig.x), nextRight = Math.min(...right.map(c => c.x));
     for (const it of l.items) {
       const cx = it.x + it.w / 2, near = cols.reduce((a, b) => Math.abs(b.x - cx) < Math.abs(a.x - cx) ? b : a);
       // The description is left-aligned and can be long: text starting in its column stays there.
-      const inDesignation = !!desig && it.x < (desig.x + firstOther) / 2 && cx < firstOther;
+      const inDesignation = !!desig && near.x > desig.x && it.x < (desig.x + nextRight) / 2 && cx < nextRight;
       cells[inDesignation ? "designation" : near.col].push(it.s.trim());
     }
     const amount = amountOf(cells.amount.join(" "));
@@ -118,11 +131,11 @@ function readTable(lines: TextLine[], warnings: string[]): Line[] {
   return rows.map(r => {
     const parts = [{ y: r.y, cells: r.cells }, ...((r as { extra?: { y: number; cells: Record<Col, string[]> }[] }).extra ?? [])].sort((a, b) => b.y - a.y);
     const text = (c: Col) => parts.map(p => p.cells[c].join(" ")).filter(Boolean);
-    let designation = text("designation"), contract = "";
+    let designation = [...text("designation"), ...text("container")], contract = text("contract").join(" ");
     designation = designation.filter(t => { const m = t.match(/^contrat\s*:?\s*(.+)$/i); if (m) { contract = m[1].trim(); return false; } return true; });
-    const amount = r.amount!, q = amountOf(text("quantity").join(" ")), pu = amountOf(text("unitPrice").join(" "));
+    const amount = r.amount!, q = quantityOf(text("quantity").join(" ")), pu = amountOf(text("unitPrice").join(" "));
     let quantity = q && q > 0 ? q : pu ? Math.max(1, Math.round(amount / pu)) : 1, unitPrice = pu ?? Math.round(amount / quantity);
-    if (quantity * unitPrice !== amount) {
+    if (Math.round(quantity * unitPrice) !== amount) {
       warnings.push(`Article « ${(designation[0] ?? "").slice(0, 40)} » : ${quantity} × ${unitPrice} ne fait pas ${amount}. Vérifiez la quantité et le prix.`);
       if (quantity > 0 && amount % quantity === 0) unitPrice = amount / quantity; else { quantity = 1; unitPrice = amount; }
     }
@@ -147,7 +160,7 @@ function blockUnder(lines: TextLine[], i: number, item: Item, max = 9) {
   const out: string[] = [], right = lines[i].items.find(it => it.x > item.x + item.w + 40)?.x ?? Infinity;
   let lastY = lines[i].y;
   for (let k = i + 1; k < lines.length && out.length < max && lines[k].page === lines[i].page; k++) {
-    if (isHeader(lines[k]) || lastY - lines[k].y > 32) break; // the block ends at a wide gap or at the table
+    if (isHeader(lines[k]) || lastY - lines[k].y > (out.length ? 32 : 80)) break; // the block ends at a wide gap or at the table
     const parts = lines[k].items.filter(it => it.x >= item.x - 25 && it.x < right - 5);
     if (!parts.length) continue; // a line of the other column only
     out.push(joinItems(parts)); lastY = lines[k].y;
@@ -165,8 +178,9 @@ export function readInvoice(lines: TextLine[]): ReadInvoice {
       const m = t.match(/(?:facture\s*n[°o]|n[°o]\s*(?:de\s*)?facture|r[ée]f[ée]rence)\s*:?\s*([A-Z0-9][\w\-/.]*\d[\w\-/]*)/i);
       if (m) number = m[1];
       else if (/n[°o]\s*(de\s*)?facture/i.test(t) && next) {
-        const label = l.items.find(it => /n[°o]/i.test(it.s)), under = label ? next.items.filter(it => Math.abs(it.x + it.w / 2 - (label.x + label.w / 2)) < 60).map(it => it.s).join(" ") : next.text;
-        number = under.match(NUMBER_TOKEN)?.[1] ?? "";
+        const label = l.items.find(it => /n[°o]/i.test(it.s)), under = label ? next.items.filter(it => Math.abs(it.x + it.w / 2 - (label.x + label.w / 2)) < 60 && !dateOf(it.s)).map(it => it.s).join(" ") : next.text;
+        const whole = under.trim();
+        number = whole.length <= 20 && /\d/.test(whole) && !dateOf(whole) ? whole : under.match(NUMBER_TOKEN)?.[1] ?? "";
       }
     }
     if (!date && /\bdate\b/i.test(t)) {
@@ -176,9 +190,9 @@ export function readInvoice(lines: TextLine[]): ReadInvoice {
     }
     if (!date) { const m = plain(t).match(/\ble\s+(\d.*)$/); if (m && /douala|yaounde|,\s*le\b/.test(plain(t))) date = dateOf(m[1]); }
     if (!client.name) {
-      const label = l.items.find(it => /factur[ée]\s*[àa](?![a-z])|^\s*client\s*:?|^\s*doit\s*:?|adress[ée]e?\s*[àa](?![a-z])/i.test(it.s));
+      const label = l.items.find(it => /factur[ée]\s*[àa](?![a-z])|(^|\s)[àa]\s+facturer\b|^\s*client\s*:?|^\s*doit\s*:?|adress[ée]e?\s*[àa](?![a-z])/i.test(it.s));
       if (label) {
-        const after = label.s.replace(/.*?(factur[ée]\s*[àa]|client|doit|adress[ée]e?\s*[àa])\s*:?/i, "").trim();
+        const after = (label.s.match(/(?:factur[ée]\s*[àa](?![a-z])|^\s*client|^\s*doit|adress[ée]e?\s*[àa](?![a-z]))\s*:?\s*(.+)$/i)?.[1] ?? "").trim();
         const block = after ? [after, ...blockUnder(body, i, label, 8)] : blockUnder(body, i, label);
         if (block[0]) {
           client.name = block[0];
@@ -210,11 +224,12 @@ export function readInvoice(lines: TextLine[]): ReadInvoice {
     else if (/\btva\b/i.test(t)) { printed.tax = v; const r = t.match(/(\d+(?:[.,]\d+)?)\s*%/); if (r) rate = Number(r[1].replace(",", ".")); }
     else if (/total\s*t\.?t\.?c|montant\s*t\.?t\.?c|net\s*[àa]\s*payer/i.test(t)) printed.ttc = v;
     else if (/(montant|total)\s*(h\.?t|hors\s*taxe)/i.test(t) || /montant\s*ht\s*apr[èe]s\s*remise/i.test(t)) printed.ht = v;
+    else if (/^total\b/i.test(t)) printed.total = v;
   }
 
   let items = readTable(lines, warnings);
   if (!items.length) items = readLooseRows(body);
-  const ht = printed.ht ?? (printed.ttc !== undefined && printed.tax !== undefined ? printed.ttc - printed.tax : undefined) ?? printed.ttc;
+  const ht = printed.ht ?? (printed.ttc !== undefined && printed.tax !== undefined ? printed.ttc - printed.tax : undefined) ?? printed.ttc ?? printed.total;
   if (!items.length && ht) { items = [{ ...emptyLine(), id: uid(), designation: "Prestations (à détailler)", quantity: 1, unitPrice: (subtotal ?? ht) }]; warnings.push("Les articles n’ont pas été reconnus : une seule ligne reprend le montant. Détaillez-les si besoin."); }
   const taxMode: "ht" | "ttc" = printed.tax && printed.tax > 0 ? "ttc" : "ht";
   const base = subtotal ?? items.reduce((n, l) => n + l.quantity * l.unitPrice, 0);
@@ -230,6 +245,21 @@ export function readInvoice(lines: TextLine[]): ReadInvoice {
     const t = invoiceTotals(draft);
     if (printed.ttc !== undefined && taxMode === "ttc" && t.ttc !== printed.ttc) warnings.push(`Le total TTC calculé (${t.ttc}) diffère de celui du PDF (${printed.ttc}).`);
     else if (printed.ht !== undefined && t.ht !== printed.ht) warnings.push(`Le montant HT calculé (${t.ht}) diffère de celui du PDF (${printed.ht}).`);
+    else if (printed.ttc === undefined && printed.ht === undefined && printed.total !== undefined && t.ttc !== printed.total) warnings.push(`Le total calculé (${t.ttc}) diffère de celui du document (${printed.total}).`);
   }
   return { number, date, client, purchaseOrder, payment, ...draft, printed, warnings };
+}
+
+/** One file can hold many invoices (one after the other, often one per page): it is cut at each title « FACTURE ».
+ *  A page without its own title continues the invoice before it. */
+const TITLE = /^facture(\s+(ttc|ht|hors\s+taxe))?$/i;
+export function splitInvoices(lines: TextLine[]): TextLine[][] {
+  const groups: TextLine[][] = [];
+  for (const l of lines) {
+    if (TITLE.test(l.text.trim()) || !groups.length) groups.push([]);
+    groups.at(-1)!.push(l);
+  }
+  // Text before the first title (a letterhead) belongs to the first invoice.
+  if (groups.length > 1 && !TITLE.test(groups[0][0].text.trim()) && groups[0].length < 8 && !groups[0].some(isHeader)) groups.splice(0, 2, [...groups[0], ...groups[1]]);
+  return groups;
 }

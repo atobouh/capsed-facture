@@ -814,3 +814,42 @@ button.cx-list-row:hover,label.cx-list-row:hover{background:var(--hover)}
 .cx-dropzone{display:flex;flex-direction:column;align-items:center;gap:10px;margin:16px 0;padding:28px 16px;border:2px dashed var(--line);border-radius:14px;background:var(--surface);color:var(--muted);text-align:center}
 .cx-dropzone p{margin:0}
 .cx-dropzone.cx-drag{border-color:var(--plum);background:var(--plum-tint)}
+/* Import: drop window, file cards, steps, tiles */
+.cx-dropzone-big{width:100%;min-height:230px;justify-content:center;cursor:pointer;border-width:2px;font:inherit;transition:border-color .15s,background .15s}
+.cx-dropzone-big:hover,.cx-dropzone-big:focus-visible{border-color:var(--plum);background:var(--plum-tint)}
+.cx-drop-icon{display:grid;place-items:center;width:64px;height:64px;border-radius:18px;background:var(--plum-soft);color:var(--plum)}
+.cx-drop-title{font-size:18px;font-weight:600;color:var(--ink);margin:0}
+.cx-drop-sub{margin:0;font-size:13px}
+.cx-drop-kinds{display:flex;gap:8px;margin-top:4px}
+.cx-file-badge{display:inline-grid;place-items:center;min-width:44px;height:24px;padding:0 8px;border-radius:6px;font-size:11px;font-weight:700;letter-spacing:.03em;color:#fff}
+.cx-file-pdf{background:#B4322B}
+.cx-file-doc{background:#2B5797}
+.cx-drop-steps{list-style:none;margin:16px 0 0;padding:0;display:grid;gap:8px;font-size:14px;color:var(--ink-2)}
+.cx-drop-steps strong{color:var(--ink)}
+.cx-import-steps{list-style:none;display:flex;flex-wrap:wrap;gap:8px 20px;margin:0 0 16px;padding:0;font-size:14px;color:var(--muted)}
+.cx-import-steps li{display:flex;align-items:center;gap:8px}
+.cx-import-steps span{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--line-soft);font-size:12px;font-weight:600}
+.cx-import-steps .cx-now{color:var(--ink);font-weight:600}
+.cx-import-steps .cx-now span{background:var(--plum);color:#fff}
+.cx-import-steps .cx-done span{background:#E6F2EA;color:#1F6B42}
+.cx-file-cards{display:grid;gap:10px;margin:0 0 16px}
+.cx-file-card{display:flex;align-items:center;gap:14px;padding:12px 16px;background:var(--surface);border:1px solid var(--line);border-radius:12px}
+.cx-file-main{flex:1;min-width:0;display:grid;gap:4px}
+.cx-file-main strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cx-file-main small{color:var(--muted);font-size:13px}
+.cx-file-failed .cx-file-main small{color:#A33A2F}
+.cx-file-bar{display:block;height:4px;border-radius:4px;background:var(--line-soft);overflow:hidden}
+.cx-file-bar b{display:block;height:100%;background:var(--plum);transition:width .2s}
+.cx-file-done .cx-file-bar b{background:#2E8B57}
+.cx-file-state{color:#2E8B57;display:grid;place-items:center;width:24px}
+.cx-spin{animation:cx-spin 1s linear infinite;color:var(--plum)}
+@keyframes cx-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.cx-spin{animation:none}}
+.cx-import-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:0 0 14px}
+.cx-import-tiles div{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.cx-import-tiles dt{font-size:13px;color:var(--muted)}
+.cx-import-tiles dd{margin:2px 0 0;font-size:24px;font-weight:600;font-variant-numeric:tabular-nums}
+.cx-import-tiles .cx-tone-good dd{color:#1F6B42}
+.cx-import-tiles .cx-tone-warn dd{color:#8A5A12}
+.cx-new-clients{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.cx-import .cx-list-main small svg{vertical-align:-1px}

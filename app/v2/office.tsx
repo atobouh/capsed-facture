@@ -9,7 +9,7 @@ import { Button, Confirm, CreditPaperView, DateInput, Empty, Field, Modal, Month
 import { ClientAccount, ClientForm, ClientsDirectory } from "./clients";
 import type { OfficeRoute } from "./clients";
 import Composer from "./composer";
-import { ImportPdf } from "./import-pdf";
+import { ImportDropDialog, ImportPdf, queueFiles } from "./import-pdf";
 import { OfficeInvoiceReport } from "./invoice-report";
 import { findIssues } from "./checks";
 import { CreditModal, CreditPicker, PaymentModal } from "./payments";
@@ -38,7 +38,7 @@ function ClientStatement({ id, nav }: { id: string; nav: Nav }) { const d = useD
 
 function Register({ role, by, nav }: { role: Role; by: string; nav: Nav }) {
   const d = useData(), month = d.month, closed = d.closedMonths.includes(month), wide = useWide(1360);
-  const [q, setQ] = useState(""), [picker, setPicker] = useState(false), [credit, setCredit] = useState<string | null>(null), [closing, setClosing] = useState(false), [sel, setSel] = useState<{ kind: "invoice" | "credit"; id: string } | null>(null);
+  const [q, setQ] = useState(""), [picker, setPicker] = useState(false), [credit, setCredit] = useState<string | null>(null), [closing, setClosing] = useState(false), [importing, setImporting] = useState(false), [sel, setSel] = useState<{ kind: "invoice" | "credit"; id: string } | null>(null);
   const bills = d.invoices.filter(i => i.date.startsWith(month)).sort((a, b) => b.number.localeCompare(a.number)), notes = d.credits.filter(c => c.date.startsWith(month)).sort((a, b) => b.number.localeCompare(a.number));
   const shownBills = bills.filter(i => matches(q, i.number, i.client.name)), shownNotes = notes.filter(c => matches(q, c.number, c.client.name, c.invoiceNumber));
   const eligible = d.invoices.some(i => { const b = balance(i, d.payments, d.credits); return b.credited < b.total; });
@@ -52,7 +52,7 @@ function Register({ role, by, nav }: { role: Role; by: string; nav: Nav }) {
   return <div className={`cx-page${wide ? " cx-page-split" : ""}`}>
     <PageHead title="Factures" sub={closed ? `${monthLabel(month)} est clôturé` : undefined}
       tools={<><MonthStepper value={month} onChange={v => { commit(by, () => ({ month: v })); setSel(null); }} /><SearchBox value={q} onChange={setQ} placeholder="Chercher un client ou un numéro" /></>}
-      actions={<><MoreMenu iconOnly label="Autres actions" items={[{ label: "Ajouter une ancienne facture", hint: "Faite avant l’application, avec son numéro d’origine", onClick: () => nav({ name: "compose", extra: "ancienne" }) }, { label: "Situation de facturation", hint: "Factures TTC et hors taxe d’une période, à imprimer ou exporter", onClick: () => nav({ name: "report" }) }, { label: "Importer d’anciennes factures (PDF)", hint: "Plusieurs PDF à la fois, vérifiées avant d’être gardées", onClick: () => nav({ name: "import" }) }]} /><Button disabled={!eligible || closed} onClick={() => setPicker(true)}>Créer un avoir</Button><Button kind="primary" icon={<Plus size={16} aria-hidden="true" />} disabled={closed} title={closed ? "Ce mois est clôturé" : "Ctrl+N"} onClick={() => nav({ name: "compose" })}>Nouvelle facture</Button></>} />
+      actions={<><MoreMenu iconOnly label="Autres actions" items={[{ label: "Ajouter une ancienne facture", hint: "Faite avant l’application, avec son numéro d’origine", onClick: () => nav({ name: "compose", extra: "ancienne" }) }, { label: "Situation de facturation", hint: "Factures TTC et hors taxe d’une période, à imprimer ou exporter", onClick: () => nav({ name: "report" }) }, { label: "Importer d’anciennes factures", hint: "PDF ou Word, glisser-déposer, plusieurs à la fois", onClick: () => setImporting(true) }]} /><Button disabled={!eligible || closed} onClick={() => setPicker(true)}>Créer un avoir</Button><Button kind="primary" icon={<Plus size={16} aria-hidden="true" />} disabled={closed} title={closed ? "Ce mois est clôturé" : "Ctrl+N"} onClick={() => nav({ name: "compose" })}>Nouvelle facture</Button></>} />
     <div className={wide ? "cx-split cx-split-panel" : ""}>
       <section className="cx-col" aria-label={`Factures de ${monthLabel(month)}`}>
         <dl className="cx-strip"><div><dt>Facturé en {monthLabel(month).split(" ")[0]}</dt><dd>{money(sum("total"))}</dd></div><div><dt>Encaissé</dt><dd>{money(sum("received"))}</dd></div><div><dt>Reste à recevoir</dt><dd className="cx-strong">{money(sum("due"))}</dd></div><div><dt>Pas encore remises au client</dt><dd>{undelivered} facture{undelivered > 1 ? "s" : ""}</dd></div></dl>
@@ -73,6 +73,7 @@ function Register({ role, by, nav }: { role: Role; by: string; nav: Nav }) {
     </div>
     {picker && <CreditPicker onClose={() => setPicker(false)} onPick={id => { setPicker(false); setCredit(id); }} />}
     {credit && <CreditModal invoiceId={credit} by={by} onClose={() => setCredit(null)} onIssued={id => { setCredit(null); open("credit", id); }} />}
+    {importing && <ImportDropDialog onClose={() => setImporting(false)} onFiles={files => { const refused = queueFiles(files); setImporting(false); if (refused.length) toast(`Ignoré : ${refused.join(", ")} (seuls les PDF et les Word .docx sont lus).`, "warn"); if (refused.length < files.length) nav({ name: "import" }); }} />}
     {closing && <Confirm title={`Clôturer ${monthLabel(month)} ?`} confirm={`Clôturer ${monthLabel(month)}`} cancel="Ne pas clôturer" onClose={() => setClosing(false)} onConfirm={() => { const [y, m] = month.split("-").map(Number), n = new Date(y, m, 1), nextM = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}`; commit(by, x => ({ closedMonths: [...x.closedMonths, month], month: nextM }), { text: `${monthLabel(month)} clôturé` }); setClosing(false); toast(`${monthLabel(month)} clôturé. Le mois suivant est ouvert.`); }}>
       <p>Après la clôture, plus aucune facture ni aucun avoir ne pourra être créé ou modifié pour {monthLabel(month)}. Les factures resteront consultables et les paiements pourront toujours être enregistrés.</p></Confirm>}
   </div>;

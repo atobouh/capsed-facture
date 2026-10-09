@@ -58,7 +58,8 @@ export function printedQuantity(value:number):string {return printedAmount(Math.
 export function correctLegacyQuantities(invoices:any[],credits:any[],closedMonths:string[]) {
  const stamp=new Date().toISOString(),changed:string[]=[];
  const items=invoices.map(invoice=>{
-  if(!invoice.lines.some((l:any)=>!Number.isInteger(l.quantity)))return invoice;
+  // Old invoices (made before the app) keep their exact quantities, volumes in m³ for instance.
+  if(invoice.legacy||!invoice.lines.some((l:any)=>!Number.isInteger(l.quantity)))return invoice;
   if(closedMonths.includes(invoice.date.slice(0,7))||credits.some(c=>c.invoiceId===invoice.id)||invoice.lines.some((l:any)=>!Number.isFinite(l.quantity)||l.quantity<1))return invoice;
   const {history,...previous}=invoice;
   changed.push(invoice.number);

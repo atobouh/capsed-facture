@@ -9,7 +9,7 @@ import { DEFAULT_TERM, METHODS, addDays, balance, commit, termOf, dateFr, dateVa
 import type { Client, Invoice, Line } from "./store";
 import { words } from "./words";
 
-export type Draft = { number: string; clientId: string; date: string; lines: Line[]; taxRate: number; taxMode: TaxMode; discountRate: number; advance: number; payment: string; note: string; purchaseOrder: string; paymentTerm: number };
+export type Draft = { number: string; clientId: string; date: string; lines: Line[]; taxRate: number; taxMode: TaxMode; discountRate: number; advance: number; payment: string; note: string; purchaseOrder: string; reference: string; paymentTerm: number };
 const STEPS = ["Client et facture", "Articles et prestations", "Remise, TVA et règlement", "Vérifier et émettre"];
 
 /** The 4-step invoice flow. `validated`: made by the Direction, so it does not come back to validate.
@@ -17,19 +17,19 @@ const STEPS = ["Client et facture", "Articles et prestations", "Remise, TVA et r
 /** A new invoice record, as the composer saves it (also used to save old invoices read from their PDF). */
 export function newInvoiceRecord(cur: ReturnType<typeof getData>, draft: Draft, client: Client, by: string, extra: Partial<Invoice>): Invoice {
   const lines = draft.lines.filter(l => l.designation.trim()).map(l => ({ ...l }));
-  return { date: draft.date, client: { ...client }, company: { ...cur.company, logo: "" }, lines, taxRate: draft.taxRate, taxMode: draft.taxMode, discountRate: draft.discountRate, purchaseOrder: draft.purchaseOrder.trim(), advance: draft.advance, payment: draft.payment, note: draft.note, paymentTerm: draft.paymentTerm, template: { document: fixedModel(cur.format) }, id: uid(), number: draft.number.trim(), createdBy: by, ...extra };
+  return { date: draft.date, client: { ...client }, company: { ...cur.company, logo: "" }, lines, taxRate: draft.taxRate, taxMode: draft.taxMode, discountRate: draft.discountRate, purchaseOrder: draft.purchaseOrder.trim(), ...(draft.reference.trim() ? { reference: draft.reference.trim() } : {}), advance: draft.advance, payment: draft.payment, note: draft.note, paymentTerm: draft.paymentTerm, template: { document: fixedModel(cur.format) }, id: uid(), number: draft.number.trim(), createdBy: by, ...extra };
 }
 /** A number already used, by an invoice or by one the Direction deleted (deleted numbers are never given again). */
 export function numberTaken(d: ReturnType<typeof getData>, n: string) {
   const k = n.trim().toLowerCase();
   return d.invoices.find(i => i.number.trim().toLowerCase() === k) ?? (d.bin ?? []).find(b => b.collection === "invoices" && String(b.data.number ?? "").trim().toLowerCase() === k)?.data as Invoice | undefined;
 }
-export const emptyDraft = (legacy = false): Draft => ({ number: "", clientId: "", date: legacy ? (getData().month < todayIso().slice(0, 7) ? getData().month + "-01" : "") : todayIso(), lines: [emptyLine()], taxRate: 19.25, taxMode: "ht", discountRate: 0, advance: 0, payment: "Espèces", note: "", purchaseOrder: "", paymentTerm: getData().paymentTerm ?? DEFAULT_TERM });
+export const emptyDraft = (legacy = false): Draft => ({ number: "", clientId: "", date: legacy ? (getData().month < todayIso().slice(0, 7) ? getData().month + "-01" : "") : todayIso(), lines: [emptyLine()], taxRate: 19.25, taxMode: "ht", discountRate: 0, advance: 0, payment: "Espèces", note: "", purchaseOrder: "", reference: "", paymentTerm: getData().paymentTerm ?? DEFAULT_TERM });
 
 /** `initial`, `readClient`, `source`: an old invoice read from a PDF, to check before saving. */
 export default function Composer({ editId, clientId, requestId, by, validated, legacy: newLegacy, initial, readClient, source, startStep, onDone, onCancel }: { editId?: string; clientId?: string; requestId?: string; by: string; validated?: boolean; legacy?: boolean; initial?: Partial<Draft>; readClient?: Partial<Client>; source?: { file: string; warnings: string[] }; startStep?: number; onDone: (invoiceId: string) => void; onCancel: () => void }) {
   const d = useData(), editing = d.invoices.find(i => i.id === editId), legacy = editing ? !!editing.legacy : !!newLegacy;
-  const [draft, setDraft] = useState<Draft>(() => editing ? { number: editing.number, clientId: editing.client.id, date: editing.date, lines: editing.lines.map(l => ({ ...l })), taxRate: editing.taxRate, taxMode: invoiceTotals(editing).taxMode, discountRate: editing.discountRate || 0, advance: editing.advance, payment: normalizePayment(editing.payment), note: editing.note, purchaseOrder: editing.purchaseOrder || "", paymentTerm: termOf(editing) }
+  const [draft, setDraft] = useState<Draft>(() => editing ? { number: editing.number, clientId: editing.client.id, date: editing.date, lines: editing.lines.map(l => ({ ...l })), taxRate: editing.taxRate, taxMode: invoiceTotals(editing).taxMode, discountRate: editing.discountRate || 0, advance: editing.advance, payment: normalizePayment(editing.payment), note: editing.note, purchaseOrder: editing.purchaseOrder || "", reference: editing.reference || "", paymentTerm: termOf(editing) }
     : { ...emptyDraft(legacy), clientId: clientId ?? getData().requests.find(r => r.id === requestId)?.clientId ?? "", ...initial });
   const [step, setStep] = useState(startStep ?? 0), [error, setError] = useState(""), [q, setQ] = useState(readClient?.name ?? ""), [form, setForm] = useState<Client | null>(null), [showContract, setShowContract] = useState<Record<string, boolean>>({});
   const set = (p: Partial<Draft>) => { setDraft(v => ({ ...v, ...p })); setError(""); };
@@ -73,7 +73,7 @@ export default function Composer({ editId, clientId, requestId, by, validated, l
   function save() {
     const e = check(3); if (e) { setStep(e[0]); setError(e[1]); return; }
     const cur = getData(), lines = draft.lines.filter(l => l.designation.trim()).map(l => ({ ...l }));
-    const data = { date: draft.date, client: { ...chosen! }, company: editing?.company ?? { ...cur.company, logo: "" }, lines, taxRate: draft.taxMode === "ttc" ? draft.taxRate : editing?.taxRate ?? draft.taxRate, taxMode: draft.taxMode, discountRate: draft.discountRate, purchaseOrder: draft.purchaseOrder.trim(), advance: draft.advance, payment: draft.payment, note: draft.note, paymentTerm: draft.paymentTerm, template: editing?.template ?? { document: fixedModel(cur.format) } };
+    const data = { date: draft.date, client: { ...chosen! }, company: editing?.company ?? { ...cur.company, logo: "" }, lines, taxRate: draft.taxMode === "ttc" ? draft.taxRate : editing?.taxRate ?? draft.taxRate, taxMode: draft.taxMode, discountRate: draft.discountRate, purchaseOrder: draft.purchaseOrder.trim(), reference: draft.reference.trim() || undefined, advance: draft.advance, payment: draft.payment, note: draft.note, paymentTerm: draft.paymentTerm, template: editing?.template ?? { document: fixedModel(cur.format) } };
     let invoice: Invoice;
     if (editing) {
       const { history, ...previous } = editing; const stamp = nowIso();
@@ -126,6 +126,7 @@ export default function Composer({ editId, clientId, requestId, by, validated, l
             <div className="cx-form-grid">
               {legacy && !editing && <Field label="Numéro d’origine" required hint="Tel qu’il est imprimé sur la facture."><TextInput value={draft.number} onChange={v => set({ number: v })} placeholder="Ex. 2026-06-015" autoFocus={!!chosen} /></Field>}
               <Field label="Date de facture" required hint={legacy ? "La date d’origine. Les mois clôturés restent protégés." : editing ? "La date reste dans le mois du numéro." : "Les mois clôturés restent protégés."}><DateInput value={draft.date} onChange={v => set({ date: v })} /></Field>
+              {(legacy || draft.reference) && <Field label="Référence de la facture" optional hint="Telle qu’elle est imprimée. Vide : le numéro sert de référence."><TextInput value={draft.reference} onChange={v => set({ reference: v })} placeholder="Ex. N/Réf/0003/26/Fact/CAPSED" /></Field>}
               <Field label="Numéro de bon de commande" optional><TextInput value={draft.purchaseOrder} onChange={v => set({ purchaseOrder: v })} placeholder="Ex. BC-2026-014" /></Field>
             </div>
             <Field label="Type de facture" required><Choice value={draft.taxMode} onChange={v => set({ taxMode: v, taxRate: v === "ttc" && !draft.taxRate ? 19.25 : draft.taxRate })} options={[{ value: "ht", label: "Facture hors taxe", sub: "Sans TVA" }, { value: "ttc", label: "Facture TTC", sub: "La TVA s’ajoute après la remise" }]} /></Field>
@@ -170,6 +171,7 @@ export default function Composer({ editId, clientId, requestId, by, validated, l
             <p><span>Client</span><strong>{chosen.name}</strong></p>
             <p><span>Numéro</span><strong>{number}</strong></p>
             <p><span>Date</span><strong>{dateFr(draft.date)}</strong></p>
+            {draft.reference.trim() && <p><span>Référence</span><strong>{draft.reference.trim()}</strong></p>}
             {draft.purchaseOrder && <p><span>Bon de commande</span><strong>{draft.purchaseOrder}</strong></p>}
             <p><span>Type</span><strong>{draft.taxMode === "ttc" ? `TTC, TVA ${String(draft.taxRate).replace(".", ",")} %` : "Hors taxe"}</strong></p>
             <p><span>Articles</span><strong>{draft.lines.filter(l => l.designation.trim()).length}</strong></p>

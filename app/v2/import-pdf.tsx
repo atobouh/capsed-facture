@@ -48,7 +48,7 @@ export function matchClient(clients: Client[], c: Partial<Client>) {
 /** `pay`: the payment mode chosen for this import, for a document that shows none. */
 function draftOf(r: ReadInvoice, clientId: string, pay = ""): Draft {
   const payment = r.payment || pay;
-  return { ...emptyDraft(true), number: r.number, date: r.date, clientId, lines: r.lines, taxMode: r.taxMode, taxRate: r.taxMode === "ttc" ? r.taxRate : 19.25, discountRate: r.discountRate, advance: r.advance, purchaseOrder: r.purchaseOrder, ...(payment ? { payment } : {}) };
+  return { ...emptyDraft(true), number: r.number, date: r.date, clientId, lines: r.lines, taxMode: r.taxMode, taxRate: r.taxMode === "ttc" ? r.taxRate : 19.25, discountRate: r.discountRate, advance: r.advance, purchaseOrder: r.purchaseOrder, reference: r.reference, ...(payment ? { payment } : {}) };
 }
 /** What stops a draft from being saved as it is, and what only deserves a look. */
 function issues(d: Data, r: ReadInvoice, twins = 0, pay = "") {
@@ -202,7 +202,7 @@ export function ImportPdf({ by, onBack, onOpen }: { by: string; onBack: () => vo
         if (it.state === "skipped") return <div key={it.key} className="cx-list-row cx-static cx-cancelled"><span className="cx-list-main"><strong>{r.number || "Numéro ?"} · {r.client.name ?? "Client ?"}</strong><small>{where} · ignorée</small></span><span className="cx-list-actions"><button type="button" className="cx-text-btn" onClick={() => update(it.key, { state: "read" })}>Reprendre</button></span></div>;
         return <div key={it.key} className="cx-list-row cx-static">
           <span className="cx-list-main"><strong>{r.number || "Numéro ?"} · {x.client?.name ?? r.client.name ?? "Client ?"} · {money(x.total)}</strong>
-            <small>{r.date ? dateFr(r.date) : "date ?"} · {r.lines.length} article{r.lines.length > 1 ? "s" : ""} · {r.taxMode === "ttc" ? "TTC" : "hors taxe"} · <FileText size={11} aria-hidden="true" /> {where}</small>
+            <small>{r.date ? dateFr(r.date) : "date ?"}{r.reference ? ` · réf. ${r.reference}` : ""} · {r.lines.length} article{r.lines.length > 1 ? "s" : ""} · {r.taxMode === "ttc" ? "TTC" : "hors taxe"} · <FileText size={11} aria-hidden="true" /> {where}</small>
             {x.stop.map(s => <small key={s} className="cx-bad-text">{s}</small>)}{x.look.map(s => <small key={s} className="cx-warn-text">{s}</small>)}</span>
           <span className="cx-list-actions">{x.ready ? <span className="cx-chip cx-tone-good">Prête</span> : x.known ? <span className="cx-chip">Déjà présente</span> : <span className="cx-chip cx-tone-warn">À vérifier</span>}
             {!x.known && <Button size="sm" kind={x.ready ? "secondary" : "primary"} onClick={() => setCheck(it)}>Vérifier</Button>}<button type="button" className="cx-text-btn" onClick={() => update(it.key, { state: "skipped" })}>Ignorer</button></span>

@@ -25,7 +25,7 @@ export const receives = (r: Role, to: Role) => to === r || (r === "bureau" && (t
 export type Client = { id: string; name: string; contact: string; address: string; phone: string; email: string; niu: string; rc: string; archived?: boolean; archivedAt?: string };
 export type Company = { name: string; subtitle: string; address: string; phone: string; email: string; niu: string; rc: string; website: string; logo: string };
 export type Line = { id: string; contract: string; designation: string; destination: string; quantity: number; unitPrice: number };
-export type Invoice = { id: string; number: string; date: string; client: Client; company: Company; lines: Line[]; taxRate: number; advance: number; payment: string; note: string; taxMode?: TaxMode; discountRate?: number; purchaseOrder?: string; revisedAt?: string; history?: Invoice[] & { savedAt?: string }[]; template?: unknown; createdBy?: string;
+export type Invoice = { id: string; number: string; date: string; client: Client; company: Company; lines: Line[]; taxRate: number; advance: number; payment: string; note: string; taxMode?: TaxMode; discountRate?: number; purchaseOrder?: string; /** The reference printed on the invoice, when it is not just its number (old invoices: « N/Réf/0003/26/Fact/CAPSED »). */ reference?: string; revisedAt?: string; history?: Invoice[] & { savedAt?: string }[]; template?: unknown; createdBy?: string;
   /** Made before the app and typed in afterwards, with its original number and date. */
   legacy?: boolean;
   /** Set by the cloud: made or changed by the office in a month already closed (a computer that was offline). */

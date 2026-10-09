@@ -9,6 +9,8 @@ type Item = { s: string; x: number; y: number; w: number; page: number };
 export type TextLine = { page: number; y: number; items: Item[]; text: string };
 export type ReadInvoice = {
   number: string; date: string; client: Partial<Client>; purchaseOrder: string; payment: string;
+  /** « N/Réf/0003/26/Fact/CAPSED »: the reference printed on the invoice, when it is more than its number. */
+  reference: string;
   lines: Line[]; taxMode: "ht" | "ttc"; taxRate: number; discountRate: number; advance: number;
   /** The totals printed on the PDF, to compare with what the lines give. */
   printed: { ht?: number; tax?: number; ttc?: number; total?: number };
@@ -174,9 +176,30 @@ function blockUnder(lines: TextLine[], i: number, item: Item, max = 9) {
   return out;
 }
 
+const OTHER_LABEL = /^\s*(?:[àa]\s+facturer|factur[ée]\s*[àa]|client|doit|adress[ée]e?\s*[àa])\b/i;
+const REF_LABEL = /^\s*r[ée]f(?:[ée]rence|\.)?(?:\s+(?:de\s+la\s+)?facture)?\s*:?\s*$/i;
+/** The value of a « RÉFÉRENCE (FACTURE) » box: on the same line after the label, or in the next lines under it
+ *  (a Word box may have another column, « A FACTURER », between the label and its value). */
+function referenceAt(lines: TextLine[], i: number): string {
+  const l = lines[i], at = l.items.findIndex(it => /^\s*r[ée]f(?:[ée]rence|\.)?\b/i.test(it.s));
+  if (at < 0) return "";
+  const looks = (s: string) => /\d/.test(s) && s.length <= 60 && !(dateOf(s) && s.length <= 12) && !/^\d[\d\s.,]*$/.test(s);
+  const same = joinItems(l.items.slice(at)).replace(/^r[ée]f(?:[ée]rence|\.)?(?:\s+(?:de\s+la\s+)?facture)?\s*:?\s*/i, "").trim();
+  if (same) return looks(same) ? same : "";
+  // The label alone: its words (« REFERENCE », « FACTURE ») give the width of the box; the value is under it.
+  const label = l.items.slice(at).filter((it, k, all) => k === 0 || (REF_LABEL.test(joinItems(all.slice(0, k + 1))) && !/\d/.test(it.s)));
+  const from = label[0].x - 60, to = Math.max(...label.map(it => it.x + it.w)) + 60;
+  for (let k = i + 1; k <= i + 3 && k < lines.length && lines[k].page === l.page; k++) {
+    // Another box's label on the same line (« A FACTURER ») is not part of the reference.
+    const under = joinItems(lines[k].items.filter(it => it.x + it.w > from && it.x < to && !OTHER_LABEL.test(it.s)));
+    if (under && looks(under)) return under;
+  }
+  return "";
+}
+
 export function readInvoice(lines: TextLine[]): ReadInvoice {
   const warnings: string[] = [], body = lines.filter(l => !FOOTER.test(l.text));
-  let number = "", date = "", purchaseOrder = "", payment = "";
+  let number = "", date = "", purchaseOrder = "", payment = "", reference = "";
   const client: Partial<Client> = {};
   for (let i = 0; i < body.length; i++) {
     const l = body[i], t = l.text, next = body[i + 1];
@@ -199,7 +222,8 @@ export function readInvoice(lines: TextLine[]): ReadInvoice {
       const label = l.items.find(it => /factur[ée]\s*[àa](?![a-z])|(^|\s)[àa]\s+facturer\b|^\s*client\s*:?|^\s*doit\s*:?|adress[ée]e?\s*[àa](?![a-z])/i.test(it.s));
       if (label) {
         const after = (label.s.match(/(?:factur[ée]\s*[àa](?![a-z])|^\s*client|^\s*doit|adress[ée]e?\s*[àa](?![a-z]))\s*:?\s*(.+)$/i)?.[1] ?? "").trim();
-        const block = after ? [after, ...blockUnder(body, i, label, 8)] : blockUnder(body, i, label);
+        // The reference box may sit in the same column (Word): its value is not the client.
+        const block = (after ? [after, ...blockUnder(body, i, label, 8)] : blockUnder(body, i, label)).filter(b => !reference || b !== reference);
         if (block[0]) {
           client.name = block[0];
           const extra: string[] = [];
@@ -211,6 +235,7 @@ export function readInvoice(lines: TextLine[]): ReadInvoice {
         }
       }
     }
+    if (!reference && /r[ée]f/i.test(t)) reference = referenceAt(body, i);
     if (!purchaseOrder) { const m = t.match(/(?:b\.?\s*c\.?\s*n[°o]|bon\s*de\s*commande(?:\s*n[°o])?)\s*:?\s*(\S.*)$/i); if (m) purchaseOrder = m[1].trim(); }
     if (!payment) { const m = t.match(/mode\s*de\s*(?:r[èe]glement|paiement)\s*:?\s*(.+)$/i); if (m) { const p = normalizePayment(m[1].trim()); payment = paymentMethods.includes(p) ? p : /ch[èe]que/i.test(p) ? "Chèque" : /virement|banque/i.test(p) ? "Virement" : /orange/i.test(p) ? "OM" : /mtn|momo/i.test(p) ? "MoMo" : /esp[èe]ce/i.test(p) ? "Espèces" : ""; } }
   }
@@ -270,7 +295,9 @@ export function readInvoice(lines: TextLine[]): ReadInvoice {
     else if (printed.ht !== undefined && t.ht !== printed.ht) warnings.push(`Le montant HT calculé (${t.ht}) diffère de celui du document (${printed.ht}).`);
     else if (printed.ttc === undefined && printed.ht === undefined && printed.total !== undefined && t.ttc !== printed.total) warnings.push(`Le total calculé (${t.ttc}) diffère de celui du document (${printed.total}).`);
   }
-  return { number, date, client, purchaseOrder, payment, ...draft, printed, warnings };
+  // A reference that is only the number again (« Référence : FA 0003 ») says nothing more.
+  if (reference.replace(/\s/g, "").toLowerCase() === number.replace(/\s/g, "").toLowerCase()) reference = "";
+  return { number, date, client, purchaseOrder, payment, reference, ...draft, printed, warnings };
 }
 
 /** One file can hold many invoices (one after the other, often one per page): it is cut at each title « FACTURE ».

@@ -61,8 +61,9 @@ export function amountOf(token: string): number | null {
 }
 /** Amounts written at the end of a line ("Montant HT   630 000"). Groups like "630 000" are rejoined. */
 function trailingAmounts(text: string): number[] {
-  const out: number[] = [], m = text.replace(/%\s*$/, " %").match(/-?\d{1,3}(?:[\s  .]\d{3})+(?:,\d+)?|-?\d+(?:,\d+)?%?/g) ?? [];
-  for (const tok of m) { if (tok.endsWith("%")) continue; const v = amountOf(tok); if (v !== null) out.push(v); }
+  // A rate (« 19,25 % », « 19,25% ») is never an amount.
+  const out: number[] = [], m = text.replace(/\d+(?:[.,]\d+)?\s*%/g, " ").match(/-?\d{1,3}(?:[\s\u00a0\u202f.]\d{3})+(?:,\d+)?|-?\d+(?:,\d+)?/g) ?? [];
+  for (const tok of m) { const v = amountOf(tok); if (v !== null) out.push(v); }
   return out;
 }
 const lastAmount = (text: string) => trailingAmounts(text).at(-1);
@@ -91,6 +92,8 @@ const NUMBER_TOKEN = /\b([A-Z]{0,4}\d[\w]*(?:[-/][\w]+)+|\d{3,})\b/i;
 // ——— The invoice ———
 type Col = "contract" | "container" | "designation" | "destination" | "quantity" | "unitPrice" | "amount";
 const HEADER: [Col, RegExp][] = [["contract", /contrat/i], ["container", /conteneur|container/i], ["designation", /d[ée]signation|libell[ée]|description|prestation/i], ["destination", /destination|lieu/i], ["quantity", /quantit[ée]|qt[ée]|nombre|volume/i], ["unitPrice", /p\.?\s*u\b|prix/i], ["amount", /montant|total/i]];
+/** A line made only of column titles (or « (M³) »): part of a table header written on two lines. */
+const isHeaderPart = (l: TextLine) => l.items.every(it => (HEADER.some(([, re]) => re.test(it.s)) && it.s === it.s.toUpperCase() && it.s.trim().length <= 25) || /^\(.*\)$/.test(it.s.trim()));
 const isHeader = (l: TextLine) => /d[ée]signation|description/i.test(l.text) && /(montant|total|prix)/i.test(l.text);
 const END = /^(montant\s*(ht|de\s*d[ée]part|hors)|total|sous[-\s]?total|remise|tva\b|net\s*[àa]\s*payer|arr[êe]t[ée]e)/i;
 const FOOTER = /merci pour votre confiance|remercions de votre confiance|\bcapital\b|\bcnps\b|page \d+\s*\/\s*\d+/i;
@@ -102,8 +105,11 @@ function readTable(lines: TextLine[], warnings: string[]): Line[] {
     const l = lines[i];
     if (isHeader(l)) {
       cols = [];
-      for (const it of l.items) { const hit = HEADER.find(([, re]) => re.test(it.s)); if (hit && !cols.some(c => c.col === hit[0])) cols.push({ col: hit[0], x: it.x + it.w / 2 }); }
+      // A header cell on two lines (« VOLUME / (M³) ») can sit a little above or below the others: neighbours count too.
+      const near = [l, ...[lines[i - 1], lines[i + 1]].filter(n => n && n.page === l.page && Math.abs(n.y - l.y) <= 16 && isHeaderPart(n))];
+      for (const h of near) for (const it of h.items) { const hit = HEADER.find(([, re]) => re.test(it.s)); if (hit && !cols.some(c => c.col === hit[0])) cols.push({ col: hit[0], x: it.x + it.w / 2 }); }
       if (!cols.some(c => c.col === "amount")) cols = null;
+      if (cols && near.includes(lines[i + 1])) i++;
       continue;
     }
     if (!cols) continue;
@@ -160,7 +166,7 @@ function blockUnder(lines: TextLine[], i: number, item: Item, max = 9) {
   const out: string[] = [], right = lines[i].items.find(it => it.x > item.x + item.w + 40)?.x ?? Infinity;
   let lastY = lines[i].y;
   for (let k = i + 1; k < lines.length && out.length < max && lines[k].page === lines[i].page; k++) {
-    if (isHeader(lines[k]) || lastY - lines[k].y > (out.length ? 32 : 80)) break; // the block ends at a wide gap or at the table
+    if (isHeader(lines[k]) || isHeaderPart(lines[k]) || lastY - lines[k].y > (out.length ? 32 : 80)) break; // the block ends at a wide gap or at the table
     const parts = lines[k].items.filter(it => it.x >= item.x - 25 && it.x < right - 5);
     if (!parts.length) continue; // a line of the other column only
     out.push(joinItems(parts)); lastY = lines[k].y;
@@ -213,10 +219,21 @@ export function readInvoice(lines: TextLine[]): ReadInvoice {
 
   // Totals printed under the table.
   const printed: ReadInvoice["printed"] = {};
-  let subtotal: number | undefined, discount: number | undefined, advance = 0, rate: number | undefined;
-  for (const l of body) {
+  let subtotal: number | undefined, discount: number | undefined, advance = 0, rate: number | undefined, vatLine = false;
+  for (const [k, l] of body.entries()) {
     if (isHeader(l)) continue;
-    const t = l.text, v = lastAmount(t); if (v === undefined) continue;
+    let t = l.text;
+    const isVat = /\btva\b/i.test(t) && !/^\s*(n°|niu|num)/i.test(t);
+    // On a VAT line, « 19,25 » (with or without %) is the rate: amounts in FCFA have no decimals.
+    if (isVat) { const r = t.match(/(\d{1,2}[.,]\d{1,2})(?!\d)\s*%?|(\d{1,2})\s*%/); if (r) { rate = Number((r[1] ?? r[2]).replace(",", ".")); t = t.replace(r[0], " "); } }
+    let v = lastAmount(t);
+    // « TVA 19,25 % » with its amount on the line just below.
+    if (isVat) {
+      vatLine = true;
+      const next = body[k + 1];
+      if (v === undefined && next && next.page === l.page && Math.abs(next.y - l.y) <= 22 && /^[\d\s\u00a0\u202f.,-]+$/.test(next.text)) v = lastAmount(next.text);
+    }
+    if (v === undefined) continue;
     if (/montant\s*de\s*d[ée]part|sous[-\s]?total/i.test(t)) subtotal = v;
     else if (/apr[èe]s\s*remise/i.test(t)) printed.ht = v;
     else if (/remise/i.test(t)) discount = Math.abs(v);
@@ -231,11 +248,17 @@ export function readInvoice(lines: TextLine[]): ReadInvoice {
   if (!items.length) items = readLooseRows(body);
   const ht = printed.ht ?? (printed.ttc !== undefined && printed.tax !== undefined ? printed.ttc - printed.tax : undefined) ?? printed.ttc ?? printed.total;
   if (!items.length && ht) { items = [{ ...emptyLine(), id: uid(), designation: "Prestations (à détailler)", quantity: 1, unitPrice: (subtotal ?? ht) }]; warnings.push("Les articles n’ont pas été reconnus : une seule ligne reprend le montant. Détaillez-les si besoin."); }
-  const taxMode: "ht" | "ttc" = printed.tax && printed.tax > 0 ? "ttc" : "ht";
+  // TTC only when the document shows VAT: an amount, or a VAT line with its rate. Without a VAT line, nothing is added.
+  const taxMode: "ht" | "ttc" = (printed.tax && printed.tax > 0) || (vatLine && (rate ?? 0) > 0) ? "ttc" : "ht";
   const base = subtotal ?? items.reduce((n, l) => n + l.quantity * l.unitPrice, 0);
   const discountRate = discount && base ? Math.round(discount / base * 1e6) / 1e4 : 0;
   let taxRate = 19.25;
-  if (taxMode === "ttc" && ht) { const r = rate ?? Math.round(printed.tax! / ht * 1e4) / 100; taxRate = Math.abs(r - 19.25) < 0.06 ? 19.25 : r; }
+  if (taxMode === "ttc") {
+    // The rate written on the document comes first; otherwise it is worked out from the amounts.
+    const r = rate ?? (ht && printed.tax ? Math.round(printed.tax / ht * 1e4) / 100 : 19.25);
+    if (r < 1 || r > 50) { taxRate = 19.25; warnings.push(`La TVA lue sur le document (${printed.tax}) ne correspond à aucun taux plausible : 19,25 % est appliqué, vérifiez.`); }
+    else taxRate = Math.abs(r - 19.25) < 0.06 ? 19.25 : r;
+  }
 
   if (!number) warnings.push("Numéro de facture non trouvé.");
   if (!date) warnings.push("Date non trouvée.");
@@ -243,8 +266,8 @@ export function readInvoice(lines: TextLine[]): ReadInvoice {
   const draft = { lines: items, taxRate: taxMode === "ttc" ? taxRate : 0, taxMode, discountRate, advance };
   if (items.length) {
     const t = invoiceTotals(draft);
-    if (printed.ttc !== undefined && taxMode === "ttc" && t.ttc !== printed.ttc) warnings.push(`Le total TTC calculé (${t.ttc}) diffère de celui du PDF (${printed.ttc}).`);
-    else if (printed.ht !== undefined && t.ht !== printed.ht) warnings.push(`Le montant HT calculé (${t.ht}) diffère de celui du PDF (${printed.ht}).`);
+    if (printed.ttc !== undefined && taxMode === "ttc" && t.ttc !== printed.ttc) warnings.push(`Le total TTC calculé (${t.ttc}) diffère de celui du document (${printed.ttc}).`);
+    else if (printed.ht !== undefined && t.ht !== printed.ht) warnings.push(`Le montant HT calculé (${t.ht}) diffère de celui du document (${printed.ht}).`);
     else if (printed.ttc === undefined && printed.ht === undefined && printed.total !== undefined && t.ttc !== printed.total) warnings.push(`Le total calculé (${t.ttc}) diffère de celui du document (${printed.total}).`);
   }
   return { number, date, client, purchaseOrder, payment, ...draft, printed, warnings };

@@ -130,7 +130,7 @@ function readTable(lines: TextLine[], warnings: string[]): Line[] {
   }
   return rows.map(r => {
     const parts = [{ y: r.y, cells: r.cells }, ...((r as { extra?: { y: number; cells: Record<Col, string[]> }[] }).extra ?? [])].sort((a, b) => b.y - a.y);
-    const text = (c: Col) => parts.map(p => p.cells[c].join(" ")).filter(Boolean);
+    const text = (c: Col) => parts.map(p => p.cells[c].join(" ").replace(/[\s\u00a0\u202f]+/g, " ").trim()).filter(Boolean);
     let designation = [...text("designation"), ...text("container")], contract = text("contract").join(" ");
     designation = designation.filter(t => { const m = t.match(/^contrat\s*:?\s*(.+)$/i); if (m) { contract = m[1].trim(); return false; } return true; });
     const amount = r.amount!, q = quantityOf(text("quantity").join(" ")), pu = amountOf(text("unitPrice").join(" "));

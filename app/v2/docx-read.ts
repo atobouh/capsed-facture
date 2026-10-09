@@ -90,7 +90,7 @@ export function docxLines(xml: string): TextLine[] {
   };
   const block = (k: Node) => {
     if (k.tag === "w:p") {
-      for (const p of paragraphs({ tag: "#", attrs: "", kids: [k], text: "" })) { if (p.pageBreak) { page++; y -= 400; } for (const seg of p.text.split("\n")) push(seg.split("\t"), 150); }
+      for (const p of paragraphs({ tag: "#", attrs: "", kids: [k], text: "" })) { if (p.pageBreak) { page++; y -= 400; } for (const seg of p.text.split("\n")) push(seg.replace(/^[\s\u00a0]+/, "").split(/\t|[ \u00a0]{3,}/), 150); } // columns made with tabs or with runs of (non-breaking) spaces; indentation is not a column
       if (/<w:sectPr/.test(k.attrs)) page++;
     } else if (k.tag === "w:tbl") {
       for (const tr of k.kids.filter(x => x.tag === "w:tr")) {

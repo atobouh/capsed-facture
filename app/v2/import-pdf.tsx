@@ -48,7 +48,7 @@ export function matchClient(clients: Client[], c: Partial<Client>) {
 /** `pay`: the payment mode chosen for this import, for a document that shows none. */
 function draftOf(r: ReadInvoice, clientId: string, pay = ""): Draft {
   const payment = r.payment || pay;
-  return { ...emptyDraft(true), number: r.number, date: r.date, clientId, lines: r.lines, taxMode: r.taxMode, taxRate: r.taxMode === "ttc" ? r.taxRate : 19.25, discountRate: r.discountRate, advance: r.advance, purchaseOrder: r.purchaseOrder, reference: r.reference, ...(payment ? { payment } : {}) };
+  return { ...emptyDraft(true), number: r.number, date: r.date, clientId, lines: r.lines, taxMode: r.taxMode, taxRate: r.taxMode === "ttc" ? r.taxRate : 19.25, discountRate: r.discountRate, advance: r.advance, purchaseOrder: r.purchaseOrder, reference: r.reference, payment };
 }
 /** What stops a draft from being saved as it is, and what only deserves a look. */
 function issues(d: Data, r: ReadInvoice, twins = 0, pay = "") {
@@ -156,7 +156,7 @@ export function ImportPdf({ by, onBack, onOpen }: { by: string; onBack: () => vo
 
   if (check) {
     const r = check.read, client = matchClient(d.clients.filter(c => !c.archived), r.client), x = issues(d, r, 0, pay);
-    return <Composer key={check.key} legacy by={by} initial={draftOf(r, client?.id ?? "", pay)} readClient={client ? undefined : r.client} source={{ file: `${check.file}${check.page > 1 ? `, page ${check.page}` : ""}`, warnings: [...x.stop, ...r.warnings] }} startStep={client && !x.stop.length && r.number && r.date ? 3 : 0}
+    return <Composer key={check.key} legacy by={by} initial={draftOf(r, client?.id ?? "", pay)} readClient={client ? undefined : r.client} source={{ file: `${check.file}${check.page > 1 ? `, page ${check.page}` : ""}`, warnings: [...x.stop, ...r.warnings] }} startStep={client && !x.stop.length && r.number && r.date ? (r.payment || pay ? 3 : 2) : 0}
       onDone={id => { update(check.key, { state: "saved", invoiceId: id, number: getData().invoices.find(i => i.id === id)?.number }); setCheck(null); }} onCancel={() => setCheck(null)} />;
   }
 

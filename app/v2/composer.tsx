@@ -59,6 +59,8 @@ export default function Composer({ editId, clientId, requestId, by, validated, l
     if (!lines.length || draft.lines.some(l => !l.designation.trim() && l.unitPrice > 0) || lines.some(l => !quantityOk(l.quantity) || l.quantity <= 0 || !Number.isSafeInteger(l.unitPrice) || l.unitPrice < 0)) return [1, legacy ? "Chaque article doit avoir une désignation, une quantité positive (jusqu’à 3 décimales, un volume par exemple) et un prix entier." : "Chaque article doit avoir une désignation, une quantité entière positive et un prix entier."];
     if (upTo < 2) return null;
     if (!Number.isFinite(draft.taxRate) || draft.taxRate < 0 || draft.taxRate > 100 || !Number.isFinite(draft.discountRate) || draft.discountRate < 0 || draft.discountRate > 100) return [2, "La TVA et la remise doivent être comprises entre 0 et 100 %."];
+    // An old invoice whose document shows no payment mode: chosen here, never « Espèces » by default.
+    if (!draft.payment) return [2, "Choisissez le mode de règlement : le document importé n’en indique pas."];
     if (!Number.isSafeInteger(draft.paymentTerm) || draft.paymentTerm < 0 || draft.paymentTerm > 365) return [2, "Le délai de paiement doit être un nombre de jours entre 0 et 365."];
     if (!Number.isSafeInteger(draft.advance) || draft.advance < 0 || draft.advance > totals.ttc) return [2, `L’avance doit être comprise entre zéro et le total (${money(totals.ttc)}).`];
     if (editing) {
@@ -161,7 +163,7 @@ export default function Composer({ editId, clientId, requestId, by, validated, l
               : <Field label="TVA"><div className="cx-static">Aucune, facture hors taxe <button type="button" className="cx-btn cx-btn-link cx-inline" onClick={() => { set({ taxMode: "ttc", taxRate: draft.taxRate || 19.25 }); }}>Passer en TTC</button></div></Field>}
             <Field label="Avance versée à la facturation" hint={`Maximum : ${money(totals.ttc)}`}><MoneyInput value={draft.advance} onChange={v => set({ advance: v })} /></Field>
           </div>
-          <Field label="Mode de règlement"><Choice columns={5} value={draft.payment} onChange={v => set({ payment: v })} options={[...(!METHODS.includes(draft.payment) ? [{ value: draft.payment, label: draft.payment, sub: "ancien mode" }] : []), ...METHODS.map(m => ({ value: m, label: m }))]} /></Field>
+          <Field label="Mode de règlement"><Choice columns={5} value={draft.payment} onChange={v => set({ payment: v })} options={[...(draft.payment && !METHODS.includes(draft.payment) ? [{ value: draft.payment, label: draft.payment, sub: "ancien mode" }] : []), ...METHODS.map(m => ({ value: m, label: m }))]} /></Field>
           <Field label="Délai de paiement" hint={`Usage interne, jamais imprimé sur la facture. Échéance le ${dateValid(draft.date) && Number.isSafeInteger(draft.paymentTerm) ? dateFr(addDays(draft.date, draft.paymentTerm)) : "—"}.`}><NumberInput value={draft.paymentTerm} onChange={v => set({ paymentTerm: v })} unit="jours" /></Field>
           <Field label="Note sur la facture" optional><TextArea rows={2} value={draft.note} onChange={v => set({ note: v })} /></Field>
         </div>}
@@ -177,12 +179,12 @@ export default function Composer({ editId, clientId, requestId, by, validated, l
             <p><span>Articles</span><strong>{draft.lines.filter(l => l.designation.trim()).length}</strong></p>
             {draft.discountRate > 0 && <p><span>Remise</span><strong>{String(draft.discountRate).replace(".", ",")} %, soit − {money(totals.discount)}</strong></p>}
             {draft.advance > 0 && <p><span>Avance reçue</span><strong>{money(draft.advance)}</strong></p>}
-            <p><span>Mode de règlement</span><strong>{draft.payment}</strong></p>
+            <p><span>Mode de règlement</span><strong>{draft.payment || "À choisir"}</strong></p>
             <p><span>Échéance (interne)</span><strong>{dateFr(addDays(draft.date, draft.paymentTerm))}, {draft.paymentTerm} jours</strong></p>
             <div className="cx-summary-total"><span>{draft.advance > 0 ? "Reste à payer" : totals.totalLabel}</span><strong>{money(totals.due)}</strong></div>
             {editing && balance(editing, d.payments, d.credits).received > 0 && <p className="cx-muted">Paiements déjà reçus sur cette facture : {money(balance(editing, d.payments, d.credits).received)}.</p>}
           </div>
-          <Paper invoice={{ ...(editing ?? {} as Invoice), id: editing?.id ?? "draft", number, date: draft.date, client: chosen, company: editing?.company ?? d.company, lines: draft.lines.filter(l => l.designation.trim()), taxRate: draft.taxRate, taxMode: draft.taxMode, discountRate: draft.discountRate, advance: draft.advance, payment: draft.payment, note: draft.note, purchaseOrder: draft.purchaseOrder }} title="Aperçu avant émission" />
+          <Paper invoice={{ ...(editing ?? {} as Invoice), id: editing?.id ?? "draft", number, date: draft.date, client: chosen, company: editing?.company ?? d.company, lines: draft.lines.filter(l => l.designation.trim()), taxRate: draft.taxRate, taxMode: draft.taxMode, discountRate: draft.discountRate, advance: draft.advance, payment: draft.payment, note: draft.note, purchaseOrder: draft.purchaseOrder, reference: draft.reference.trim() || undefined }} title="Aperçu avant émission" />
         </div>}
       </div>
       {step < 3 && summary}

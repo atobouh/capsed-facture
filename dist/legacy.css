@@ -381,3 +381,23 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .invoice-delivery-status strong{display:inline-flex;align-items:center;gap:6px}
 .delivery-reset{border:0;background:transparent;color:#58667b;font-size:12px;text-decoration:underline;text-underline-offset:3px;padding:6px}
 @media(max-width:650px){.client-record-actions{gap:10px}.payment-entry-actions{width:100%;justify-content:flex-start;margin-left:42px}.payment-entry{flex-wrap:wrap}.invoice-delivery-status{gap:8px}}
+.receipt-title-next{margin-bottom:16px}.receipt-title-next>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Invoice totals line up with the table: labels start under « Quantité », amounts sit in the « Montant HT » column,
+   centred like the line amounts above them (columns 39 / 17 / 10 / 16 / 18 %). The signature stays centred under them. */
+.receipt-totals-aligned{width:44%}
+.receipt-totals-aligned p{display:grid;grid-template-columns:26fr 18fr;gap:0;align-items:baseline}
+.receipt-totals-aligned p>span{padding-left:7px}
+.receipt-totals-aligned p>strong{text-align:center;padding:0 7px}
+.receipt-totals-aligned .receipt-total{padding:7px 0}
+.receipt-totals-aligned~.receipt-payment .receipt-signature{width:44%}
+
+/* Situation de facturation: TTC and hors taxe invoices, each block with its subtotal. */
+.statement-report-block{margin-bottom:18px}
+.statement-report-title{font-size:12px;font-weight:600;margin:0 0 6px;color:#242932}
+.statement-report-table th:nth-child(1){width:13%}
+.statement-report-table th:nth-child(2){width:17%;text-align:left}
+.statement-report-table th:nth-child(3),.statement-report-table td:nth-child(3){text-align:left}
+.statement-report-table th:nth-child(3){width:auto}
+.statement-report-table .statement-report-subtotal td{font-weight:600;border-top:1px solid #777b84;border-bottom:0}
+.statement-report-table .statement-report-subtotal td+td{text-align:right}

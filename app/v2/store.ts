@@ -5,11 +5,16 @@ import { balance as v1Balance } from "../client-account";
 import { defaultFormat, restoreFormat } from "../invoice-format";
 import type { InvoiceFormat } from "../invoice-format";
 import type { CreditNote } from "../credit-note";
+import { DATA_KEY, SETTINGS_FIELDS, isBinCollection, keyOf } from "./collections";
+import type { BinCollection, ListCollection } from "./collections";
 
 /* Data stays compatible with the first prototype ("capsed-facture-v1"), so its backups restore here. */
 /** "bureau" is the full office mode: Facturation and Encaissement in one login. */
 export type Role = "facturation" | "encaissement" | "bureau" | "responsable";
-export type Account = { id: string; name: string; role: Role; login: string; password: string; active: boolean; createdAt: string; passwordAt: string };
+/** `password` exists only in the demo; the real app keeps a salted hash (see password.ts). */
+export type Account = { id: string; name: string; role: Role; login: string; email?: string; password?: string; visiblePassword?: string; pwHash?: string; pwSalt?: string; pwIter?: number; active: boolean; createdAt: string; passwordAt: string;
+  /** Removed by the Direction: no login or password left, gone from the team list; the name stays in the history. */
+  deletedAt?: string };
 export const ROLE_LABEL: Record<Role, string> = { facturation: "Facturation", encaissement: "Encaissement", bureau: "Facturation et encaissement", responsable: "Responsable" };
 /** What a login may do in the office app. Every tab exists once; the login decides which ones show. */
 export const canBill = (r: Role) => r === "facturation" || r === "bureau";
@@ -20,13 +25,17 @@ export const receives = (r: Role, to: Role) => to === r || (r === "bureau" && (t
 export type Client = { id: string; name: string; contact: string; address: string; phone: string; email: string; niu: string; rc: string; archived?: boolean; archivedAt?: string };
 export type Company = { name: string; subtitle: string; address: string; phone: string; email: string; niu: string; rc: string; website: string; logo: string };
 export type Line = { id: string; contract: string; designation: string; destination: string; quantity: number; unitPrice: number };
-export type Invoice = { id: string; number: string; date: string; client: Client; company: Company; lines: Line[]; taxRate: number; advance: number; payment: string; note: string; taxMode?: TaxMode; discountRate?: number; purchaseOrder?: string; revisedAt?: string; history?: Invoice[] & { savedAt?: string }[]; template?: unknown; createdBy?: string;
+export type Invoice = { id: string; number: string; date: string; client: Client; company: Company; lines: Line[]; taxRate: number; advance: number; payment: string; note: string; taxMode?: TaxMode; discountRate?: number; purchaseOrder?: string; /** The reference printed on the invoice, when it is not just its number (old invoices: « N/Réf/0003/26/Fact/CAPSED »). */ reference?: string; revisedAt?: string; history?: Invoice[] & { savedAt?: string }[]; template?: unknown; createdBy?: string;
+  /** Made before the app and typed in afterwards, with its original number and date. */
+  legacy?: boolean;
+  /** Set by the cloud: made or changed by the office in a month already closed (a computer that was offline). */
+  afterClose?: string;
   /** Seen and approved by the Direction. Never required: an invoice not validated is used everywhere like any other. */
   validatedAt?: string; validatedBy?: string;
   /** Internal payment deadline in days. Never printed on the invoice. */
   paymentTerm?: number };
 export type PaymentRevision = { amount: number; date: string; method: string; reference: string; savedAt: string; by?: string };
-export type Payment = { id: string; invoiceId: string; amount: number; date: string; method: string; reference: string; cancelledAt?: string; cancelledBy?: string; lockedAt?: string; revisedAt?: string; history?: PaymentRevision[]; by?: string; at?: string };
+export type Payment = { id: string; invoiceId: string; amount: number; date: string; method: string; reference: string; cancelledAt?: string; cancelledBy?: string; lockedAt?: string; unlockedAt?: string; changedAfterLock?: string; revisedAt?: string; history?: PaymentRevision[]; by?: string; at?: string };
 export type Delivery = { invoiceId: string; declaredAt: string; by?: string; cancelledAt?: string; cancelledBy?: string };
 export type { CreditNote };
 /** Requests only go from the manager to the office team. */
@@ -39,6 +48,12 @@ export type Request = {
   receivedAt?: string; readAt?: string; resolvedAt?: string; resolvedBy?: string; response?: string; linkedId?: string;
 };
 export type Event = { id: string; at: string; by: string; text: string; clientId?: string; invoiceId?: string };
+/** A rule the Direction lifted: what changed, why, and how to put it back. */
+export type Override = { id: string; at: string; by: string; action: string; label: string; reason: string; target: { collection: string; id: string }; before: Record<string, unknown>; after: Record<string, unknown>; undoneAt?: string; undoneBy?: string; undoReason?: string };
+/** Deleted by the Direction: out of every list, balance and statement, kept here and restorable.
+ *  `deletedWith`: removed together with this invoice (its credit notes, its cancelled payments) and restored with it. */
+export type Deleted = { deletedAt: string; deletedBy?: string; deleteReason?: string; deletedWith?: string };
+export type BinItem = { collection: BinCollection; data: Record<string, unknown> & { id: string } & Deleted };
 export type Snapshot = { clients: Client[]; invoices: Invoice[]; payments: Payment[]; credits: CreditNote[]; deliveries: Delivery[]; receivedAt: string };
 export type Data = {
   version: 2; company: Company; format: InvoiceFormat; clients: Client[]; invoices: Invoice[]; payments: Payment[]; credits: CreditNote[];
@@ -46,13 +61,22 @@ export type Data = {
   officeOnline: boolean; snapshot: Snapshot;
   /** Default internal payment deadline in days, set by the Direction. */
   paymentTerm?: number;
+  overrides?: Override[];
+  /** What the Direction deleted. On office computers only stubs (number, date) arrive here, so numbers stay taken. */
+  bin?: BinItem[];
 };
+
+/** demo: everything in this browser (GitHub Pages). site: the Direction website, data from the cloud.
+ *  office: the desktop app for Facturation and Encaissement, works offline and syncs with the cloud. */
+declare const __CAPSED_MODE__: string | undefined;
+export const MODE: "demo" | "site" | "office" = typeof __CAPSED_MODE__ === "string" && (__CAPSED_MODE__ === "site" || __CAPSED_MODE__ === "office") ? __CAPSED_MODE__ : "demo";
+export const CLOUD = MODE !== "demo";
 
 export const METHODS = ["Chèque", "Virement", "OM", "MoMo", "Espèces"];
 export const methodName = (m: string) => ({ OM: "Orange Money", MoMo: "MTN MoMo" } as Record<string, string>)[m] ?? m;
 export const REFERENCE_HINT: Record<string, string> = { "Chèque": "Numéro du chèque", "Virement": "Référence du virement", "OM": "ID de transaction Orange Money", "MoMo": "ID de transaction MTN MoMo", "Espèces": "Note (facultatif)" };
 
-const KEY = "capsed-v2";
+const KEY = MODE === "demo" ? "capsed-v2" : `capsed-${MODE}-data`;
 export const uid = () => (crypto.randomUUID?.() ?? String(Math.random()).slice(2)) as string;
 export const nowIso = () => new Date().toISOString();
 export const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
@@ -63,7 +87,7 @@ export const timeFr = (d: string) => new Date(d).toLocaleString("fr-FR", { day: 
 export const monthLabel = (m: string) => new Date(m + "-01T12:00:00").toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
 export const daysSince = (d: string) => Math.max(0, Math.floor((Date.now() - new Date(d.length === 10 ? d + "T12:00:00" : d).getTime()) / 864e5));
 export const hoursSince = (iso: string) => (Date.now() - new Date(iso).getTime()) / 36e5;
-export function ago(d: string) { const m = Math.floor((Date.now() - new Date(d).getTime()) / 60000); if (m < 1) return "à l’instant"; if (m < 60) return `il y a ${m} min`; const h = Math.floor(m / 60); if (h < 24) return `il y a ${h} h`; const j = Math.floor(h / 24); return j === 1 ? "hier" : `il y a ${j} jours`; }
+export function ago(d: string) { const t = new Date(d).getTime(); if (!d || Number.isNaN(t)) return "jamais"; const m = Math.floor((Date.now() - t) / 60000); if (m < 1) return "à l’instant"; if (m < 60) return `il y a ${m} min`; const h = Math.floor(m / 60); if (h < 24) return `il y a ${h} h`; const j = Math.floor(h / 24); return j === 1 ? "hier" : `il y a ${j} jours`; }
 export const DEFAULT_TERM = 60;
 export const addDays = (date: string, n: number) => { const t = new Date(date + "T12:00:00"); t.setDate(t.getDate() + n); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`; };
 /** Payment deadline: the invoice's own, else the Direction's default. Internal only, never on the paper. */
@@ -130,13 +154,27 @@ export function fromBackup(d: Record<string, unknown>, keep?: Data): Data {
   const core = { clients, invoices: fixed, payments, credits, invoiceDeliveries };
   return {
     ...base, ...core, version: 2, company: (d.company as Company) ?? base.company, format: d.format || d.models ? restoreFormat(d) : base.format, closedMonths, month: (d.month as string) ?? base.month,
-    requests: (d.requests as Request[]) ?? base.requests, events: (d.events as Event[]) ?? base.events, accounts: (d.accounts as Account[]) ?? base.accounts,
+    bin: (d.bin as BinItem[]) ?? base.bin ?? [], requests: (d.requests as Request[]) ?? base.requests, events: (d.events as Event[]) ?? base.events, accounts: (d.accounts as Account[]) ?? base.accounts,
     officeOnline: true, snapshot: { ...structuredClone(core), deliveries: structuredClone(invoiceDeliveries), receivedAt: nowIso() },
   };
 }
+/** A real installation starts empty: everything comes from the cloud or is typed in. */
+function emptyData(): Data {
+  const core = { clients: [], invoices: [], payments: [], credits: [], invoiceDeliveries: [] };
+  return { version: 2, company, format: defaultFormat, ...core, closedMonths: [], month: todayIso().slice(0, 7), requests: [], events: [], accounts: [], overrides: [], bin: [], officeOnline: true, snapshot: { ...core, deliveries: [], receivedAt: "" } };
+}
 function load(): Data {
-  try { const raw = localStorage.getItem(KEY); if (raw) { const d = JSON.parse(raw); if (d?.version === 2 && d.accounts && d.snapshot) return withDemoAccounts(d); } } catch { /* stockage indisponible */ }
-  return seed();
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) { const d = JSON.parse(raw); if (d?.version === 2 && d.accounts) return CLOUD ? withSnapshot({ ...emptyData(), ...d, month: todayIso().slice(0, 7) }) : d.snapshot ? withDemoAccounts(d) : seed(); }
+  } catch { /* stockage indisponible */ }
+  return CLOUD ? withSnapshot(emptyData()) : seed();
+}
+/** Outside the demo there is one copy of the data: the Direction's « snapshot » is the cloud copy itself. */
+let receivedAt = () => "";
+export function setReceivedAt(f: () => string) { receivedAt = f; }
+function withSnapshot(d: Data): Data {
+  return { ...d, officeOnline: true, snapshot: { clients: d.clients, invoices: d.invoices, payments: d.payments, credits: d.credits, deliveries: d.invoiceDeliveries, receivedAt: receivedAt() } };
 }
 /** Demo data saved before the full office mode existed gets its demo login too. */
 function withDemoAccounts(d: Data): Data {
@@ -147,10 +185,43 @@ let state: Data | null = null;
 const listeners = new Set<() => void>();
 export function getData() { return state ??= load(); }
 export function setData(next: Data) {
-  state = next;
-  try { localStorage.setItem(KEY, JSON.stringify(next)); } catch { /* stockage plein */ }
+  state = CLOUD ? withSnapshot(next) : next;
+  try { localStorage.setItem(KEY, JSON.stringify(CLOUD ? { ...state, snapshot: undefined } : state)); } catch { /* stockage plein */ }
   listeners.forEach(l => l());
 }
+/** Clear this browser's copy (sign-out on the Direction site, or a computer being reset). */
+export function forgetLocalData() { try { localStorage.removeItem(KEY); } catch { /* rien */ } state = null; listeners.forEach(l => l()); }
+/** Records received from the cloud: replace or add them, without sending them back. */
+export function applyRemote(items: { collection: string; id: string; data: Record<string, unknown> | null }[]) {
+  if (!items.length) return;
+  const d = getData(), next: Data = { ...d };
+  const lists = new Map<string, Record<string, unknown>[]>();
+  let bin: BinItem[] | null = null;
+  for (const it of items) {
+    if (it.collection === "settings") {
+      if (it.data) for (const k of SETTINGS_FIELDS) if (it.data[k] !== undefined) (next as Record<string, unknown>)[k] = it.data[k];
+      continue;
+    }
+    const key = DATA_KEY[it.collection as ListCollection]; if (!key) continue;
+    if (!lists.has(key)) lists.set(key, [...((next as Record<string, unknown>)[key] as Record<string, unknown>[] ?? [])]);
+    const arr = lists.get(key)!, idx = arr.findIndex(r => keyOf(it.collection as ListCollection, r) === it.id);
+    // Deleted by the Direction: out of the list, into the bin. Restored: out of the bin, back in the list.
+    if (isBinCollection(it.collection)) {
+      bin ??= [...(next.bin ?? [])];
+      const b = bin.findIndex(x => x.collection === it.collection && x.data.id === it.id);
+      if (b >= 0) bin.splice(b, 1);
+      if (it.data?.deletedAt) { if (idx >= 0) arr.splice(idx, 1); bin.push({ collection: it.collection, data: it.data as BinItem["data"] }); continue; }
+    }
+    if (!it.data) { if (idx >= 0) arr.splice(idx, 1); }
+    else if (idx >= 0) arr[idx] = it.data; else arr.push(it.data);
+  }
+  if (bin) next.bin = bin;
+  for (const [key, arr] of lists) (next as Record<string, unknown>)[key] = key === "events" ? arr.sort((a, b) => String(b.at).localeCompare(String(a.at))) : arr;
+  setData(next);
+}
+/** The sync engine listens to every change made in the app. */
+let commitHook: ((prev: Data, next: Data, by: string) => void) | null = null;
+export function setCommitHook(f: typeof commitHook) { commitHook = f; }
 export function resetDemo() { setData(seed()); }
 export function useData() {
   const [, force] = useState(0);
@@ -162,6 +233,7 @@ const snap = (d: Data, at: string): Snapshot => ({ clients: structuredClone(d.cl
 export function commit(by: string, change: (d: Data) => Partial<Data>, event?: Omit<Event, "id" | "at" | "by">) {
   const d = getData(), at = nowIso(), next = { ...d, ...change(d) };
   if (event) next.events = [{ ...event, id: uid(), at, by }, ...next.events];
+  if (CLOUD) { setData(next); commitHook?.(d, getData(), by); return; }
   if (next.officeOnline) { next.snapshot = snap(next, at); next.requests = next.requests.map(r => r.receivedAt ? r : { ...r, receivedAt: at }); }
   setData(next);
 }
@@ -175,8 +247,23 @@ export function delivery(d: { invoiceDeliveries?: Delivery[]; deliveries?: Deliv
 export function accountTotals(invoices: Invoice[], payments: Payment[], credits: CreditNote[]) {
   return invoices.reduce((a, i) => { const b = balance(i, payments, credits); return { total: a.total + b.total, received: a.received + b.received, credited: a.credited + b.credited, due: a.due + b.due, refund: a.refund + b.refund }; }, { total: 0, received: 0, credited: 0, due: 0, refund: 0 });
 }
-export function nextInvoiceNumber(d: Data, period: string) { return `${period}-${String(Math.max(0, ...d.invoices.filter(i => i.number.startsWith(period + "-")).map(i => Number(i.number.split("-")[2]) || 0)) + 1).padStart(3, "0")}`; }
-export function nextCreditNumber(d: Data, period: string) { return "AV-" + period + "-" + String(Math.max(0, ...d.credits.filter(c => c.date.startsWith(period)).map(c => Number(c.number.split("-").at(-1)) || 0)) + 1).padStart(3, "0"); }
+/** Each computer that issues invoices offline has its own series: the first keeps 2026-10-001, the others 2026-10-B001…
+ *  The Direction site uses the D series. Numbers never collide, even when nobody is connected. */
+let seriesLetter = "";
+export function setSeriesLetter(l: string) { seriesLetter = l; }
+export const getSeriesLetter = () => seriesLetter;
+const seriesMax = (numbers: string[], prefix: string) => Math.max(0, ...numbers.map(n => { const m = n.startsWith(prefix) ? n.slice(prefix.length).match(/^(\d+)$/) : null; return m ? Number(m[1]) : 0; }));
+/** Old invoices typed in with their original number do not move the automatic numbering; a number they already use is skipped. */
+/** A deleted invoice keeps its number: it is never given again. */
+const binned = (d: Data, c: BinCollection) => (d.bin ?? []).filter(b => b.collection === c).map(b => b.data);
+export function nextInvoiceNumber(d: Data, period: string) {
+  const all = [...d.invoices, ...binned(d, "invoices")] as { number?: string; legacy?: boolean }[];
+  const prefix = `${period}-${seriesLetter}`, used = new Set(all.map(i => String(i.number ?? "").trim().toLowerCase()));
+  let n = seriesMax(all.filter(i => !i.legacy).map(i => String(i.number ?? "")), prefix) + 1;
+  while (used.has((prefix + String(n).padStart(3, "0")).toLowerCase())) n++;
+  return prefix + String(n).padStart(3, "0");
+}
+export function nextCreditNumber(d: Data, period: string) { const prefix = `AV-${period}-${seriesLetter}`; return prefix + String(seriesMax([...d.credits.map(c => c.number), ...binned(d, "credits").map(c => String(c.number ?? ""))], prefix) + 1).padStart(3, "0"); }
 export function emptyClient(): Client { return { id: "", name: "", contact: "", address: "", phone: "", email: "", niu: "", rc: "" }; }
 export function emptyLine(): Line { return { id: uid(), contract: "", designation: "", destination: "", quantity: 1, unitPrice: 0 }; }
 export function accountName(id?: string) { if (!id) return "—"; if (id === "system") return "Système"; return getData().accounts.find(a => a.id === id)?.name ?? "Équipe"; }

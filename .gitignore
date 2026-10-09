@@ -43,3 +43,16 @@ next-env.d.ts
 /.codex/
 /outputs/
 /work/
+
+# Built by scripts/build-static.mjs for the cloud Worker and the desktop app
+dist-site/
+dist-pages/
+dist-guide/
+dist-office/
+cloud/.wrangler/
+cloud/pages/.wrangler/
+
+# Desktop app build output
+src-tauri/target/
+src-tauri/gen/
+node_modules/

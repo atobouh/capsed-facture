@@ -1,0 +1,70 @@
+<!-- title: Facturation | lead: Créer les clients et les factures, les imprimer, les remettre, les corriger. Tout se fait dans CAPSED Bureau, même sans internet. -->
+<h2 id="votre-ecran">Votre écran</h2>
+<p>À gauche, trois onglets : <b>Factures</b>, <b>Clients</b>, <b>Demandes</b> (ce que la Direction vous demande). En bas à gauche : l’état des envois, <span class="btn-ref">Verrouiller</span> et <span class="btn-ref">Se déconnecter</span>.</p>
+<table>
+  <tr><th>Raccourci</th><th>Effet</th></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>N</kbd></td><td>Nouvelle facture</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>F</kbd></td><td>Chercher sur la page</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>L</kbd></td><td>Verrouiller l’ordinateur</td></tr>
+  <tr><td><kbd>F1</kbd></td><td>Aide sur la page en cours (et le lien vers ce manuel)</td></tr>
+</table>
+
+<h2 id="clients">Ajouter un client</h2>
+<p>Onglet <b>Clients</b>, <span class="btn-ref">Ajouter un client</span>. Seul le nom est obligatoire <span class="mk">1</span> ; ce qui reste vide n’est pas imprimé. Puis <span class="btn-ref">Ajouter le client</span> <span class="mk">2</span>.</p>
+<figure><img src="img/fac-20-nouveau-client.webp" alt="Fenêtre Ajouter un client." loading="lazy"><figcaption>Le NIU et le RCCM s’impriment sur les factures du client.</figcaption></figure>
+<div class="note info"><strong>Une liste de clients existe déjà dans Excel ?</strong>Ne la retapez pas : onglet Clients, <span class="btn-ref">⋯</span> puis <span class="btn-ref">Importer des clients</span>. La première ligne du fichier donne les titres des colonnes (Nom, Adresse, Téléphone, E-mail, NIU, RCCM, Contact). Un aperçu s’affiche avant d’enregistrer ; les clients déjà présents sont laissés tels quels.</div>
+<p>Un client qui ne travaille plus avec CAPSED s’<b>archive</b> (menu <span class="btn-ref">⋯</span> du client, <span class="btn-ref">Archiver le client</span>) : il quitte la liste, rien n’est supprimé, il se réactive en un clic.</p>
+
+<h2 id="nouvelle-facture">Créer une facture, en 4 étapes</h2>
+<p>Onglet <b>Factures</b>, <span class="btn-ref">Nouvelle facture</span> (ou <kbd>Ctrl</kbd>+<kbd>N</kbd>).</p>
+<figure><img src="img/fac-01-factures-vide.webp" alt="Page Factures avec le bouton Nouvelle facture." loading="lazy"><figcaption>La page Factures, mois par mois. <span class="mk">1</span> Nouvelle facture.</figcaption></figure>
+<div class="step"><span>1</span><div><h3>Le client et la facture</h3><p>Tapez le nom du client <span class="mk">1</span> et choisissez-le dans la liste <span class="mk">2</span>. S’il n’existe pas : <span class="btn-ref">Nouveau client</span> <span class="mk">3</span>.</p>
+<figure><img src="img/fac-02-etape1-client.webp" alt="Étape 1 : choisir le client." loading="lazy"></figure>
+<p>Vérifiez la date <span class="mk">1</span>, choisissez <b>Facture hors taxe</b> ou <b>Facture TTC</b> <span class="mk">2</span>, ajoutez le n° de bon de commande si le client en a donné un, puis <span class="btn-ref">Continuer</span> <span class="mk">3</span>.</p>
+<figure><img src="img/fac-03-etape1-facture.webp" alt="Étape 1 : date et type de facture." loading="lazy"></figure></div></div>
+<div class="step"><span>2</span><div><h3>Les articles</h3><p>Pour chaque prestation : la désignation <span class="mk">1</span> (plusieurs lignes possibles, par exemple les numéros de conteneurs), la destination si besoin, la quantité <span class="mk">2</span> et le prix unitaire hors taxe <span class="mk">3</span>. <span class="btn-ref">Ajouter un article</span> <span class="mk">4</span> pour la prestation suivante.</p>
+<figure><img src="img/fac-04-etape2-articles.webp" alt="Étape 2 : articles et prestations." loading="lazy"><figcaption>Le total se calcule à droite pendant la saisie.</figcaption></figure></div></div>
+<div class="step"><span>3</span><div><h3>Remise, TVA et règlement</h3><p>La remise (0 si aucune), le taux de TVA pour une facture TTC, l’avance déjà versée <span class="mk">2</span>, le mode de règlement <span class="mk">1</span> et le délai de paiement (60 jours par défaut, <b>jamais imprimé</b>).</p>
+<figure><img src="img/fac-05-etape3-reglement.webp" alt="Étape 3 : remise, TVA et règlement." loading="lazy"></figure></div></div>
+<div class="step"><span>4</span><div><h3>Vérifier et émettre</h3><p>Le récapitulatif <span class="mk">1</span> et la facture telle qu’elle sera imprimée. Si tout est juste : <span class="btn-ref">Émettre la facture n° …</span> <span class="mk">2</span>. Le numéro est donné à ce moment-là.</p>
+<figure><img src="img/fac-06-etape4-verifier.webp" alt="Étape 4 : vérifier et émettre." loading="lazy"></figure></div></div>
+<div class="note good"><strong>Les longues factures</strong>Une facture peut avoir beaucoup d’articles : elle continue sur 2, 3 ou 4 pages. L’en-tête complet est sur la première page, les suivantes portent « N° … · client · suite », et les totaux, la somme en lettres, le mode de règlement et la signature sont sur la dernière.</div>
+<div class="note info"><strong>Quitter en cours de route</strong><span class="btn-ref">Quitter sans enregistrer</span> abandonne la facture : aucun numéro n’est consommé.</div>
+
+<h2 id="apres-emission">Après l’émission : imprimer, remettre, exporter</h2>
+<figure><img src="img/fac-07-registre.webp" alt="Liste des factures du mois." loading="lazy"><figcaption>Le mois se choisit avec les flèches <span class="mk">1</span>. Cliquez une facture <span class="mk">2</span> pour l’ouvrir.</figcaption></figure>
+<ul>
+  <li><b>Imprimer</b> : <span class="btn-ref">Imprimer</span> ouvre l’impression. Pour un PDF, choisissez « Enregistrer au format PDF » comme imprimante.</li>
+  <li><b>Remise au client</b> : quand la facture est donnée au client, <span class="btn-ref">Marquer comme remise</span>. La colonne « Remise au client » passe à « Oui ». Une erreur ? <span class="btn-ref">⋯</span>, <span class="btn-ref">Annuler la remise</span>.</li>
+  <li><b>Excel</b> : <span class="btn-ref">⋯</span>, <span class="btn-ref">Exporter en Excel</span> donne la facture en fichier Excel.</li>
+</ul>
+
+<h2 id="modifier">Modifier une facture</h2>
+<p>Ouvrez la facture, <span class="btn-ref">Modifier</span>. Les mêmes 4 étapes s’ouvrent.</p>
+<ul><li>Le <b>numéro ne change pas</b>, et la date reste dans le même mois.</li><li>La <b>version précédente est gardée</b> dans l’historique de la facture.</li><li>Si la Direction l’avait validée, elle revient chez elle « à valider » : c’est normal.</li><li>Une facture qui a déjà des paiements ou des avoirs garde le même client.</li></ul>
+<div class="note warn"><strong>Facture déjà remise au client</strong>On ne la modifie plus : on fait un <b>avoir</b> (ci-dessous).</div>
+
+<h2 id="avoir">Corriger avec un avoir</h2>
+<p>Un avoir réduit ou annule le montant d’une facture déjà remise ou payée. Page Factures, <span class="btn-ref">Créer un avoir</span>, choisissez la facture d’origine, puis le montant ou les articles concernés et le motif.</p>
+<figure><img src="img/fac-10-avoir.webp" alt="Choisir la facture à corriger par un avoir." loading="lazy"><figcaption>L’avoir a son propre numéro (AV-…) et reste attaché à la facture d’origine.</figcaption></figure>
+
+<h2 id="ancienne-facture">Ajouter une ancienne facture</h2>
+<p>Pour une facture faite <b>avant</b> l’application (sur papier ou dans Word) : page Factures, <span class="btn-ref">⋯</span> <span class="mk">1</span>, <span class="btn-ref">Ajouter une ancienne facture</span>.</p>
+<figure><img src="img/fac-08-menu-ancienne.webp" alt="Menu Autres actions avec Ajouter une ancienne facture." loading="lazy"></figure>
+<p>Les 4 mêmes étapes, avec en plus le <b>numéro d’origine</b> <span class="mk">2</span> et la <b>date d’origine</b> <span class="mk">3</span>, tels qu’imprimés sur le papier.</p>
+<figure><img src="img/fac-09-ancienne-facture.webp" alt="Ancienne facture avec numéro et date d’origine." loading="lazy"></figure>
+<ul><li>Un numéro qui existe déjà est refusé, avec le nom du client et la date de l’autre facture.</li><li>La numérotation des nouvelles factures n’est pas touchée.</li><li>Elle porte l’étiquette « Ancienne » et compte dans le compte du client comme les autres.</li><li>Si son mois est clôturé, la Direction doit d’abord le rouvrir.</li></ul>
+
+<h2 id="cloturer">Clôturer un mois</h2>
+<p>Quand un mois est fini et vérifié : page Factures, sur ce mois, en bas <span class="btn-ref">Clôturer octobre 2026…</span>, puis confirmez.</p>
+<ul><li>Plus aucune facture ni avoir ne peut être créé ou modifié sur ce mois.</li><li>Tout reste consultable et imprimable. Les paiements continuent d’arriver normalement.</li><li><b>Seule la Direction peut rouvrir un mois</b>, avec un motif.</li></ul>
+
+<h2 id="demandes">Les demandes de la Direction</h2>
+<p>Onglet <b>Demandes</b>. La Direction peut demander un <b>client à créer</b> ou une <b>facture à créer</b>. Ouvrez la demande, puis <span class="btn-ref">Créer le client</span> ou <span class="btn-ref">Créer la facture</span> : les informations données sont reprises, et la demande se marque traitée toute seule.</p>
+
+<h2 id="sans-internet">Sans internet</h2>
+<p>Continuez normalement : créer, modifier, imprimer, tout marche. La barre d’état affiche « N modifications en attente » ; elles partent seules au retour de la connexion. Ne retapez rien deux fois.</p>
+<div class="note warn"><strong>À éviter</strong>Éteindre définitivement, réinstaller Windows ou changer d’ordinateur alors que des modifications sont encore « en attente ». Attendez « Tout est envoyé ».</div>
+
+<h2 id="les-deux-roles">Facturation et encaissement</h2>
+<p>Avec le rôle « Facturation et encaissement », vous avez les onglets <b>Factures</b>, <b>Clients et paiements</b> et <b>Demandes</b>, avec les actions des deux métiers. Lisez cette page et la page <a href="encaissement.html">Encaissement</a>.</p>

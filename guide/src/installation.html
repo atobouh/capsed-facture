@@ -1,0 +1,60 @@
+<!-- title: Installer et relier un ordinateur | lead: À faire une seule fois par ordinateur du bureau. Comptez cinq minutes, avec internet. -->
+<h2 id="installer">1. Installer CAPSED Bureau</h2>
+<div class="step"><span>1</span><div><h3>Télécharger</h3><p>Sur l’ordinateur du bureau, ouvrez ce lien : <a href="https://github.com/atobouh/capsed-facture/releases/download/bureau-latest/CAPSED-Bureau-installation.exe">CAPSED-Bureau-installation.exe</a> (environ 4 Mo). Ouvrez le fichier téléchargé.</p></div></div>
+<div class="step"><span>2</span><div><h3>Si Windows affiche « Windows a protégé votre ordinateur »</h3><p>C’est normal : l’application est un outil interne, sans certificat payant. Cliquez <span class="btn-ref">Informations complémentaires</span> <span class="mk">1</span>, puis <span class="btn-ref">Exécuter quand même</span> <span class="mk">2</span>.</p>
+<div class="illu" role="img" aria-label="Fenêtre bleue de Windows : cliquer Informations complémentaires, puis Exécuter quand même.">
+<svg viewBox="0 0 520 250" width="100%" style="display:block;font-family:'Segoe UI',system-ui,sans-serif">
+  <rect width="520" height="250" rx="8" fill="#0063B1"/><text x="28" y="52" font-size="22" fill="#fff">Windows a protégé votre ordinateur</text>
+  <text x="28" y="88" font-size="13" fill="#E3F0FB">Microsoft Defender SmartScreen a empêché le démarrage d’une application</text><text x="28" y="106" font-size="13" fill="#E3F0FB">non reconnue. L’exécution de cette application peut mettre votre ordinateur…</text>
+  <text x="28" y="140" font-size="13" fill="#fff" text-decoration="underline">Informations complémentaires</text>
+  <rect x="20" y="124" width="200" height="26" rx="6" fill="none" stroke="#E5484D" stroke-width="3"/><circle cx="20" cy="124" r="11" fill="#E5484D"/><text x="20" y="129" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">1</text>
+  <rect x="250" y="196" width="120" height="32" fill="#fff" opacity=".9"/><text x="310" y="217" text-anchor="middle" font-size="13" fill="#000">Exécuter quand même</text>
+  <rect x="380" y="196" width="120" height="32" fill="#fff" opacity=".6"/><text x="440" y="217" text-anchor="middle" font-size="13" fill="#000">Ne pas exécuter</text>
+  <rect x="244" y="190" width="132" height="44" rx="8" fill="none" stroke="#E5484D" stroke-width="3"/><circle cx="244" cy="190" r="11" fill="#E5484D"/><text x="244" y="195" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">2</text>
+</svg></div><p>« Exécuter quand même » n’apparaît qu’après avoir cliqué « Informations complémentaires ».</p></div></div>
+<div class="step"><span>3</span><div><h3>Ouvrir CAPSED Bureau</h3><p>L’installation est rapide. Une icône violette avec un triangle blanc apparaît sur le bureau et dans le menu Démarrer. À chaque ouverture, une petite carte « Ouverture… » s’affiche tout de suite, puis l’application.</p>
+<figure class="small"><img src="img/bur-00-ouverture.webp" alt="Carte violette CAPSED Bureau, Ouverture…" loading="lazy" width="360" height="240"><figcaption>La carte d’ouverture : l’application démarre.</figcaption></figure>
+<div class="note info"><strong>Si l’ordinateur n’a pas le composant Microsoft WebView2</strong>L’installation le télécharge : il faut alors internet pendant l’installation. Windows 10 et 11 l’ont presque toujours.</div></div></div>
+
+<h2 id="relier">2. Relier l’ordinateur (une seule fois)</h2>
+<div class="step"><span>1</span><div><h3>Demander un code à la Direction</h3><p>La Direction ouvre son site : Réglages, Équipe et accès, <span class="btn-ref">Relier un ordinateur</span>. Un code à 6 chiffres s’affiche (voir <a href="direction.html#ordinateurs">Direction : relier un ordinateur</a>).</p></div></div>
+<div class="step"><span>2</span><div><h3>Taper le code sur l’ordinateur du bureau</h3><p>Tapez le code <span class="mk">1</span>, donnez un nom à l’ordinateur <span class="mk">2</span> (par exemple « Facturation 1 » ou « Accueil »), puis <span class="btn-ref">Relier l’ordinateur</span> <span class="mk">3</span>.</p>
+<figure><img src="img/bur-01-relier.webp" alt="Écran Relier cet ordinateur avec le code, le nom et le bouton." loading="lazy"><figcaption>L’écran « Relier cet ordinateur ».</figcaption></figure>
+<div class="note good"><strong>Le code n’est valable que 24 heures, et une seule fois.</strong>Ce n’est que le code qui expire. Une fois l’ordinateur relié, il le reste : rien à renouveler. Un code non utilisé à temps : la Direction en crée simplement un autre.</div>
+<div class="note info"><strong>Connexion très lente ?</strong>Le bouton affiche « Connexion lente, on continue… » et l’application réessaie toute seule. Si la réponse se perd en route, réessayer avec le même code fonctionne : l’ordinateur n’est jamais relié deux fois.</div></div></div>
+<div class="step"><span>3</span><div><h3>Première récupération des données</h3><p>L’ordinateur reçoit les clients, les factures et les comptes de l’équipe. Le nombre d’éléments reçus s’affiche. C’est la seule étape qui a besoin d’internet ; ensuite, l’ordinateur travaille même sans.</p></div></div>
+
+<h2 id="se-connecter">3. Se connecter</h2>
+<p>Chaque personne tape l’identifiant <span class="mk">1</span> et le mot de passe <span class="mk">2</span> donnés par la Direction, puis <span class="btn-ref">Se connecter</span> <span class="mk">3</span>. Le mot de passe est vérifié sur l’ordinateur : <b>ça marche sans internet</b>.</p>
+<figure><img src="img/bur-02-connexion.webp" alt="Écran de connexion avec identifiant et mot de passe." loading="lazy"><figcaption>L’écran de connexion de CAPSED Bureau.</figcaption></figure>
+<p>Chacun ne voit que ses onglets : la Facturation voit <b>Factures, Clients, Demandes</b> ; l’Encaissement voit <b>Clients et paiements, Demandes</b> ; « Facturation et encaissement » voit tout.</p>
+
+<h2 id="barre-d-etat">4. La barre d’état : tout est-il envoyé ?</h2>
+<p>En bas à gauche <span class="mk">1</span>, l’application dit où en sont les envois :</p>
+<ul><li><span class="pill good">Tout est envoyé · 14:32</span> : le cloud et la Direction ont tout.</li><li><span class="pill warn">2 modifications en attente</span> : elles partiront dès que la connexion revient. Rien n’est perdu, continuez à travailler.</li></ul>
+<figure><img src="img/bur-03-statut-envoi.webp" alt="Barre d’état Tout est envoyé et boutons Verrouiller et Se déconnecter." loading="lazy"><figcaption>En bas à gauche : l’état des envois <span class="mk">1</span>, et <span class="btn-ref">Verrouiller</span> · <span class="btn-ref">Se déconnecter</span> <span class="mk">2</span>.</figcaption></figure>
+<figure><img src="img/bur-05-hors-ligne.webp" alt="Sans internet, la barre d’état indique les modifications en attente." loading="lazy"><figcaption>Sans internet : une facture créée normalement, « 2 modifications en attente ».</figcaption></figure>
+
+<h2 id="verrouiller">5. Verrouiller, se déconnecter</h2>
+<ul>
+  <li><b>Verrouiller</b> (<span class="btn-ref">Verrouiller</span> ou <kbd>Ctrl</kbd>+<kbd>L</kbd>) : pour une pause. Le travail en cours reste à l’écran, caché. Seul votre mot de passe le rouvre <span class="mk">1</span>.</li>
+  <li><b>Verrouillage automatique</b> : après 10 minutes sans toucher l’ordinateur.</li>
+  <li><b>Ce n’est pas moi : changer d’utilisateur</b> <span class="mk">2</span> : quelqu’un d’autre prend le poste ; il se connecte avec son propre compte.</li>
+  <li><b>Se déconnecter</b> : en fin de journée, ou en laissant le poste à un collègue.</li>
+</ul>
+<figure><img src="img/bur-04-verrouille.webp" alt="Écran Session verrouillée avec le champ mot de passe." loading="lazy"><figcaption>L’ordinateur verrouillé. Après 5 mauvais mots de passe, il faut attendre 30 secondes.</figcaption></figure>
+
+<h2 id="mises-a-jour">6. Les mises à jour : vous choisissez le moment</h2>
+<p>CAPSED Bureau regarde de temps en temps s’il existe une nouvelle version. Il ne télécharge et n’installe rien tout seul. Quand il y en a une, un message apparaît en bas de l’écran : <i>« Nouvelle version 1.0.x disponible. »</i></p>
+<ul><li><span class="btn-ref">Plus tard</span> : le message disparaît pendant 3 jours. Pour l’installer avant, ouvrez l’aide (<span class="btn-ref">Aide</span> ou <kbd>F1</kbd>) puis <span class="btn-ref">L’installer maintenant</span>.</li><li><span class="btn-ref">Installer</span> : un écran violet montre le téléchargement (pourcentage). Ensuite l’application se ferme, une petite fenêtre d’installation apparaît, puis CAPSED Bureau se rouvre tout seul. <span class="btn-ref">Annuler</span> arrête le téléchargement ; rien ne change.</li></ul>
+<p>Choisissez un moment calme avec internet : le téléchargement fait une dizaine de Mo. Une mise à jour n’arrive que lorsque la Direction (ou le développeur, avec son accord) la publie pour l’équipe. Le message peut dire ce qui change (« Nouveautés : … »).</p>
+<div class="note warn"><strong>« La mise à jour … ne s’est pas installée la dernière fois »</strong>Cliquez <span class="btn-ref">Réessayer</span>. Si cela ne marche toujours pas : téléchargez l’installateur (lien en haut de cette page), ouvrez-le, puis rouvrez CAPSED Bureau. Les données ne sont pas touchées.</div>
+<div class="note good"><strong>Les données ne sont pas touchées.</strong>Les factures, paiements et modifications en attente restent sur l’ordinateur et dans le cloud.</div>
+
+<h2 id="retire">7. Si l’ordinateur a été retiré</h2>
+<p>Quand la Direction retire un ordinateur (perdu, remplacé…), il déconnecte la personne dès qu’il a internet et affiche « Cet ordinateur a été retiré par la Direction ». Pour l’utiliser de nouveau : un nouveau code de la Direction.</p>
+<figure><img src="img/bur-06-ordinateur-retire.webp" alt="Message Cet ordinateur a été retiré par la Direction." loading="lazy"><figcaption>Si l’ordinateur avait des modifications pas encore envoyées, elles sont gardées et partent dès qu’il est relié de nouveau.</figcaption></figure>
+
+<h2 id="remplacer">8. Remplacer un ordinateur</h2>
+<ol><li>Sur l’ancien ordinateur, s’il marche encore : vérifiez « Tout est envoyé ».</li><li>Installez CAPSED Bureau sur le nouveau et reliez-le avec un nouveau code.</li><li>La Direction retire l’ancien (Réglages, Équipe et accès, Ordinateurs du bureau, <span class="btn-ref">Retirer</span>).</li></ol>
+<p>Le nouvel ordinateur reçoit tout l’historique depuis le cloud.</p>

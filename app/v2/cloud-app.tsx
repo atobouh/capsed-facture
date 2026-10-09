@@ -12,9 +12,10 @@ import type { OfficeRoute } from "./clients";
 import { ResponsableScreen } from "./responsable";
 import type { RRoute } from "./responsable";
 import { DIRECTION_LETTER } from "./collections";
+import { DeleteRight } from "./corbeille";
 import { checkPassword } from "./password";
 import { ROLE_LABEL, commit, forgetLocalData, getData, nowIso, receives, setSeriesLetter, useData } from "./store";
-import type { Account } from "./store";
+import type { Account, Role } from "./store";
 import { resetSync, startSync, stopSync, syncNow, useSync } from "./sync";
 import { fetchJson } from "./net";
 import type { NetOptions } from "./net";
@@ -243,23 +244,25 @@ export function OfficeApp() {
 
 function OfficeSignedIn({ device, onUnlink }: { device: Device; onUnlink: () => void }) {
   const d = useData(), sync = useSync(), [sid, setSid] = useState(() => read(SESSION));
-  const me = d.accounts.find(a => a.id === sid && a.active && a.role !== "responsable");
-  const [route, setRoute] = useState<OfficeRoute>(() => HOME[me?.role ?? "facturation"]), [help, setHelp] = useState(false);
+  const me = d.accounts.find(a => a.id === sid && a.active);
+  // The Direction on an office computer: the full office screens, plus deleting. Validating and the settings stay on the website.
+  const direction = me?.role === "responsable", role: Role = direction ? "bureau" : me?.role ?? "facturation";
+  const [route, setRoute] = useState<OfficeRoute>(() => HOME[role]), [help, setHelp] = useState(false);
   const nav = useCallback((r: OfficeRoute) => { setRoute(r); document.getElementById("contenu")?.scrollTo(0, 0); }, []);
-  // Requests from the Direction are marked as received on this computer.
+  // Requests from the Direction are marked as received on this computer (by the office, not by the Direction itself).
   useEffect(() => {
-    if (!me) return;
+    if (!me || direction) return;
     const fresh = d.requests.filter(r => receives(me.role, r.to) && !r.receivedAt);
     if (fresh.length) commit(me.id, x => ({ requests: x.requests.map(r => fresh.some(f => f.id === r.id) ? { ...r, receivedAt: nowIso() } : r) }));
-  }, [d.requests, me]);
-  useEffect(() => { document.title = me ? `CAPSED, ${ROLE_LABEL[me.role]}` : "CAPSED, Connexion"; }, [me]);
+  }, [d.requests, me, direction]);
+  useEffect(() => { document.title = me ? `CAPSED, ${direction ? "Direction" : ROLE_LABEL[me.role]}` : "CAPSED, Connexion"; }, [me, direction]);
   const [locked, lock, unlock] = useAutoLock(!!me);
   if (!sync.firstPullDone && !d.accounts.length) return <Loading title="Première récupération des données…" detail={sync.received ? `${sync.received} éléments reçus` : `Poste « ${device.name} ». Une seule fois, ensuite le poste travaille même sans internet.`} error={sync.authLost ? "Ce poste n’est plus autorisé. Demandez un nouveau code à la Direction." : sync.error} onRetry={sync.authLost ? onUnlink : sync.error ? syncNow : undefined} />;
-  if (!me) return <Screen><OfficeLogin device={device} authLost={!!sync.authLost} onUnlink={onUnlink} onDone={a => { write(SESSION, a.id); setSid(a.id); setRoute(HOME[a.role]); unlock(); }} /></Screen>;
-  return <div className={`cx-app cx-role-${me.role}`}>
-    <div className="cx-lock-host" inert={locked || undefined}><OfficeShell me={me} route={route} nav={nav} onHelp={() => setHelp(true)} onLock={lock} onSignOut={() => { write(SESSION, ""); setSid(""); unlock(); }}><OfficeScreen role={me.role} by={me.id} route={route} nav={nav} /></OfficeShell></div>
+  if (!me) return <Screen><OfficeLogin device={device} authLost={!!sync.authLost} onUnlink={onUnlink} onDone={a => { write(SESSION, a.id); setSid(a.id); setRoute(HOME[a.role === "responsable" ? "bureau" : a.role]); unlock(); }} /></Screen>;
+  return <div className={`cx-app cx-role-${role}`}>
+    <div className="cx-lock-host" inert={locked || undefined}><OfficeShell me={me} route={route} nav={nav} onHelp={() => setHelp(true)} onLock={lock} onSignOut={() => { write(SESSION, ""); setSid(""); unlock(); }}><DeleteRight.Provider value={direction}><OfficeScreen role={role} by={me.id} route={route} nav={nav} /></DeleteRight.Provider></OfficeShell></div>
     {locked && <LockScreen me={me} onUnlock={unlock} onSwitch={() => { write(SESSION, ""); setSid(""); unlock(); }} />}
-    {help && <HelpPanel role={me.role} route={route.name} onClose={() => setHelp(false)} />}
+    {help && <HelpPanel role={role} route={route.name} onClose={() => setHelp(false)} />}
     <UpdateBar />
     <ToastHost />
   </div>;
@@ -302,7 +305,7 @@ function LockScreen({ me, onUnlock, onSwitch }: { me: Account; onUnlock: () => v
     <form className="cx-lock-card" onSubmit={e => { e.preventDefault(); void submit(); }}>
       <img src="favicon.svg" alt="" className="cx-lock-mark" />
       <h2 id="lock-title">Session verrouillée</h2>
-      <p className="cx-muted">{me.name} · {ROLE_LABEL[me.role]}. Le travail en cours est gardé.</p>
+      <p className="cx-muted">{me.name} · {me.role === "responsable" ? "Direction" : ROLE_LABEL[me.role]}. Le travail en cours est gardé.</p>
       <Field label="Mot de passe"><PasswordInput id="unlock-password" autoFocus value={password} onChange={v => { setPassword(v); setError(""); }} autoComplete="current-password" /></Field>
       {error && <Notice tone="bad">{error}</Notice>}
       <Button kind="primary" type="submit" wide disabled={busy}>Déverrouiller</Button>
@@ -348,12 +351,11 @@ function OfficeLogin({ device, authLost, onDone, onUnlink }: { device: Device; a
     setBusy(false);
     if (!a || !ok) return setError("Identifiant ou mot de passe incorrect. Vérifiez la fiche remise par la Direction.");
     if (!a.active) return setError("Ce compte est désactivé. Adressez-vous à la Direction.");
-    if (a.role === "responsable") return setError("La Direction utilise le site, pas l’application de bureau.");
     onDone(a);
   }
   return <form className="cx-signin-form" onSubmit={e => { e.preventDefault(); void submit(); }}>
     <h2>Connexion</h2>
-    <p className="cx-muted">Poste « {device.name} »{device.letter ? `, factures de la série ${device.letter}` : ""}. Fonctionne aussi sans internet.</p>
+    <p className="cx-muted">Poste « {device.name} »{device.letter ? `, factures de la série ${device.letter}` : ""}. Fonctionne aussi sans internet, pour l’équipe comme pour la Direction.</p>
     {authLost && <Notice tone="bad" title="Ce poste n’est plus relié">La Direction l’a retiré. <button type="button" className="cx-link-btn" onClick={onUnlink}>Relier avec un nouveau code</button></Notice>}
     {!team.length && <Notice>Aucun compte de l’équipe pour l’instant. La Direction les crée dans Réglages, Équipe et accès.</Notice>}
     <Field label="Identifiant"><input id="login" className="cx-input" value={login} autoFocus autoComplete="username" onChange={e => { setLogin(e.target.value); setError(""); }} /></Field>

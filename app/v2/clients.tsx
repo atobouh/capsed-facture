@@ -3,6 +3,8 @@ import { FilePlus2, Lock, Pencil, Plus, UserPlus } from "lucide-react";
 import { Button, Confirm, Empty, Field, Modal, MoreMenu, Monogram, PageHead, Row, SearchBox, Stamp, StatusChip, TextInput, matches, toast, useWide } from "./ui";
 import { CancelPayment, CreditModal, PaymentModal } from "./payments";
 import { ImportClients } from "./import-clients";
+import { DeleteDialog, useCanDelete } from "./corbeille";
+import type { BinTarget } from "./corbeille";
 import { accountName, methodName, accountTotals, balance, canBill, canCash, commit, dateFr, getData, overdueDays, money, nowIso, uid, useData } from "./store";
 import type { Client, Role } from "./store";
 
@@ -65,6 +67,7 @@ export function ClientsDirectory({ role, by, nav }: { role: Role; by: string; na
 export function ClientAccount({ id, role, by, nav, pane }: { id: string; role: Role; by: string; nav: Nav; pane?: boolean }) {
   const d = useData(), client = d.clients.find(c => c.id === id);
   const [edit, setEdit] = useState(false), [archive, setArchive] = useState(false), [pay, setPay] = useState<{ invoiceId: string; paymentId?: string } | null>(null), [cancel, setCancel] = useState<string | null>(null), [credit, setCredit] = useState<string | null>(null);
+  const canDelete = useCanDelete(), [del, setDel] = useState<BinTarget | null>(null);
   if (!client) return <Empty title="Client introuvable." action={<Button onClick={() => nav({ name: "clients" })}>Tous les clients</Button>} />;
   const items = d.invoices.filter(i => i.client.id === client.id).sort((a, b) => b.date.localeCompare(a.date) || b.number.localeCompare(a.number));
   const a = accountTotals(items, d.payments, d.credits), unpaid = items.filter(i => balance(i, d.payments, d.credits).due > 0);
@@ -80,6 +83,7 @@ export function ClientAccount({ id, role, by, nav, pane }: { id: string; role: R
       actions={<>
         {biller && <MoreMenu label="Autres actions" items={[
           ...(cashier ? [{ label: "Modifier les coordonnées", onClick: () => setEdit(true) }, { label: "Relevé du client", onClick: () => nav({ name: "situation", id: client.id }) }] : []),
+          ...(canDelete ? [{ label: "Supprimer le client", hint: "Restaurable sur le site de la Direction", onClick: () => setDel({ collection: "clients", id: client.id }) }] : []),
           client.archived ? { label: "Réactiver le client", onClick: () => { commit(by, x => ({ clients: x.clients.map(c => c.id === client.id ? { ...c, archived: false, archivedAt: undefined } : c) }), { text: `Client ${client.name} réactivé`, clientId: client.id }); toast("Client réactivé."); } } : { label: "Archiver le client", hint: "Il quitte la liste. Rien n’est supprimé.", onClick: () => setArchive(true) }]} />}
         {biller && !cashier && <Button icon={<Pencil size={17} aria-hidden="true" />} onClick={() => setEdit(true)}>Modifier</Button>}
         {cashier && !biller && <Button onClick={() => nav({ name: "situation", id: client.id })}>Relevé du client</Button>}
@@ -108,7 +112,8 @@ export function ClientAccount({ id, role, by, nav, pane }: { id: string; role: R
           : p.cancelledAt ? <Stamp tone="bad">Annulé</Stamp>
           : p.lockedAt ? <Stamp tone="good"><Lock size={12} aria-hidden="true" />Validé par la Direction</Stamp>
           : cashier ? <><span className="cx-chip">À valider par la Direction</span><button type="button" className="cx-text-btn" onClick={() => setPay({ invoiceId: p.invoiceId, paymentId: p.id })}>Corriger</button><button type="button" className="cx-text-btn cx-text-bad" onClick={() => setCancel(p.id)}>Annuler</button></>
-          : <span className="cx-chip">À valider par la Direction</span>}</span>
+          : <span className="cx-chip">À valider par la Direction</span>}
+          {canDelete && !p.advance && <button type="button" className="cx-text-btn cx-text-bad" onClick={() => setDel({ collection: "payments", id: p.id })}>Supprimer</button>}</span>
       </div>)}{!entries.length && <Empty title="Aucun paiement reçu pour l’instant." />}</div>
     </section>
     {edit && <ClientForm client={client} by={by} onClose={() => setEdit(false)} onSaved={() => setEdit(false)} />}
@@ -117,5 +122,6 @@ export function ClientAccount({ id, role, by, nav, pane }: { id: string; role: R
     {pay && <PaymentModal invoiceId={pay.invoiceId} paymentId={pay.paymentId} by={by} onClose={() => setPay(null)} />}
     {cancel && <CancelPayment payment={d.payments.find(p => p.id === cancel)!} by={by} onClose={() => setCancel(null)} />}
     {credit && <CreditModal invoiceId={credit} by={by} onClose={() => setCredit(null)} onIssued={cid => { setCredit(null); nav({ name: "credit", id: cid }); }} />}
+    {del && <DeleteDialog target={del} by={by} onClose={() => setDel(null)} onDone={del.collection === "clients" ? () => nav({ name: "clients" }) : undefined} />}
   </div>;
 }

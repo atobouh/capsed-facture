@@ -2,15 +2,16 @@
  *  Factures › « ⋯ » › « Importer d’anciennes factures » opens a drop window; the files are then read on this computer,
  *  turned into invoice drafts, and let go: no file is ever kept or sent.
  *  Each draft is checked, then saved as an old invoice (« Ancienne »), with its own number and date.
- *  Old invoices need no validation by the Direction. */
+ *  Old invoices need no validation by the Direction.
+ *  A document that shows no payment mode takes the one chosen once for the whole import. « Tout annuler » drops what is not saved. */
 import { useEffect, useRef, useState } from "react";
-import { Check, FileText, FileUp, Loader2, UserPlus } from "lucide-react";
-import { invoiceTotals } from "../invoice-math";
+import { Check, FileText, FileUp, Loader2, UserPlus, X } from "lucide-react";
+import { invoiceTotals, paymentMethods } from "../invoice-math";
 import Composer, { emptyDraft, newInvoiceRecord, numberTaken } from "./composer";
 import type { Draft } from "./composer";
 import { ClientForm } from "./clients";
 import { Button, Confirm, Modal, Notice, PageHead, toast } from "./ui";
-import { commit, dateFr, emptyClient, getData, money, monthLabel, todayIso, useData } from "./store";
+import { commit, dateFr, emptyClient, getData, methodName, money, monthLabel, todayIso, useData } from "./store";
 import type { Client, Data } from "./store";
 import { pdfLines, readInvoice, splitInvoices } from "./pdf-read";
 import type { ReadInvoice } from "./pdf-read";
@@ -20,8 +21,10 @@ type Kind = "pdf" | "docx";
 type Job = { key: string; name: string; kind: Kind; state: "waiting" | "reading" | "done" | "failed"; page?: number; pages?: number; found: number; error?: string };
 type Item = { key: string; file: string; page: number; state: "read" | "saved" | "skipped"; read: ReadInvoice; invoiceId?: string; number?: string };
 // Kept while the app is open, so going to an invoice and back does not lose the batch. Only the text read is kept, never a file.
-let keptJobs: Job[] = [], keptItems: Item[] = [];
+let keptJobs: Job[] = [], keptItems: Item[] = [], keptPay = "";
 const waiting: { key: string; file: File }[] = [];
+/** Changes at each « Tout annuler »: a file still being read when the import was cancelled adds nothing. */
+let batch = 0;
 const kindOf = (f: File): Kind | null => f.type === "application/pdf" || /\.pdf$/i.test(f.name) ? "pdf" : /\.docx$/i.test(f.name) || f.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ? "docx" : null;
 /** Files chosen in the drop window, read as soon as the import page opens. Returns the files that cannot be read. */
 export function queueFiles(files: File[]) {
@@ -42,12 +45,15 @@ export function matchClient(clients: Client[], c: Partial<Client>) {
   const niu = c.niu?.replace(/\s/g, "").toLowerCase();
   return (niu && clients.find(x => x.niu && x.niu.replace(/\s/g, "").toLowerCase() === niu)) || (c.name ? clients.find(x => simple(x.name) === simple(c.name!) && simple(x.name)) : undefined);
 }
-function draftOf(r: ReadInvoice, clientId: string): Draft {
-  return { ...emptyDraft(true), number: r.number, date: r.date, clientId, lines: r.lines, taxMode: r.taxMode, taxRate: r.taxMode === "ttc" ? r.taxRate : 19.25, discountRate: r.discountRate, advance: r.advance, purchaseOrder: r.purchaseOrder, ...(r.payment ? { payment: r.payment } : {}) };
+/** `pay`: the payment mode chosen for this import, for a document that shows none. */
+function draftOf(r: ReadInvoice, clientId: string, pay = ""): Draft {
+  const payment = r.payment || pay;
+  return { ...emptyDraft(true), number: r.number, date: r.date, clientId, lines: r.lines, taxMode: r.taxMode, taxRate: r.taxMode === "ttc" ? r.taxRate : 19.25, discountRate: r.discountRate, advance: r.advance, purchaseOrder: r.purchaseOrder, ...(payment ? { payment } : {}) };
 }
 /** What stops a draft from being saved as it is, and what only deserves a look. */
-function issues(d: Data, r: ReadInvoice, twins = 0) {
+function issues(d: Data, r: ReadInvoice, twins = 0, pay = "") {
   const stop: string[] = [], look = [...r.warnings], client = matchClient(d.clients.filter(c => !c.archived), r.client);
+  if (!r.payment && !pay) look.push("Mode de paiement absent du document : choisissez-le en haut de la page.");
   const taken = r.number ? numberTaken(d, r.number) : undefined;
   if (taken) stop.push(taken.client ? `Déjà dans l’application (facture de ${taken.client.name}).` : `Le numéro ${r.number} a déjà servi.`);
   else if (twins > 1) stop.push(`Le numéro ${r.number} apparaît ${twins} fois dans les fichiers.`);
@@ -97,6 +103,8 @@ type Filter = "all" | "ready" | "check" | "saved";
 export function ImportPdf({ by, onBack, onOpen }: { by: string; onBack: () => void; onOpen: (invoiceId: string) => void }) {
   const d = useData(), [jobs, setJobsState] = useState<Job[]>(keptJobs), [items, setItemsState] = useState<Item[]>(keptItems);
   const [check, setCheck] = useState<Item | null>(null), [bulk, setBulk] = useState(false), [drop, setDrop] = useState(false), [filter, setFilter] = useState<Filter>("all"), [newClient, setNewClient] = useState<Client | null>(null);
+  const [pay, setPayState] = useState(keptPay), [cancelAll, setCancelAll] = useState(false);
+  const setPay = (v: string) => setPayState(keptPay = v);
   const setJobs = (f: (x: Job[]) => Job[]) => setJobsState(() => (keptJobs = f(keptJobs)));
   const setItems = (f: (x: Item[]) => Item[]) => setItemsState(() => (keptItems = f(keptItems)));
   const job = (key: string, p: Partial<Job>) => setJobs(x => x.map(j => j.key === key ? { ...j, ...p } : j));
@@ -108,11 +116,12 @@ export function ImportPdf({ by, onBack, onOpen }: { by: string; onBack: () => vo
     if (busy.current) return; busy.current = true;
     try {
       for (let next = waiting.shift(); next; next = waiting.shift()) {
-        const { key, file } = next, kind = kindOf(file)!;
+        const { key, file } = next, kind = kindOf(file)!, mine = batch;
         job(key, { state: "reading" });
         try {
           const data = await file.arrayBuffer();
           const lines = kind === "pdf" ? await pdfLines(data, (page, pages) => job(key, { page, pages })) : await wordLines(data);
+          if (mine !== batch) continue;
           const found = splitInvoices(lines).map(g => ({ page: g[0]?.page ?? 1, read: readInvoice(g) })).filter(x => x.read.number || x.read.date || x.read.lines.length);
           if (!found.length) { job(key, { state: "failed", error: kind === "pdf" ? "Aucune facture lisible : c’est peut-être un scan (une image). Saisissez-la avec « Ajouter une ancienne facture »." : "Aucune facture trouvée dans ce document." }); continue; }
           setItems(x => [...x, ...found.map(f => ({ key: crypto.randomUUID(), file: file.name, page: f.page, state: "read" as const, read: f.read }))]);
@@ -129,24 +138,31 @@ export function ImportPdf({ by, onBack, onOpen }: { by: string; onBack: () => vo
   function saveReady(list: Item[]) {
     let n = 0;
     for (const it of list) {
-      const cur = getData(), x = issues(cur, it.read);
+      const cur = getData(), x = issues(cur, it.read, 0, keptPay);
       if (!x.ready || !x.client) continue;
-      const invoice = newInvoiceRecord(cur, draftOf(it.read, x.client.id), x.client, by, { legacy: true });
+      const invoice = newInvoiceRecord(cur, draftOf(it.read, x.client.id, keptPay), x.client, by, { legacy: true });
       commit(by, y => ({ invoices: [...y.invoices, invoice] }), { text: `Ancienne facture ${invoice.number} du ${dateFr(invoice.date)} reprise de son fichier, ${money(invoiceTotals(invoice).ttc)}`, clientId: invoice.client.id, invoiceId: invoice.id });
       update(it.key, { state: "saved", invoiceId: invoice.id, number: invoice.number }); n++;
     }
     toast(n ? `${n} ancienne(s) facture(s) enregistrée(s).` : "Rien à enregistrer.");
   }
+  /** Back to an empty import: files and invoices not saved leave this page. What was saved stays in the app. */
+  function discard() {
+    batch++; waiting.length = 0;
+    const kept = keptItems.filter(i => i.state === "saved").length;
+    setJobs(() => []); setItems(() => []); setPay(""); setFilter("all"); setCancelAll(false);
+    toast(kept ? `Import annulé. ${kept === 1 ? "La facture déjà enregistrée reste" : `Les ${kept} factures déjà enregistrées restent`} dans l’application.` : "Import annulé.");
+  }
 
   if (check) {
-    const r = check.read, client = matchClient(d.clients.filter(c => !c.archived), r.client), x = issues(d, r);
-    return <Composer key={check.key} legacy by={by} initial={draftOf(r, client?.id ?? "")} readClient={client ? undefined : r.client} source={{ file: `${check.file}${check.page > 1 ? `, page ${check.page}` : ""}`, warnings: [...x.stop, ...r.warnings] }} startStep={client && !x.stop.length && r.number && r.date ? 3 : 0}
+    const r = check.read, client = matchClient(d.clients.filter(c => !c.archived), r.client), x = issues(d, r, 0, pay);
+    return <Composer key={check.key} legacy by={by} initial={draftOf(r, client?.id ?? "", pay)} readClient={client ? undefined : r.client} source={{ file: `${check.file}${check.page > 1 ? `, page ${check.page}` : ""}`, warnings: [...x.stop, ...r.warnings] }} startStep={client && !x.stop.length && r.number && r.date ? 3 : 0}
       onDone={id => { update(check.key, { state: "saved", invoiceId: id, number: getData().invoices.find(i => i.id === id)?.number }); setCheck(null); }} onCancel={() => setCheck(null)} />;
   }
 
   const counts = new Map<string, number>();
   for (const it of items) if (it.state === "read" && it.read.number) counts.set(it.read.number.toLowerCase(), (counts.get(it.read.number.toLowerCase()) ?? 0) + 1);
-  const rows = items.map(it => ({ it, x: issues(d, it.read, counts.get(it.read.number.toLowerCase())) }));
+  const rows = items.map(it => ({ it, x: issues(d, it.read, counts.get(it.read.number.toLowerCase()), pay) }));
   const open = rows.filter(r => r.it.state === "read"), ready = open.filter(r => r.x.ready), toCheck = open.filter(r => !r.x.ready), saved = rows.filter(r => r.it.state === "saved");
   // Clients read in the files that are not in the app yet: created once, for all their invoices.
   const unknown = new Map<string, { client: Partial<Client>; n: number }>();
@@ -154,10 +170,11 @@ export function ImportPdf({ by, onBack, onOpen }: { by: string; onBack: () => vo
   const reading = jobs.some(j => j.state === "waiting" || j.state === "reading");
   const shown = rows.filter(r => filter === "all" ? true : filter === "ready" ? r.it.state === "read" && r.x.ready : filter === "check" ? r.it.state === "read" && !r.x.ready : r.it.state === "saved");
   const step = !jobs.length ? 1 : reading ? 2 : 3;
+  const noPayment = open.filter(r => !r.it.read.payment).length;
 
   return <div className="cx-page cx-import">
     <PageHead back={{ label: "Factures", onClick: onBack }} title="Importer d’anciennes factures" sub="PDF ou Word, une ou plusieurs factures par fichier"
-      actions={<><Button onClick={() => setDrop(true)} icon={<FileUp size={16} aria-hidden="true" />}>Ajouter des fichiers</Button>{ready.length > 0 && !reading && <Button kind="primary" onClick={() => setBulk(true)}>{ready.length === 1 ? "Enregistrer la facture prête" : `Enregistrer les ${ready.length} factures prêtes`}</Button>}</>} />
+      actions={<>{jobs.length > 0 && <Button kind="quiet" onClick={() => setCancelAll(true)} icon={<X size={16} aria-hidden="true" />}>Tout annuler</Button>}<Button onClick={() => setDrop(true)} icon={<FileUp size={16} aria-hidden="true" />}>Ajouter des fichiers</Button>{ready.length > 0 && !reading && <Button kind="primary" onClick={() => setBulk(true)}>{ready.length === 1 ? "Enregistrer la facture prête" : `Enregistrer les ${ready.length} factures prêtes`}</Button>}</>} />
     <ol className="cx-import-steps" aria-label="Étapes">{["Déposer les fichiers", "Lecture", "Vérifier et enregistrer"].map((t, i) => <li key={t} className={i + 1 < step ? "cx-done" : i + 1 === step ? "cx-now" : ""}><span>{i + 1 < step ? <Check size={14} strokeWidth={3} aria-label="fait" /> : i + 1}</span>{t}</li>)}</ol>
 
     {!jobs.length && <button type="button" className="cx-dropzone cx-dropzone-big" onClick={() => setDrop(true)}><span className="cx-drop-icon" aria-hidden="true"><FileUp size={34} /></span><span className="cx-drop-title">Choisir ou déposer les fichiers</span><span className="cx-drop-kinds"><span className="cx-file-badge cx-file-pdf">PDF</span><span className="cx-file-badge cx-file-doc">Word .docx</span></span></button>}
@@ -174,6 +191,10 @@ export function ImportPdf({ by, onBack, onOpen }: { by: string; onBack: () => vo
         Ces clients ne sont pas encore dans l’application. Créez-les une fois : toutes leurs factures deviennent prêtes.
         <span className="cx-new-clients">{[...unknown.values()].map(u => <Button key={u.client.name} size="sm" icon={<UserPlus size={15} aria-hidden="true" />} onClick={() => setNewClient({ ...emptyClient(), ...u.client } as Client)}>Créer {u.client.name} ({u.n} facture{u.n > 1 ? "s" : ""})</Button>)}</span>
       </Notice>}
+      {(noPayment > 0 || pay) && <div className="cx-import-pay">
+        <label className="cx-select"><span>Mode de paiement si le document n’en indique pas</span><select value={pay} onChange={e => setPay(e.target.value)}><option value="">À choisir</option>{paymentMethods.map(m => <option key={m} value={m}>{methodName(m)}</option>)}</select></label>
+        <small className={pay ? "cx-muted" : "cx-warn-text"}>{noPayment ? `${noPayment} facture${noPayment > 1 ? "s" : ""} sans mode de paiement${pay ? ` : ${methodName(pay)}` : ". Elles restent à vérifier tant qu’il n’est pas choisi"}.` : "Toutes les factures restantes indiquent leur mode de paiement."}</small>
+      </div>}
       <div className="cx-seg" role="group" aria-label="Factures à montrer">{([["all", `Toutes (${items.length})`], ["ready", `Prêtes (${ready.length})`], ["check", `À vérifier (${toCheck.length})`], ["saved", `Enregistrées (${saved.length})`]] as const).map(([k, l]) => <button type="button" key={k} aria-pressed={filter === k} onClick={() => setFilter(k)}>{l}</button>)}</div>
       <div className="cx-card cx-card-flush cx-list">{shown.map(({ it, x }) => {
         const r = it.read, where = `${it.file}${it.page > 1 || jobs.find(j => j.name === it.file)?.found !== 1 ? ` · page ${it.page}` : ""}`;
@@ -190,6 +211,10 @@ export function ImportPdf({ by, onBack, onOpen }: { by: string; onBack: () => vo
     </>}
     {drop && <ImportDropDialog onClose={() => setDrop(false)} onFiles={files => { const refused = queueFiles(files); setDrop(false); setJobsState(keptJobs); if (refused.length) toast(`Ignoré : ${refused.join(", ")} (seuls les PDF et les Word .docx sont lus).`, "warn"); }} />}
     {newClient && <ClientForm client={newClient} by={by} onClose={() => setNewClient(null)} onSaved={() => setNewClient(null)} />}
+    {cancelAll && <Confirm title="Tout annuler ?" confirm="Tout annuler" cancel="Continuer l’import" onClose={() => setCancelAll(false)} onConfirm={discard}>
+      <p>Les fichiers déposés et les factures lues mais pas encore enregistrées quittent cette page{reading ? ", et la lecture en cours s’arrête" : ""}. Rien n’est ajouté à l’application.</p>
+      {saved.length > 0 && <p>{saved.length === 1 ? "La facture déjà enregistrée reste" : `Les ${saved.length} factures déjà enregistrées restent`} dans l’application.</p>}
+    </Confirm>}
     {bulk && <Confirm title={ready.length === 1 ? "Enregistrer la facture prête ?" : `Enregistrer les ${ready.length} factures prêtes ?`} confirm="Enregistrer" cancel="Pas encore" onClose={() => setBulk(false)} onConfirm={() => { setBulk(false); saveReady(ready.map(r => r.it)); }}>
       <p>Seules les factures « Prête » (rien à regarder, client déjà dans l’application) sont enregistrées telles qu’elles ont été lues : numéro, date, articles et total identiques au fichier. Les autres restent à vérifier une par une.</p>
     </Confirm>}

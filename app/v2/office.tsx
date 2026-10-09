@@ -13,6 +13,7 @@ import { ImportDropDialog, ImportPdf, queueFiles } from "./import-pdf";
 import { OfficeInvoiceReport } from "./invoice-report";
 import { findIssues } from "./checks";
 import { CreditModal, CreditPicker, PaymentModal } from "./payments";
+import { DeleteDialog, useCanDelete } from "./corbeille";
 import { CLOUD, REQUEST_LABEL, accountName, balance, canBill, canCash, commit, receives, dateFr, dateValid, delivery, dueDateOf, overdueDays, termOf, methodName, monthLabel, money, nowIso, timeFr, todayIso, useData } from "./store";
 import type { Data, Request, Role } from "./store";
 import { words } from "./words";
@@ -81,7 +82,7 @@ function Register({ role, by, nav }: { role: Role; by: string; nav: Nav }) {
 
 /** The selected invoice beside the list: state, the next actions, the figures, the A4 page, its history. */
 function InvoicePanel({ id, role, by, nav }: { id: string; role: Role; by: string; nav: Nav }) {
-  const d = useData(), i = d.invoices.find(x => x.id === id), [credit, setCredit] = useState(false), [undo, setUndo] = useState(false), [pay, setPay] = useState(false);
+  const d = useData(), i = d.invoices.find(x => x.id === id), [credit, setCredit] = useState(false), [undo, setUndo] = useState(false), [pay, setPay] = useState(false), canDelete = useCanDelete(), [del, setDel] = useState(false);
   if (!i) return <Empty title="Facture introuvable." />;
   const b = balance(i, d.payments, d.credits), closed = d.closedMonths.includes(i.date.slice(0, 7)), deliv = delivery(d, i.id);
   const deliver = () => { commit(by, x => ({ invoiceDeliveries: [...x.invoiceDeliveries, { invoiceId: i.id, declaredAt: nowIso(), by }] }), { text: `Facture ${i.number} remise au client`, clientId: i.client.id, invoiceId: i.id }); toast("Facture marquée comme remise au client."); };
@@ -93,6 +94,7 @@ function InvoicePanel({ id, role, by, nav }: { id: string; role: Role; by: strin
     ...(b.credited < b.total && !closed ? [{ label: "Créer un avoir", hint: "Réduire ou annuler le montant de cette facture", onClick: () => setCredit(true) }] : []),
     ...(deliv ? [{ label: "Annuler la remise", hint: "Si la facture n’a pas été donnée au client", onClick: () => setUndo(true) }] : []),
     { label: "Voir le compte du client", onClick: () => nav({ name: "client", id: i.client.id }) },
+    ...(canDelete ? [{ label: "Supprimer la facture", hint: "Restaurable sur le site de la Direction", onClick: () => setDel(true) }] : []),
   ];
   return <div className="cx-panel-body">
     <header className="cx-panel-head">
@@ -123,11 +125,12 @@ function InvoicePanel({ id, role, by, nav }: { id: string; role: Role; by: strin
     {credit && <CreditModal invoiceId={i.id} by={by} onClose={() => setCredit(false)} onIssued={cid => { setCredit(false); nav({ name: "credit", id: cid }); }} />}
     {undo && <Confirm title="Annuler la remise ?" confirm="Annuler la remise" cancel="Garder la remise" onClose={() => setUndo(false)} onConfirm={() => { commit(by, x => ({ invoiceDeliveries: x.invoiceDeliveries.map(r => r.invoiceId === i.id && !r.cancelledAt ? { ...r, cancelledAt: nowIso(), cancelledBy: by } : r) }), { text: `Remise de la facture ${i.number} annulée`, clientId: i.client.id, invoiceId: i.id }); setUndo(false); toast("Remise annulée. L’historique la garde."); }}>
       <p>La facture sera de nouveau notée comme pas encore remise. La déclaration du {deliv ? dateFr(deliv.declaredAt) : ""} reste dans l’historique.</p></Confirm>}
+    {del && <DeleteDialog target={{ collection: "invoices", id: i.id }} by={by} onClose={() => setDel(false)} />}
   </div>;
 }
 
 export function InvoiceView({ id, role, by, nav, pane }: { id: string; role: Role; by: string; nav: Nav; pane?: boolean }) {
-  const d = useData(), i = d.invoices.find(x => x.id === id), [pay, setPay] = useState(false), [credit, setCredit] = useState(false), [undo, setUndo] = useState(false);
+  const d = useData(), i = d.invoices.find(x => x.id === id), [pay, setPay] = useState(false), [credit, setCredit] = useState(false), [undo, setUndo] = useState(false), canDelete = useCanDelete(), [del, setDel] = useState(false);
   if (!i) return <Empty title="Facture introuvable." action={<Button onClick={() => nav({ name: canBill(role) ? "register" : "clients" })}>Retour</Button>} />;
   const b = balance(i, d.payments, d.credits), closed = d.closedMonths.includes(i.date.slice(0, 7)), deliv = delivery(d, i.id), biller = canBill(role), cashier = canCash(role);
   const more = [
@@ -135,6 +138,7 @@ export function InvoiceView({ id, role, by, nav, pane }: { id: string; role: Rol
     ...(biller && b.credited < b.total ? [{ label: "Créer un avoir", hint: "Réduire ou annuler le montant de cette facture", onClick: () => setCredit(true) }] : []),
     ...(biller && deliv ? [{ label: "Annuler la remise", hint: "Si la facture n’a pas été donnée au client", onClick: () => setUndo(true) }] : []),
     { label: "Voir le compte du client", onClick: () => nav({ name: "client", id: i.client.id }) },
+    ...(canDelete ? [{ label: "Supprimer la facture", hint: "Restaurable sur le site de la Direction", onClick: () => setDel(true) }] : []),
   ];
   return <div className={pane ? "cx-detail" : "cx-page"}>
     <PageHead pane={pane} back={pane ? undefined : { label: biller ? "Factures" : i.client.name, onClick: () => nav(biller ? { name: "register" } : { name: "client", id: i.client.id }) }} title={<>Facture {i.number}{i.legacy && <span className="cx-legacy-tag">Ancienne</span>}{b.status === "Payée" && <Stamp tone="good">Payée</Stamp>}</>} sub={`${i.client.name}, ${i.legacy ? "ancienne facture du" : "le"} ${dateFr(i.date)}`}
@@ -160,6 +164,7 @@ export function InvoiceView({ id, role, by, nav, pane }: { id: string; role: Rol
     {credit && <CreditModal invoiceId={i.id} by={by} onClose={() => setCredit(false)} onIssued={cid => { setCredit(false); nav({ name: "credit", id: cid }); }} />}
     {undo && <Confirm title="Annuler la remise ?" confirm="Annuler la remise" cancel="Garder la remise" onClose={() => setUndo(false)} onConfirm={() => { commit(by, x => ({ invoiceDeliveries: x.invoiceDeliveries.map(r => r.invoiceId === i.id && !r.cancelledAt ? { ...r, cancelledAt: nowIso(), cancelledBy: by } : r) }), { text: `Remise de la facture ${i.number} annulée`, clientId: i.client.id, invoiceId: i.id }); setUndo(false); toast("Remise annulée. L’historique la garde."); }}>
       <p>La facture sera de nouveau notée comme pas encore remise. La déclaration du {deliv ? dateFr(deliv.declaredAt) : ""} reste dans l’historique.</p></Confirm>}
+    {del && <DeleteDialog target={{ collection: "invoices", id: i.id }} by={by} onClose={() => setDel(false)} onDone={() => nav(biller ? { name: "register" } : { name: "client", id: i.client.id })} />}
   </div>;
 }
 

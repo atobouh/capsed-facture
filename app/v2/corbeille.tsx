@@ -1,13 +1,17 @@
 /** Deleting, for the Direction only: a client, an invoice or a payment entered by mistake.
  *  Nothing is erased. The record leaves every list, balance and statement, and the office computers;
  *  the cloud keeps it whole and the Direction restores it from Réglages, Éléments supprimés. */
-import { useState } from "react";
+import { createContext, useContext, useState } from "react";
 import { Undo2 } from "lucide-react";
 import { invoiceTotals } from "../invoice-math";
 import { Button, Empty, Field, Modal, Notice, TextArea, toast } from "./ui";
 import { accountName, commit, getData, methodName, money, nowIso, timeFr, useData } from "./store";
 import type { BinItem, Client, Data, Deleted, Invoice, Payment } from "./store";
 import type { BinCollection } from "./collections";
+
+/** True for the Direction signed in on an office computer: the office screens then show « Supprimer ». The cloud checks it again. */
+export const DeleteRight = createContext(false);
+export const useCanDelete = () => useContext(DeleteRight);
 
 export type BinTarget = { collection: Extract<BinCollection, "clients" | "invoices" | "payments">; id: string };
 type Rec = BinItem["data"];
@@ -38,12 +42,13 @@ export function describe(d: Data, t: BinTarget) {
   if (t.collection === "payments") { const p = d.payments.find(x => x.id === t.id); return p ? `le paiement de ${money(p.amount)} (${methodName(p.method)}, facture ${invoiceNumber(d, p.invoiceId)})` : "le paiement"; }
   return `le client ${d.clients.find(x => x.id === t.id)?.name ?? ""}`.trim();
 }
-function effectOf(d: Data, t: BinTarget) {
+/** `onComputer`: deleted from an office computer, where there is no Réglages: restoring is done on the website. */
+function effectOf(d: Data, t: BinTarget, onComputer = false) {
   const g = together(d, t), withIt = [g.credits.length ? `${g.credits.length} avoir${g.credits.length > 1 ? "s" : ""}` : "", g.payments.length ? `${g.payments.length} paiement${g.payments.length > 1 ? "s" : ""} annulé${g.payments.length > 1 ? "s" : ""}` : ""].filter(Boolean).join(" et ");
   const what = t.collection === "invoices" ? "Elle disparaît des comptes clients, des relevés et des ordinateurs du bureau. Son numéro n’est jamais redonné."
     : t.collection === "payments" ? "Il ne compte plus dans le solde du client et disparaît des ordinateurs du bureau."
     : "Il disparaît de la liste des clients, ici et sur les ordinateurs du bureau.";
-  return `${what}${withIt ? ` ${withIt[0].toUpperCase() + withIt.slice(1)} ${g.credits.length + g.payments.length > 1 ? "partent" : "part"} avec elle.` : ""} Rien n’est effacé : vous pouvez ${t.collection === "invoices" ? "la" : "le"} restaurer dans Réglages, Éléments supprimés.`;
+  return `${what}${withIt ? ` ${withIt[0].toUpperCase() + withIt.slice(1)} ${g.credits.length + g.payments.length > 1 ? "partent" : "part"} avec elle.` : ""} Rien n’est effacé : vous pouvez ${t.collection === "invoices" ? "la" : "le"} restaurer ${onComputer ? "sur le site de la Direction, " : ""}dans Réglages, Éléments supprimés.`;
 }
 
 export function deleteRecord(by: string, t: BinTarget, reason: string) {
@@ -93,12 +98,12 @@ export function binLabel(d: Data, b: BinItem) {
 }
 
 export function DeleteDialog({ target, by, onClose, onDone }: { target: BinTarget; by: string; onClose: () => void; onDone?: () => void }) {
-  const d = useData(), [reason, setReason] = useState(""), [tried, setTried] = useState(false);
+  const d = useData(), [reason, setReason] = useState(""), [tried, setTried] = useState(false), onComputer = useCanDelete();
   const blocker = deleteBlocker(d, target), label = describe(d, target);
   return <Modal title={`Supprimer ${label} ?`} subtitle="Réservé à la Direction" onClose={onClose}
-    actions={blocker ? <Button kind="primary" onClick={onClose}>Compris</Button> : <><Button kind="quiet" onClick={onClose}>Annuler</Button><Button kind="primary" onClick={() => { setTried(true); if (reason.trim().length < 3) return; deleteRecord(by, target, reason); toast(`${label[0].toUpperCase() + label.slice(1)} : supprimé. Restaurable dans Réglages.`); onClose(); onDone?.(); }}>Supprimer</Button></>}>
+    actions={blocker ? <Button kind="primary" onClick={onClose}>Compris</Button> : <><Button kind="quiet" onClick={onClose}>Annuler</Button><Button kind="primary" onClick={() => { setTried(true); if (reason.trim().length < 3) return; deleteRecord(by, target, reason); toast(`${label[0].toUpperCase() + label.slice(1)} : supprimé. Restaurable ${onComputer ? "sur le site de la Direction" : "dans Réglages"}.`); onClose(); onDone?.(); }}>Supprimer</Button></>}>
     {blocker ? <Notice tone="warn" title="Pas encore">{blocker}</Notice> : <>
-      <p className="cx-lift-effect">{effectOf(d, target)}</p>
+      <p className="cx-lift-effect">{effectOf(d, target, onComputer)}</p>
       <Field label="Motif" required error={tried && reason.trim().length < 3 ? "Écrivez le motif en quelques mots." : undefined} hint="Il reste dans le journal, avec votre nom et la date."><TextArea rows={2} value={reason} onChange={setReason} placeholder="Ex. saisie en double, erreur de client" /></Field>
     </>}
   </Modal>;

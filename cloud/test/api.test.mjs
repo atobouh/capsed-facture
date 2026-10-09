@@ -67,12 +67,18 @@ test("office computer: code, enrol, revoke-safe token", async () => {
 });
 
 let inv, pay, payRev = 0;
-test("office pushes as the person signed in; the computer can never act as the Direction", async () => {
+test("office pushes as the person signed in; the Direction on a computer works as the office", async () => {
   inv = { id: uid(), number: "2026-10-001", date: "2026-10-05", client: { id: "c1", name: "EFMK" }, lines: [{ id: "l", designation: "Désherbage", quantity: 1, unitPrice: 100000 }], taxRate: 0, taxMode: "ht", advance: 0, createdBy: awa.id };
   const r = await push([change("invoices", inv, { by: awa.id })], "device");
   assert.ok(r.body.results[0].ok, JSON.stringify(r.body));
   const asDir = await push([change("invoices", { ...inv, note: "x" }, { by: dirId })], "device");
-  assert.equal(asDir.body.results[0].ok, false);
+  assert.ok(asDir.body.results[0].ok, "the Direction signed in on a computer does office work");
+  const validate = await push([change("invoices", { ...inv, note: "x", validatedAt: "2026-10-05T10:00:00Z", validatedBy: dirId }, { by: dirId })], "device");
+  assert.equal(validate.body.results[0].ok, false, "validating stays on the website");
+  const settings = await push([change("settings", { id: "main", company: { name: "Autre" } }, { by: dirId })], "device");
+  assert.equal(settings.body.results[0].ok, false, "the settings stay on the website");
+  const account = await push([change("accounts", { ...awa, role: "bureau" }, { by: dirId })], "device");
+  assert.equal(account.body.results[0].ok, false, "team accounts stay on the website");
   const wrongRole = await push([change("payments", { id: uid(), invoiceId: inv.id, amount: 1, date: "2026-10-05", method: "OM", reference: "" }, { by: awa.id })], "device");
   assert.equal(wrongRole.body.results[0].ok, false, "facturation cannot enter payments");
 });
@@ -161,6 +167,22 @@ test("only the Direction deletes; office computers get a stub; a payment made of
   assert.ok(back.body.results[0].ok); assert.equal(back.body.results[0].record.deletedAt, undefined); assert.equal(back.body.results[0].record.deleteReason, undefined);
   const again = (await call(`/api/sync?since=${delRev}`, { auth: "device" })).body.records.find(r => r.id === bill.id).data;
   assert.equal(again.lines.length, 1, "restored: whole again on office computers");
+});
+
+test("the Direction signed in on an office computer deletes there, but restores only on the website", async () => {
+  const bill = { id: uid(), number: "2026-10-009", date: "2026-10-07", client: { id: "c1", name: "EFMK" }, lines: [{ id: "l", designation: "Fumigation", quantity: 1, unitPrice: 40000 }], taxRate: 0, taxMode: "ht", advance: 0, createdBy: awa.id, validatedAt: "2026-10-07T09:00:00Z", validatedBy: dirId };
+  const rev = (await push([change("invoices", bill)], "web")).body.results[0].rev;
+  const at = new Date().toISOString();
+  const forged = await push([change("invoices", { ...bill, deletedAt: at, deletedBy: awa.id, deleteReason: "x" }, { by: dirId, base: rev })], "device");
+  assert.equal(forged.body.results[0].ok, false, "a deletion is signed by who deletes");
+  const sneaky = await push([change("invoices", { ...bill, note: "changé", deletedAt: at, deletedBy: dirId, deleteReason: "x" }, { by: awa.id, base: rev })], "device");
+  assert.equal(sneaky.body.results[0].ok, false, "the team still cannot delete");
+  const del = await push([change("invoices", { ...bill, deletedAt: at, deletedBy: dirId, deleteReason: "erreur de client" }, { by: dirId, base: rev })], "device");
+  assert.ok(del.body.results[0].ok, JSON.stringify(del.body)); assert.deepEqual(Object.keys(del.body.results[0].record).sort(), ["date", "deletedAt", "id", "number"]);
+  const web = (await call(`/api/sync?since=${rev}`, { auth: "web" })).body.records.find(r => r.id === bill.id).data;
+  assert.equal(web.deleteReason, "erreur de client"); assert.equal(web.validatedAt, bill.validatedAt, "its validation is kept for a restore");
+  const restore = await push([change("invoices", bill, { by: dirId, base: del.body.results[0].rev })], "device");
+  assert.equal(restore.body.results[0].ok, false, "restoring stays on the website");
 });
 
 test("revoked computer is refused", async () => {

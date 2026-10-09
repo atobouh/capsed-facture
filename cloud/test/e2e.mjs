@@ -405,6 +405,30 @@ try {
   await site.locator('.cx-modal input').fill(oldNumber + '-bis');
   await site.locator('.cx-modal footer').getByRole('button', { name: 'Enregistrer le numéro' }).click();
   ok(await until(async () => (await card('Numéro en double').count()) === 0, 10000), 'number corrected: no more duplicate');
+
+  // 22. The Direction signs in on an office computer, without internet: the office screens (no inbox of its own requests)
+  //     and « Supprimer ». The deletion reaches the cloud when the network comes back; restoring stays on the website.
+  const inClosed = closedMonth + '-099';
+  ok(await until(async () => { await poke(office); return office.evaluate(n => JSON.parse(localStorage.getItem('capsed-office-data')).invoices.some(i => i.number === n), inClosed); }, 40000, 1000), 'the office computer has the invoice to delete');
+  await office.context().setOffline(true);
+  await office.getByRole('button', { name: 'Se déconnecter' }).click();
+  await office.locator('#login').fill('direction'); await office.locator('#password').fill('secret12');
+  await btn(office, 'Se connecter').click();
+  await office.locator('.cx-sidebar').waitFor();
+  const sideNav = await office.locator('.cx-sidebar nav').textContent();
+  ok(/Factures/.test(sideNav) && /Clients et paiements/.test(sideNav) && !/Demandes/.test(sideNav) && (await office.locator('.cx-sidebar .cx-brand small').textContent()) === 'Direction', 'Direction signs in on an office computer without internet: office screens, no inbox');
+  await office.locator('.cx-sidebar nav button', { hasText: 'Clients' }).click();
+  await office.locator('#contenu .cx-search input').fill('EFMK');
+  await office.locator('.cx-doc-link', { hasText: inClosed }).click();
+  await office.locator('.cx-page-head').getByRole('button', { name: 'Autres actions' }).click();
+  await office.getByRole('menuitem', { name: /Supprimer la facture/ }).click();
+  await office.locator('.cx-modal textarea').fill('saisie en double');
+  await shot(office, '95-direction-delete-offline');
+  await office.locator('.cx-modal footer').getByRole('button', { name: 'Supprimer' }).click();
+  ok(await until(async () => !(await office.evaluate(n => JSON.parse(localStorage.getItem('capsed-office-data')).invoices.some(i => i.number === n), inClosed)), 5000), 'invoice deleted on the office computer, offline');
+  await office.context().setOffline(false);
+  const inBin = async () => { await poke(office); return site.evaluate(async () => { let since = 0; for (;;) { const j = await fetch(`/api/sync?since=${since}&limit=500`, { headers: { 'x-capsed': '1' } }).then(r => r.json()); const f = j.records.find(r => r.collection === 'invoices' && r.id === 'in-closed'); if (f) return f.data; if (!j.more) return null; since = j.cursor; } }); };
+  ok(await until(async () => { const r = await inBin(); return !!r?.deletedAt && r.deleteReason === 'saisie en double' && r.lines?.length > 0; }, 40000, 1000), 'back online: the deletion reaches the cloud, the Direction keeps the invoice whole in its bin');
 } catch (e) { errs.push('STEP ' + e.message.split('\n')[0]); await shot(site, 'ERR-site').catch(() => {}); await shot(office, 'ERR-office').catch(() => {}); }
 console.log(log.join('\n')); console.log('\nERRORS:\n' + (errs.join('\n') || 'none'));
 await b.close();

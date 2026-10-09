@@ -852,4 +852,7 @@ button.cx-list-row:hover,label.cx-list-row:hover{background:var(--hover)}
 .cx-import-tiles .cx-tone-good dd{color:#1F6B42}
 .cx-import-tiles .cx-tone-warn dd{color:#8A5A12}
 .cx-new-clients{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.cx-import-pay{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;margin:0 0 14px;padding:10px 14px;background:var(--surface);border:1px solid var(--line);border-radius:12px}
+.cx-import-pay .cx-select{flex-wrap:wrap}
+.cx-import-pay .cx-select select{min-width:170px}
 .cx-import .cx-list-main small svg{vertical-align:-1px}

@@ -122,32 +122,34 @@ async function applyChange(env: Env, who: Actor | { device: { id: string; name: 
   const cur = await getRecord(env, ch.collection, ch.id);
   // Already received (a send cut by the network and sent again): answer the same, change nothing.
   if (done) return { changeId: ch.changeId, ok: true, rev: cur?.rev ?? done.seq, record: cur?.data ?? ch.data, duplicate: true };
-  // On an office computer the person signed in there acts; the computer can never act as the Direction.
+  // On an office computer the person signed in there acts. The Direction signed in there works as the full office, and may delete;
+  // validating, restoring and the settings stay on the website.
   let account: Account | undefined, device: string | null = null;
   if ("account" in who) account = who.account;
   else {
     device = who.device.id;
     account = ch.by ? await accountById(env, ch.by) : undefined;
-    if (!account?.active || account.role === "responsable") return { changeId: ch.changeId, ok: false, error: "Personne inconnue ou désactivée sur ce poste." };
+    if (!account?.active) return { changeId: ch.changeId, ok: false, error: "Personne inconnue ou désactivée sur ce poste." };
   }
+  const role: Role = device && account.role === "responsable" ? "bureau" : account.role, canDelete = account.role === "responsable";
   if (ch.collection === "events" && cur) return { changeId: ch.changeId, ok: true, rev: cur.rev, record: cur.data };
   const data: Rec = { ...ch.data };
   if (ch.collection === "accounts") delete data.password;
   let base: Rec | null = null;
   if (cur && ch.base) base = ch.base === cur.rev ? cur.data : JSON.parse((await env.DB.prepare("SELECT data FROM versions WHERE collection = ? AND id = ? AND seq <= ? ORDER BY seq DESC LIMIT 1").bind(ch.collection, ch.id, ch.base).first<{ data: string }>())?.data ?? "null");
-  const at = now(), merged = afterMerge(ch.collection, account.role, cur?.data ?? null, merge(base, cur?.data ?? null, data), at);
-  const reason = refuse(ch.collection, account.role, account.id, cur?.data ?? null, merged);
+  const at = now(), merged = afterMerge(ch.collection, role, cur?.data ?? null, merge(base, cur?.data ?? null, data), at);
+  const reason = refuse(ch.collection, role, account.id, cur?.data ?? null, merged, canDelete);
   if (reason) return { changeId: ch.changeId, ok: false, error: reason, rev: cur?.rev ?? 0, record: cur?.data ?? null };
   if (cur && same(cur.data, merged)) return { changeId: ch.changeId, ok: true, rev: cur.rev, record: cur.data };
   // An invoice made or changed by the office in a month already closed (a computer that was offline when it was closed):
   // kept, nothing is lost, and marked for the Direction.
   let final = merged;
   // A payment or credit note made offline on an invoice the Direction had deleted: kept, and put in the bin with that invoice.
-  if ((ch.collection === "payments" || ch.collection === "credits") && account.role !== "responsable" && !cur && typeof merged.invoiceId === "string") {
+  if ((ch.collection === "payments" || ch.collection === "credits") && role !== "responsable" && !cur && typeof merged.invoiceId === "string") {
     const inv = (await getRecord(env, "invoices", merged.invoiceId))?.data;
     if (inv?.deletedAt) final = { ...merged, deletedAt: at, deletedBy: "system", deleteReason: "Saisi sur une facture déjà supprimée par la Direction.", deletedWith: merged.invoiceId };
   }
-  if (ch.collection === "invoices" && account.role !== "responsable") {
+  if (ch.collection === "invoices" && role !== "responsable" && !merged.deletedAt) {
     const closed = ((await getRecord(env, "settings", "main"))?.data?.closedMonths as string[] | undefined) ?? [];
     if (closed.includes(String(merged.date ?? "").slice(0, 7))) final = { ...merged, afterClose: at };
   }

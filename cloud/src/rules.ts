@@ -1,5 +1,6 @@
 /** How the cloud merges changes that crossed each other, and who may change what.
  *  The server is the protection: hiding a button in the app is only a convenience. */
+import { isBinCollection } from "../../app/v2/collections";
 import type { CollectionName } from "../../app/v2/collections";
 
 export type Role = "facturation" | "encaissement" | "bureau" | "responsable";
@@ -21,6 +22,7 @@ export function merge(base: Rec | null, current: Rec | null, incoming: Rec): Rec
   return out;
 }
 
+const DELETE_MARK = ["deletedAt", "deletedBy", "deleteReason", "deletedWith"];
 const PAYMENT_CONTENT = ["amount", "date", "method", "reference", "invoiceId", "cancelledAt"];
 /** A validated payment changed by the office (offline, before it heard of the validation) is kept,
  *  and goes back to the Direction to validate again. Nothing is refused, nothing is lost. */
@@ -30,7 +32,7 @@ export function afterMerge(collection: CollectionName, role: Role, current: Rec 
     return { ...rest, changedAfterLock: at };
   }
   // An invoice changed by the office after the Direction validated it comes back to validate.
-  if (collection === "invoices" && current?.validatedAt && role !== "responsable" && changed(current, merged).some(k => k !== "validatedAt" && k !== "validatedBy")) {
+  if (collection === "invoices" && current?.validatedAt && role !== "responsable" && changed(current, merged).some(k => k !== "validatedAt" && k !== "validatedBy" && !DELETE_MARK.includes(k))) {
     const { validatedAt: _a, validatedBy: _b, ...rest } = merged; void _a; void _b;
     return rest;
   }
@@ -39,13 +41,21 @@ export function afterMerge(collection: CollectionName, role: Role, current: Rec 
 
 const changed = (a: Rec | null, b: Rec) => [...new Set([...Object.keys(a ?? {}), ...Object.keys(b)])].filter(k => !same(a?.[k], b[k]));
 const REQUEST_REPLY = new Set(["receivedAt", "readAt", "resolvedAt", "resolvedBy", "response", "linkedId"]);
+const unmarked = (r: Rec) => Object.fromEntries(Object.entries(r).filter(([k]) => !DELETE_MARK.includes(k)));
 
-/** Returns a reason in French when the change is not allowed for this role, null when it is. */
-export function refuse(collection: CollectionName, role: Role, actorId: string, current: Rec | null, next: Rec): string | null {
+/** Returns a reason in French when the change is not allowed for this role, null when it is.
+ *  `canDelete`: the Direction signed in on an office computer. It works there with the office's rights, and may also delete;
+ *  validating, restoring and the settings stay on the website. */
+export function refuse(collection: CollectionName, role: Role, actorId: string, current: Rec | null, next: Rec, canDelete = false): string | null {
   if (role === "responsable") return null;
   // Deleting and restoring belong to the Direction; a deleted record no longer changes from the office.
   if (current?.deletedAt) return "Supprimé par la Direction : la modification n’est pas prise en compte.";
-  if (next.deletedAt) return "Seule la Direction supprime.";
+  if (next.deletedAt) {
+    if (!canDelete || !isBinCollection(collection)) return "Seule la Direction supprime.";
+    if (next.deletedBy !== actorId) return "Une suppression doit être signée par son auteur.";
+    // The deletion mark, and otherwise only what the office itself may change.
+    return refuse(collection, role, actorId, current, unmarked(next));
+  }
   const diff = changed(current, next);
   switch (collection) {
     case "clients": case "credits": case "deliveries":

@@ -1,0 +1,33 @@
+<!-- title: Encaissement | lead: Enregistrer chaque paiement reçu, le corriger si besoin, sortir le relevé d’un client. Dans CAPSED Bureau, même sans internet. -->
+<h2 id="votre-ecran">Votre écran</h2>
+<p>Deux onglets : <b>Clients et paiements</b> <span class="mk">1</span> et <b>Demandes</b>. Les clients qui doivent de l’argent sont en haut <span class="mk">2</span>, avec ce qu’il leur reste à payer ; ceux qui ont tout payé sont regroupés plus bas.</p>
+<figure><img src="img/enc-01-clients-paiements.webp" alt="Page Clients et paiements." loading="lazy"></figure>
+
+<h2 id="encaisser">Enregistrer un paiement</h2>
+<div class="step"><span>1</span><div><h3>Ouvrir le compte du client</h3><p>Cliquez le client. Ses factures s’affichent avec le reste à payer. Sur la ligne de la facture payée : <span class="btn-ref">Encaisser</span> <span class="mk">1</span>. Si vous ne savez pas quelle facture : <span class="btn-ref">Enregistrer un paiement</span> en haut, puis choisissez-la.</p>
+<figure><img src="img/enc-02-compte-client.webp" alt="Compte d’un client avec ses factures." loading="lazy"></figure></div></div>
+<div class="step"><span>2</span><div><h3>Le montant, la date, le mode</h3><p>Le montant reçu <span class="mk">1</span>, la date du paiement, le mode <span class="mk">2</span> (Chèque, Virement, OM, MoMo, Espèces) et une référence si vous en avez une (n° de chèque, n° de transaction). Puis <span class="btn-ref">Enregistrer le paiement</span> <span class="mk">3</span>.</p>
+<figure><img src="img/enc-03-paiement.webp" alt="Fenêtre Enregistrer un paiement." loading="lazy"><figcaption>Le bas de la fenêtre dit ce qu’il restera à payer. Un montant plus grand que le reste à payer est refusé.</figcaption></figure></div></div>
+
+<h2 id="doublon">« Ce paiement ressemble à un paiement déjà saisi »</h2>
+<p>Si le même montant a déjà été saisi sur la même facture il y a peu, l’application vous prévient et montre qui l’a saisi et quand <span class="mk">1</span>.</p>
+<figure><img src="img/enc-04-doublon.webp" alt="Alerte paiement qui ressemble à un paiement déjà saisi." loading="lazy"></figure>
+<ul><li>C’est le <b>même</b> paiement (déjà saisi par vous ou un collègue) : <b>n’enregistrez pas</b>, fermez la fenêtre.</li><li>C’est vraiment un <b>autre</b> paiement (le client a payé deux fois la même somme) : cochez <span class="btn-ref">C’est bien un autre paiement</span>, puis enregistrez.</li></ul>
+<div class="note info"><strong>Deux ordinateurs, même paiement ?</strong>Si deux personnes saisissent le même paiement sur deux ordinateurs sans se voir (l’un était hors ligne), la Direction le voit marqué « Doublon possible » et annule celui en trop.</div>
+
+<h2 id="corriger">Corriger ou annuler un paiement</h2>
+<table>
+  <tr><th>Situation</th><th>Que faire</th></tr>
+  <tr><td>Erreur de montant, de date ou de mode, <b>pas encore validé</b></td><td>Dans le compte du client, sur le paiement : <span class="btn-ref">Modifier</span>. L’ancienne valeur reste dans l’historique.</td></tr>
+  <tr><td>Paiement saisi par erreur, <b>pas encore validé</b></td><td><span class="btn-ref">Annuler</span>. Il reste visible comme annulé et le reste à payer est recalculé.</td></tr>
+  <tr><td>Paiement <b>validé par la Direction</b> <span class="pill good">Validé, verrouillé</span></td><td>Il ne se modifie plus au bureau. Demandez à la Direction : elle peut le déverrouiller avec un motif, puis vous le corrigez.</td></tr>
+</table>
+
+<h2 id="releve">Le relevé d’un client</h2>
+<p>Dans le compte du client : <span class="btn-ref">Relevé du client</span>. Choisissez la période ; le relevé montre factures, avoirs et paiements, avec le solde. <span class="btn-ref">Imprimer</span> pour le remettre au client, ou exportez-le en Excel ou CSV.</p>
+
+<h2 id="demandes">Les demandes de la Direction</h2>
+<p>La Direction peut signaler un <b>paiement à vérifier</b> (un client dit avoir payé). Onglet <b>Demandes</b> : ouvrez-la, vérifiez avec le relevé bancaire ou la caisse. Si le paiement est réel et pas encore saisi : <span class="btn-ref">Enregistrer ce paiement</span> (les informations données par la Direction sont reprises). S’il est déjà saisi, répondez-le dans la demande.</p>
+
+<h2 id="sans-internet">Sans internet</h2>
+<p>Tout marche : enregistrer, corriger, annuler, imprimer un relevé. Les paiements partent seuls quand la connexion revient (« N modifications en attente », puis « Tout est envoyé »).</p>

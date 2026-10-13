@@ -3,7 +3,7 @@
  *  - one table per kind of data (.csv, opens in Excel): invoices, invoice lines, payments, credit notes, clients, journal;
  *  - LISEZMOI.txt: what each file is. */
 import { downloadBlob, zip } from "../receipt-export";
-import { invoiceTotals } from "../invoice-math";
+import { invoiceTotals, lineAmount } from "../invoice-math";
 import { accountName, balance, dueDateOf, getData, methodName, nowIso, todayIso } from "./store";
 
 type Cell = string | number | undefined | null;
@@ -25,8 +25,8 @@ export function exportAll() {
     "capsed-sauvegarde.json": backup,
     "factures.csv": csv(["Numéro", "Date", "Client", "NIU du client", "Type", "Montant HT", "TVA", "Total", "Avance", "Avoirs", "Encaissé", "Reste à payer", "Statut", "Échéance (interne)", "Ancienne facture", "Validée par la Direction", "Créée par", "Bon de commande"],
       invoices.map(i => { const t = invoiceTotals(i), b = balance(i, d.payments, d.credits); return [i.number, i.date, i.client.name, i.client.niu, t.taxMode === "ttc" ? "TTC" : "HT", t.ht, t.tax, b.total, i.advance, b.credited, b.received, b.due, b.status, dueDateOf(i), i.legacy ? "oui" : "", i.validatedAt ? day(i.validatedAt) : "", accountName(i.createdBy), i.purchaseOrder]; })),
-    "lignes-des-factures.csv": csv(["Facture", "Date", "Client", "Désignation", "Destination", "Quantité", "Prix unitaire HT", "Montant HT", "Contrat"],
-      invoices.flatMap(i => i.lines.map(l => [i.number, i.date, i.client.name, l.designation, l.destination, l.quantity, l.unitPrice, l.quantity * l.unitPrice, l.contract]))),
+    "lignes-des-factures.csv": csv(["Facture", "Date", "Client", "Contrat", "Désignation", "Destination", "Calcul", "Quantité ou volume", "N° de lot", "Poids", "Unité du poids", "Prix unitaire HT", "Montant HT"],
+      invoices.flatMap(i => i.lines.map(l => [i.number, i.date, i.client.name, l.contract, l.designation, l.destination, i.measure === "volume" ? "volume (m³)" : "quantité", l.quantity, l.lot, l.weight, l.weight ? i.weightUnit ?? "kg" : "", l.unitPrice, lineAmount(l)]))),
     "paiements.csv": csv(["Date", "Facture", "Client", "Montant", "Mode", "Référence", "Saisi par", "Saisi le", "Annulé le", "Validé le"],
       [...d.payments].sort((a, b) => a.date.localeCompare(b.date)).map(p => { const i = d.invoices.find(x => x.id === p.invoiceId); return [p.date, i?.number, i?.client.name, p.amount, methodName(p.method), p.reference, accountName(p.by), day(p.at), day(p.cancelledAt), day(p.lockedAt)]; })),
     "avoirs.csv": csv(["Numéro", "Date", "Facture", "Client", "Montant", "Motif"],

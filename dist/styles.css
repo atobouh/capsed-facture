@@ -110,6 +110,14 @@
 @media print{.receipt-page-number,.doc-page-number{display:none!important}}
 .receipt-title-next{margin-bottom:16px}.receipt-title-next>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
+/* Invoice lines: widths come from the colgroup (columns change with the invoice) */
+.receipt-table.receipt-lines th{width:auto!important;text-align:center}
+.receipt-table.receipt-lines td{text-align:center;vertical-align:middle}
+.receipt-table.receipt-lines th.receipt-left,.receipt-table.receipt-lines td.receipt-left{text-align:left}
+.receipt-table.receipt-lines td.receipt-left{vertical-align:top}
+.receipt-table.receipt-dense th{font-size:9.5px;padding:6px 4px}
+.receipt-table.receipt-dense td{font-size:10.5px;padding:9px 5px}
+
 @font-face{font-family:'Geist';font-style:normal;font-weight:100 900;font-display:swap;src:url(fonts/Geist-Variable.woff2) format('woff2')}
 @font-face{font-family:'Playfair Display';font-style:normal;font-weight:700;font-display:swap;src:url(fonts/PlayfairDisplay-700-latin-ext.woff2) format('woff2');unicode-range:U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF}
 @font-face{font-family:'Playfair Display';font-style:normal;font-weight:700;font-display:swap;src:url(fonts/PlayfairDisplay-700-latin.woff2) format('woff2');unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD}
@@ -910,6 +918,9 @@ button.cx-list-row:hover,label.cx-list-row:hover{background:var(--hover)}
 .cx-updating-bar::after{content:"";position:absolute;inset:0 auto 0 0;width:40%;border-radius:3px;background:#fff;animation:cx-boot-bar 1s ease-in-out infinite}
 @keyframes cx-boot-bar{from{transform:translateX(-100%)}to{transform:translateX(250%)}}
 @media (prefers-reduced-motion:reduce){.cx-updating-bar::after{animation:none;width:100%}}
+.cx-updating-known{width:260px}.cx-updating-known::after{display:none}
+.cx-updating-known b{display:block;height:100%;border-radius:3px;background:#fff;transition:width .3s}
+.cx-updating .cx-updating-small{font-size:13px;color:#E2D3E8;max-width:420px}
 /* Install the site like an app */
 .cx-install{position:fixed;z-index:55;left:12px;right:12px;bottom:calc(84px + env(safe-area-inset-bottom));display:flex;gap:12px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:0 14px 36px #1b18202e;padding:12px 14px;max-width:520px;margin:0 auto}
 .cx-install img{width:44px;height:44px;border-radius:11px;flex:none}
@@ -922,3 +933,14 @@ button.cx-list-row:hover,label.cx-list-row:hover{background:var(--hover)}
 .cx-install-help h3{margin:0 0 4px;font-size:16px}
 .cx-install-help p{margin:4px 0 10px}
 .cx-install-help ul{margin:6px 0 8px;padding-left:18px;display:grid;gap:4px}
+/* Invoice columns chosen per invoice */
+.cx-columns-pick{margin:0 0 16px;padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2,#FAF8FB)}
+.cx-columns-pick h3{margin:0 0 10px;font-size:14px;font-weight:600}
+.cx-columns-pick .cx-hint{margin:10px 0 0}
+.cx-toggles{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.cx-toggle{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:6px 12px;border:1px solid var(--line-2);border-radius:999px;background:var(--surface);color:var(--ink);font:inherit;font-size:14px;cursor:pointer}
+.cx-toggle:hover{border-color:#C6BECF;background:var(--hover)}
+.cx-toggle.cx-on{background:#F3ECF6;border-color:#8A5C9E;color:#4E2E5C;font-weight:500}
+.cx-toggle:focus-visible{outline:2px solid #8A5C9E;outline-offset:2px}
+.cx-toggle-sm{min-height:30px;padding:4px 10px;font-size:13px}
+.cx-unit-pick{display:inline-flex;align-items:center;gap:6px;margin-left:4px;color:var(--muted);font-size:13px}

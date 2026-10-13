@@ -87,3 +87,11 @@
 .delivery-reset{border:0;background:transparent;color:#58667b;font-size:12px;text-decoration:underline;text-underline-offset:3px;padding:6px}
 @media(max-width:650px){.client-record-actions{gap:10px}.payment-entry-actions{width:100%;justify-content:flex-start;margin-left:42px}.payment-entry{flex-wrap:wrap}.invoice-delivery-status{gap:8px}}
 .receipt-title-next{margin-bottom:16px}.receipt-title-next>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Invoice lines: widths come from the colgroup (columns change with the invoice) */
+.receipt-table.receipt-lines th{width:auto!important;text-align:center}
+.receipt-table.receipt-lines td{text-align:center;vertical-align:middle}
+.receipt-table.receipt-lines th.receipt-left,.receipt-table.receipt-lines td.receipt-left{text-align:left}
+.receipt-table.receipt-lines td.receipt-left{vertical-align:top}
+.receipt-table.receipt-dense th{font-size:9.5px;padding:6px 4px}
+.receipt-table.receipt-dense td{font-size:10.5px;padding:9px 5px}

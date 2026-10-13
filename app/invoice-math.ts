@@ -6,6 +6,23 @@ export const normalizePayment = (value: string) => value === "Banque" || value =
 export const moneyRound = (value: number) => Math.round((Number(value) || 0) + Number.EPSILON);
 export const lineAmount = (line: FinancialLine) => moneyRound(Number(line.quantity) * Number(line.unitPrice));
 export const quantityLabel = (value: number) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 8 }).format(value);
+
+/** An invoice counts either quantities (number of parcels, containers…) or volumes in m³, never both:
+ *  the line amount is always that number × the unit price. Quantities, volumes and weights take up to 3 decimals. */
+export type Measure = "quantite" | "volume";
+/** Columns the invoice may carry besides Désignation, Quantité or Volume, P. U. and Montant. */
+export type InvoiceColumns = { contract?: boolean; destination?: boolean; lot?: boolean; weight?: boolean };
+export type WeightUnit = "kg" | "t";
+export const measureName = (m?: Measure) => m === "volume" ? "Volume (m³)" : "Quantité";
+export const decimalLabel = (value: number) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 3 }).format(value);
+export const threeDecimals = (value: number) => Number.isFinite(value) && Math.abs(value * 1000 - Math.round(value * 1000)) < 1e-6;
+/** The optional columns actually printed: chosen for this invoice and filled on at least one line.
+ *  Invoices made before the choice existed show the contract and the destination when they are filled. */
+export function printedColumns(i: { lines: any[]; columns?: InvoiceColumns }) {
+  const c = i.columns ?? { contract: true, destination: true };
+  const has = (k: "contract" | "destination" | "lot" | "weight") => i.lines.some(l => k === "weight" ? Number(l.weight) > 0 : String(l[k] ?? "").trim() !== "");
+  return { contract: !!c.contract && has("contract"), destination: !!c.destination && has("destination"), lot: !!c.lot && has("lot"), weight: !!c.weight && has("weight") };
+}
 export function invoiceTotals(invoice: FinancialInvoice) {
   const subtotal = invoice.lines.reduce((sum, line) => sum + lineAmount(line), 0);
   const discount = Math.min(subtotal, Math.max(0, moneyRound(subtotal * (invoice.discountRate || 0) / 100)));
@@ -53,7 +70,7 @@ export function creditSelection(invoice: any, credits: any[], quantities: Record
 }
 
 export const printedAmount=(n:number)=>new Intl.NumberFormat("fr-FR",{maximumFractionDigits:0}).format(Math.round(n));
-export function printedQuantity(value:number):string {return printedAmount(Math.trunc(value));}
+export function printedQuantity(value:number):string {return decimalLabel(value);}
 
 export function correctLegacyQuantities(invoices:any[],credits:any[],closedMonths:string[]) {
  const stamp=new Date().toISOString(),changed:string[]=[];

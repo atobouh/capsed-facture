@@ -810,3 +810,14 @@ button.cx-list-row:hover,label.cx-list-row:hover{background:var(--hover)}
 .cx-install-help h3{margin:0 0 4px;font-size:16px}
 .cx-install-help p{margin:4px 0 10px}
 .cx-install-help ul{margin:6px 0 8px;padding-left:18px;display:grid;gap:4px}
+/* Invoice columns chosen per invoice */
+.cx-columns-pick{margin:0 0 16px;padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2,#FAF8FB)}
+.cx-columns-pick h3{margin:0 0 10px;font-size:14px;font-weight:600}
+.cx-columns-pick .cx-hint{margin:10px 0 0}
+.cx-toggles{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.cx-toggle{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:6px 12px;border:1px solid var(--line-2);border-radius:999px;background:var(--surface);color:var(--ink);font:inherit;font-size:14px;cursor:pointer}
+.cx-toggle:hover{border-color:#C6BECF;background:var(--hover)}
+.cx-toggle.cx-on{background:#F3ECF6;border-color:#8A5C9E;color:#4E2E5C;font-weight:500}
+.cx-toggle:focus-visible{outline:2px solid #8A5C9E;outline-offset:2px}
+.cx-toggle-sm{min-height:30px;padding:4px 10px;font-size:13px}
+.cx-unit-pick{display:inline-flex;align-items:center;gap:6px;margin-left:4px;color:var(--muted);font-size:13px}

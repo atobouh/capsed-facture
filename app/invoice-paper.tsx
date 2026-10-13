@@ -1,20 +1,35 @@
 import { OFFICIAL_FOOTER } from "./invoice-brand";
 import { clientDetailLines, optionalText } from "./client-details";
 import { useLayoutEffect, useRef, useState } from "react";
-import { invoiceTotals, lineAmount, printedQuantity, quantityLabel, normalizePayment } from "./invoice-math";
+import { decimalLabel, invoiceTotals, lineAmount, measureName, normalizePayment, printedColumns } from "./invoice-math";
 import { printedAmount as money } from "./invoice-math";
 export const CAPSED_STATIONERY="capsed-letterhead.webp";
 export function DocumentBackground({format}:{format:any}) {return <img className="receipt-stationery" src={CAPSED_STATIONERY} alt=""/>;}
 export function DocumentFooter({format}:{format:any}) {return <footer className="receipt-official-footer"><p className="receipt-thanks">Merci pour votre confiance.</p><div className="receipt-legal-footer">{OFFICIAL_FOOTER.map((line,index)=><p key={index}>{line}</p>)}</div></footer>;}
 export function modelFormat(model:any) {return {stationery:model.stationery??CAPSED_STATIONERY,banner:model.blocks?.find((b:any)=>b.kind==="image"&&b.y<200)?.image||"",footerText:model.blocks?.find((b:any)=>b.kind==="footer")?.text?.startsWith("Pied de page provisoire")?"":model.blocks?.find((b:any)=>b.kind==="footer")?.text?.trim()||"",footerImage:model.blocks?.find((b:any)=>b.kind==="image"&&b.y>1000)?.image||""};}
-function Lines({lines,invoice}:{lines:any[];invoice:any}) {return <table className="receipt-table"><thead><tr><th>Désignation</th><th>Destination</th><th>Quantité</th><th>P. U.</th><th>Montant HT</th></tr></thead><tbody>{lines.map(l=><tr key={l.id}><td>{l.designation}{l.contract&&<small>Contrat : {l.contract}</small>}</td><td>{l.destination}</td><td>{Number.isInteger(l.quantity)?printedQuantity(l.quantity):quantityLabel(l.quantity)}</td><td>{money(l.unitPrice)}</td><td>{money(lineAmount(l))}</td></tr>)}</tbody></table>;}
+// The columns follow the invoice: N° contrat, Destination, N° de lot and Poids only when chosen and filled; Quantité or Volume (m³).
+type Col={key:string;head:string;w:number;left?:boolean;cell:(l:any)=>any};
+function columnsOf(i:any):Col[] {
+ const p=printedColumns(i),cols:(Col|false)[]=[
+  p.contract&&{key:"contract",head:"N° contrat",w:14,left:true,cell:l=>l.contract},
+  {key:"designation",head:"Désignation",w:30,left:true,cell:l=>l.designation},
+  p.destination&&{key:"destination",head:"Destination",w:14,cell:l=>l.destination},
+  {key:"measure",head:measureName(i.measure),w:11,cell:l=>decimalLabel(l.quantity)},
+  p.lot&&{key:"lot",head:"N° de lot",w:12,cell:l=>l.lot},
+  p.weight&&{key:"weight",head:`Poids (${i.weightUnit==="t"?"t":"kg"})`,w:11,cell:l=>Number(l.weight)>0?decimalLabel(l.weight):""},
+  {key:"pu",head:"P. U.",w:12,cell:l=>money(l.unitPrice)},
+  {key:"amount",head:"Montant HT",w:14,cell:l=>money(lineAmount(l))},
+ ];
+ return cols.filter(Boolean) as Col[];
+}
+function Lines({lines,invoice}:{lines:any[];invoice:any}) {const cols=columnsOf(invoice),sum=cols.reduce((n,c)=>n+c.w,0);return <table className={"receipt-table receipt-lines"+(cols.length>6?" receipt-dense":"")}><colgroup>{cols.map(c=><col key={c.key} style={{width:(c.w/sum*100).toFixed(2)+"%"}}/>)}</colgroup><thead><tr>{cols.map(c=><th key={c.key} className={c.left?"receipt-left":undefined}>{c.head}</th>)}</tr></thead><tbody>{lines.map(l=><tr key={l.id}>{cols.map(c=><td key={c.key} className={c.left?"receipt-left":undefined}>{c.cell(l)}</td>)}</tr>)}</tbody></table>;}
 export default function InvoicePaper({model,invoice:i,words}:{model:any;invoice:any;words:(n:number)=>string}) {
  const t=invoiceTotals(i),format=modelFormat(model),measure=useRef<HTMLDivElement>(null),[heights,setHeights]=useState<number[]>([]);
  useLayoutEffect(()=>{const rows=measure.current?.querySelectorAll("tbody tr");if(rows){const next=Array.from(rows).map(r=>(r as HTMLElement).offsetHeight);setHeights(old=>JSON.stringify(old)===JSON.stringify(next)?old:next);}},[i.lines]);
  // Line space on a page, in px: the first page carries the client and reference blocks, the next ones only a short title.
  // Totals, amount in words, payment mode and signature take `closing` px and go on the last page only.
  const first=580,next=740,closing=first-(t.discount>0&&i.advance>0?235:t.taxMode==="ttc"||t.discount>0?270:320);
- const height=(line:any,index:number)=>heights[index]??Math.max(45,20+Math.max(line.designation.split("\n").length,(line.destination||"").split("\n").length)*17);
+ const height=(line:any,index:number)=>heights[index]??Math.max(45,20+Math.max(line.designation.split("\n").length,(line.destination||"").split("\n").length,(line.contract||"").split("\n").length)*17);
  const groups:any[][]=[[]],used=[0];
  i.lines.forEach((line:any,index:number)=>{const h=height(line,index),room=groups.length===1?first:next;if(used.at(-1)!+h>room&&groups.at(-1)!.length){groups.push([]);used.push(0);}groups.at(-1)!.push(line);used[used.length-1]+=h;});
  // The closing block must fit under the last lines: otherwise the last line moves to a new page with it, so no page holds totals alone.

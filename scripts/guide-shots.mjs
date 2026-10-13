@@ -130,7 +130,7 @@ try {
   await line.locator("textarea").first().fill("Traitement phytosanitaire\nConteneur MSNU 923173-6");
   await line.locator("textarea").nth(1).fill("Kolkata");
   await line.locator("input").nth(0).fill("2"); await line.locator("input").nth(1).fill("45000");
-  await shot(office, "fac-04-etape2-articles", [[1, line.locator("textarea").first()], [2, line.locator("input").nth(0)], [3, line.locator("input").nth(1)], [4, btn(office, "Ajouter un article")]]);
+  await shot(office, "fac-04-etape2-articles", [[1, line.locator("textarea").first()], [2, line.locator("input").nth(0)], [3, line.locator("input").nth(1)], [4, office.locator(".cx-toggles")]]);
   await btn(office, /Continuer/).click();
   await shot(office, "fac-05-etape3-reglement", [[1, office.locator(".cx-choice-compact").first()], [2, office.locator(".cx-form-grid").first()]]);
   await btn(office, /Continuer/).click();

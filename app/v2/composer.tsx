@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Check, ChevronLeft, FileText, Pencil, Plus, Trash2, UserPlus } from "lucide-react";
-import { invoiceTotals, lineAmount, normalizePayment } from "../invoice-math";
-import type { TaxMode } from "../invoice-math";
+import { decimalLabel, invoiceTotals, lineAmount, measureName, normalizePayment, threeDecimals } from "../invoice-math";
+import type { InvoiceColumns, Measure, TaxMode, WeightUnit } from "../invoice-math";
 import { fixedModel } from "../invoice-format";
 import { Button, Choice, DateInput, Field, MoneyInput, Notice, NumberInput, Paper, SearchBox, TextArea, TextInput, matches, toast } from "./ui";
 import { ClientForm } from "./clients";
@@ -9,18 +9,30 @@ import { DEFAULT_TERM, METHODS, addDays, balance, commit, termOf, dateFr, dateVa
 import type { Client, Invoice, Line } from "./store";
 import { words } from "./words";
 
-type Draft = { number: string; clientId: string; date: string; lines: Line[]; taxRate: number; taxMode: TaxMode; discountRate: number; advance: number; payment: string; note: string; purchaseOrder: string; paymentTerm: number };
+type Draft = { number: string; clientId: string; date: string; lines: Line[]; taxRate: number; taxMode: TaxMode; discountRate: number; advance: number; payment: string; note: string; purchaseOrder: string; paymentTerm: number; measure: Measure; columns: InvoiceColumns; weightUnit: WeightUnit };
 const STEPS = ["Client et facture", "Articles et prestations", "Remise, TVA et règlement", "Vérifier et émettre"];
+type Habits = Pick<Draft, "measure" | "columns" | "weightUnit">;
+const BASIC: Habits = { measure: "quantite", columns: { destination: true }, weightUnit: "kg" };
+/** A new invoice starts like the last one made for the same client (quantity or volume, same columns). */
+function habitsOf(clientId: string): Habits {
+  const last = getData().invoices.filter(i => i.client.id === clientId && i.columns).sort((a, b) => b.date.localeCompare(a.date))[0];
+  return last ? { measure: last.measure ?? "quantite", columns: { ...last.columns }, weightUnit: last.weightUnit ?? "kg" } : BASIC;
+}
+const OPTIONAL: [keyof InvoiceColumns, string][] = [["contract", "N° de contrat"], ["destination", "Destination"], ["lot", "N° de lot"], ["weight", "Poids"]];
 
 /** The 4-step invoice flow. `validated`: made by the Direction, so it does not come back to validate.
  *  `legacy`: an invoice made before the app, typed in with its original number and date. */
 export default function Composer({ editId, clientId, requestId, by, validated, legacy: newLegacy, onDone, onCancel }: { editId?: string; clientId?: string; requestId?: string; by: string; validated?: boolean; legacy?: boolean; onDone: (invoiceId: string) => void; onCancel: () => void }) {
   const d = useData(), editing = d.invoices.find(i => i.id === editId), legacy = editing ? !!editing.legacy : !!newLegacy;
-  const [draft, setDraft] = useState<Draft>(() => editing ? { number: editing.number, clientId: editing.client.id, date: editing.date, lines: editing.lines.map(l => ({ ...l })), taxRate: editing.taxRate, taxMode: invoiceTotals(editing).taxMode, discountRate: editing.discountRate || 0, advance: editing.advance, payment: normalizePayment(editing.payment), note: editing.note, purchaseOrder: editing.purchaseOrder || "", paymentTerm: termOf(editing) }
-    : { number: "", clientId: clientId ?? getData().requests.find(r => r.id === requestId)?.clientId ?? "", date: legacy ? (getData().month < todayIso().slice(0, 7) ? getData().month + "-01" : "") : todayIso(), lines: [emptyLine()], taxRate: 19.25, taxMode: "ht", discountRate: 0, advance: 0, payment: "Espèces", note: "", purchaseOrder: "", paymentTerm: getData().paymentTerm ?? DEFAULT_TERM });
-  const [step, setStep] = useState(0), [error, setError] = useState(""), [q, setQ] = useState(""), [form, setForm] = useState<Client | null>(null), [showContract, setShowContract] = useState<Record<string, boolean>>({});
+  const [draft, setDraft] = useState<Draft>(() => editing ? { number: editing.number, clientId: editing.client.id, date: editing.date, lines: editing.lines.map(l => ({ ...l })), taxRate: editing.taxRate, taxMode: invoiceTotals(editing).taxMode, discountRate: editing.discountRate || 0, advance: editing.advance, payment: normalizePayment(editing.payment), note: editing.note, purchaseOrder: editing.purchaseOrder || "", paymentTerm: termOf(editing), measure: editing.measure ?? "quantite", columns: editing.columns ?? { contract: editing.lines.some(l => l.contract.trim()), destination: true }, weightUnit: editing.weightUnit ?? "kg" }
+    : { ...habitsOf(clientId ?? getData().requests.find(r => r.id === requestId)?.clientId ?? ""), number: "", clientId: clientId ?? getData().requests.find(r => r.id === requestId)?.clientId ?? "", date: legacy ? (getData().month < todayIso().slice(0, 7) ? getData().month + "-01" : "") : todayIso(), lines: [emptyLine()], taxRate: 19.25, taxMode: "ht", discountRate: 0, advance: 0, payment: "Espèces", note: "", purchaseOrder: "", paymentTerm: getData().paymentTerm ?? DEFAULT_TERM });
+  const [step, setStep] = useState(0), [error, setError] = useState(""), [q, setQ] = useState(""), [form, setForm] = useState<Client | null>(null), [touched, setTouched] = useState(false);
   const set = (p: Partial<Draft>) => { setDraft(v => ({ ...v, ...p })); setError(""); };
   const setLine = (id: string, p: Partial<Line>) => set({ lines: draft.lines.map(l => l.id === id ? { ...l, ...p } : l) });
+  const habit = (p: Partial<Habits>) => { setTouched(true); set(p); };
+  // Choosing the client of a new invoice brings back how its last invoice was made, until something is chosen by hand.
+  const pickClient = (id: string) => set(editing || touched || !id ? { clientId: id } : { clientId: id, ...habitsOf(id) });
+  const volume = draft.measure === "volume", cols = draft.columns, unitOf = (u: WeightUnit) => u === "t" ? "t" : "kg";
   const chosen = d.clients.find(c => c.id === draft.clientId), totals = invoiceTotals(draft), period = draft.date.slice(0, 7);
   const number = editing?.number ?? (legacy ? draft.number.trim() || "—" : dateValid(draft.date) ? nextInvoiceNumber(d, period) : "—");
   const request = d.requests.find(r => r.id === requestId);
@@ -41,7 +53,11 @@ export default function Composer({ editId, clientId, requestId, by, validated, l
     if (editing && draft.clientId !== editing.client.id && (d.payments.some(p => p.invoiceId === editing.id && !p.cancelledAt) || d.credits.some(c => c.invoiceId === editing.id))) return [0, "Cette facture a des paiements ou des avoirs : conservez le même client."];
     if (upTo < 1) return null;
     const lines = draft.lines.filter(l => l.designation.trim());
-    if (!lines.length || draft.lines.some(l => !l.designation.trim() && l.unitPrice > 0) || lines.some(l => !Number.isSafeInteger(l.quantity) || l.quantity <= 0 || !Number.isSafeInteger(l.unitPrice) || l.unitPrice < 0)) return [1, "Chaque article doit avoir une désignation, une quantité entière positive et un prix entier."];
+    if (!lines.length || draft.lines.some(l => !l.designation.trim() && l.unitPrice > 0)) return [1, "Chaque article doit avoir une désignation."];
+    const what = volume ? "un volume" : "une quantité";
+    if (lines.some(l => !(l.quantity > 0) || !threeDecimals(l.quantity))) return [1, `Chaque article doit avoir ${what} supérieur à zéro, avec 3 chiffres après la virgule au plus (ex. 19,245).`];
+    if (lines.some(l => !Number.isSafeInteger(l.unitPrice) || l.unitPrice < 0)) return [1, "Le prix unitaire est un nombre entier de francs CFA."];
+    if (cols.weight && lines.some(l => l.weight !== undefined && (l.weight < 0 || !threeDecimals(l.weight)))) return [1, "Le poids a 3 chiffres après la virgule au plus."];
     if (upTo < 2) return null;
     if (!Number.isFinite(draft.taxRate) || draft.taxRate < 0 || draft.taxRate > 100 || !Number.isFinite(draft.discountRate) || draft.discountRate < 0 || draft.discountRate > 100) return [2, "La TVA et la remise doivent être comprises entre 0 et 100 %."];
     if (!Number.isSafeInteger(draft.paymentTerm) || draft.paymentTerm < 0 || draft.paymentTerm > 365) return [2, "Le délai de paiement doit être un nombre de jours entre 0 et 365."];
@@ -57,8 +73,9 @@ export default function Composer({ editId, clientId, requestId, by, validated, l
   function next() { const e = check(step); if (e && e[0] <= step) { setStep(e[0]); setError(e[1]); return; } setError(""); setStep(s => s + 1); }
   function save() {
     const e = check(3); if (e) { setStep(e[0]); setError(e[1]); return; }
-    const cur = getData(), lines = draft.lines.filter(l => l.designation.trim()).map(l => ({ ...l }));
-    const data = { date: draft.date, client: { ...chosen! }, company: editing?.company ?? { ...cur.company, logo: "" }, lines, taxRate: draft.taxMode === "ttc" ? draft.taxRate : editing?.taxRate ?? draft.taxRate, taxMode: draft.taxMode, discountRate: draft.discountRate, purchaseOrder: draft.purchaseOrder.trim(), advance: draft.advance, payment: draft.payment, note: draft.note, paymentTerm: draft.paymentTerm, template: editing?.template ?? { document: fixedModel(cur.format) } };
+    // A column that is not chosen keeps nothing, so it can never come back on the invoice by surprise.
+    const cur = getData(), lines = draft.lines.filter(l => l.designation.trim()).map(({ lot, weight, ...l }) => ({ ...l, contract: cols.contract ? l.contract.trim() : "", destination: cols.destination ? l.destination : "", ...(cols.lot && lot?.trim() ? { lot: lot.trim() } : {}), ...(cols.weight && weight ? { weight } : {}) }));
+    const data = { date: draft.date, client: { ...chosen! }, company: editing?.company ?? { ...cur.company, logo: "" }, lines, taxRate: draft.taxMode === "ttc" ? draft.taxRate : editing?.taxRate ?? draft.taxRate, taxMode: draft.taxMode, discountRate: draft.discountRate, purchaseOrder: draft.purchaseOrder.trim(), advance: draft.advance, payment: draft.payment, note: draft.note, paymentTerm: draft.paymentTerm, measure: draft.measure, columns: { ...cols }, weightUnit: draft.weightUnit, template: editing?.template ?? { document: fixedModel(cur.format) } };
     let invoice: Invoice;
     if (editing) {
       const { history, ...previous } = editing; const stamp = nowIso();
@@ -101,7 +118,7 @@ export default function Composer({ editId, clientId, requestId, by, validated, l
             {chosen ? <div className="cx-chosen"><span className="cx-monogram">{chosen.name.slice(0, 2).toUpperCase()}</span><div><strong>{chosen.name}</strong><span>{[chosen.address, chosen.niu && `NIU ${chosen.niu}`].filter(Boolean).join(", ") || "Coordonnées à compléter"}</span></div>
               <div className="cx-chosen-actions"><Button size="sm" kind="quiet" icon={<Pencil size={15} />} onClick={() => setForm({ ...chosen })}>Modifier les coordonnées</Button><Button size="sm" kind="link" onClick={() => set({ clientId: "" })}>Changer de client</Button></div></div>
               : <><div className="cx-search-row"><SearchBox value={q} onChange={setQ} placeholder="Tapez le nom du client" autoFocus /><Button icon={<UserPlus size={18} />} onClick={() => setForm({ ...emptyClient(), name: q })}>Nouveau client</Button></div>
-                <div className="cx-pick-list">{clients.map(c => <button type="button" key={c.id} onClick={() => set({ clientId: c.id })}><span className="cx-monogram">{c.name.slice(0, 2).toUpperCase()}</span><span><strong>{c.name}</strong><small>{[c.address, c.phone].filter(Boolean).join(", ")}</small></span></button>)}{!clients.length && <p className="cx-muted">Aucun client ne correspond. Utilisez « Nouveau client ».</p>}</div></>}
+                <div className="cx-pick-list">{clients.map(c => <button type="button" key={c.id} onClick={() => pickClient(c.id)}><span className="cx-monogram">{c.name.slice(0, 2).toUpperCase()}</span><span><strong>{c.name}</strong><small>{[c.address, c.phone].filter(Boolean).join(", ")}</small></span></button>)}{!clients.length && <p className="cx-muted">Aucun client ne correspond. Utilisez « Nouveau client ».</p>}</div></>}
           </div>
           <div className="cx-card">
             <div className="cx-section-title"><h2>La facture</h2></div>
@@ -112,24 +129,31 @@ export default function Composer({ editId, clientId, requestId, by, validated, l
             </div>
             <Field label="Type de facture" required><Choice value={draft.taxMode} onChange={v => set({ taxMode: v, taxRate: v === "ttc" && !draft.taxRate ? 19.25 : draft.taxRate })} options={[{ value: "ht", label: "Facture hors taxe", sub: "Sans TVA" }, { value: "ttc", label: "Facture TTC", sub: "La TVA s’ajoute après la remise" }]} /></Field>
             {draft.taxMode === "ttc" && <p className="cx-hint">Les prix sont saisis hors taxe. Le taux de TVA se règle à l’étape 3.</p>}
+            <Field label="Le montant se calcule avec" required hint="Une facture compte soit des quantités, soit des volumes, jamais les deux."><Choice value={draft.measure} onChange={v => habit({ measure: v })} options={[{ value: "quantite", label: "Quantité × prix unitaire", sub: "Nombre de colis, de conteneurs…" }, { value: "volume", label: "Volume × prix unitaire", sub: "En mètres cubes (m³)" }]} /></Field>
           </div>
         </>}
         {step === 1 && <div className="cx-card">
           <div className="cx-section-title"><h2>Articles et prestations</h2><span className="cx-muted">{chosen?.name}</span></div>
-          {draft.lines.some(l => !Number.isInteger(l.quantity)) && <Notice tone="warn">Cette ancienne facture contient une quantité décimale. Choisissez une quantité entière ; le montant sera recalculé et l’ancienne version conservée.</Notice>}
+          <div className="cx-columns-pick">
+            <h3>Colonnes de la facture</h3>
+            <div className="cx-toggles">{OPTIONAL.map(([k, label]) => <button type="button" key={k} aria-pressed={!!cols[k]} className={`cx-toggle${cols[k] ? " cx-on" : ""}`} onClick={() => habit({ columns: { ...cols, [k]: !cols[k] } })}>{cols[k] ? <Check size={15} strokeWidth={3} aria-hidden="true" /> : <Plus size={15} aria-hidden="true" />}{label}</button>)}
+              {cols.weight && <span className="cx-unit-pick">en {(["kg", "t"] as WeightUnit[]).map(u => <button type="button" key={u} aria-pressed={draft.weightUnit === u} className={`cx-toggle cx-toggle-sm${draft.weightUnit === u ? " cx-on" : ""}`} onClick={() => habit({ weightUnit: u })}>{u === "t" ? "tonnes" : "kg"}</button>)}</span>}</div>
+            <p className="cx-hint">Désignation, {volume ? "volume (m³)" : "quantité"}, prix unitaire et montant sont toujours imprimés. Une colonne non choisie, ou laissée vide, n’apparaît pas sur la facture.</p>
+          </div>
           {draft.lines.map((l, k) => <fieldset key={l.id} className="cx-line">
             <legend>Article {k + 1}</legend>
             <div className="cx-line-grid">
+              {cols.contract && <Field label="N° de contrat" optional wide><TextInput value={l.contract} onChange={v => setLine(l.id, { contract: v })} placeholder="Ex. D091/26 ; FAD 13971 TAL P2" /></Field>}
               <Field label="Désignation" required hint="Plusieurs lignes possibles (ex. numéros de conteneurs)."><TextArea rows={3} value={l.designation} onChange={v => setLine(l.id, { designation: v })} placeholder={"Traitement phytosanitaire\nConteneur MSNU 923173-6"} /></Field>
-              <Field label="Destination" optional><TextArea rows={3} value={l.destination} onChange={v => setLine(l.id, { destination: v })} placeholder={"Kolkata\nNorfolk"} /></Field>
-              <Field label="Quantité" required><NumberInput value={l.quantity} onChange={v => setLine(l.id, { quantity: v })} placeholder="1" /></Field>
-              <Field label="Prix unitaire hors taxe" required><MoneyInput value={l.unitPrice} onChange={v => setLine(l.id, { unitPrice: v })} /></Field>
-              {(l.contract || showContract[l.id]) && <Field label="Référence de contrat" optional wide><TextInput value={l.contract} onChange={v => setLine(l.id, { contract: v })} placeholder="Ex. CTE1207111" /></Field>}
+              {cols.destination && <Field label="Destination" optional><TextArea rows={3} value={l.destination} onChange={v => setLine(l.id, { destination: v })} placeholder={"Kolkata\nNorfolk"} /></Field>}
+              <Field label={measureName(draft.measure)} required hint="Décimales possibles : 19,245"><NumberInput decimals value={l.quantity} onChange={v => setLine(l.id, { quantity: v })} placeholder={volume ? "0,000" : "1"} unit={volume ? "m³" : undefined} /></Field>
+              <Field label={volume ? "Prix unitaire HT, par m³" : "Prix unitaire hors taxe"} required><MoneyInput value={l.unitPrice} onChange={v => setLine(l.id, { unitPrice: v })} /></Field>
+              {cols.lot && <Field label="N° de lot" optional><TextInput value={l.lot ?? ""} onChange={v => setLine(l.id, { lot: v })} placeholder="Ex. LOT 24-118" /></Field>}
+              {cols.weight && <Field label={`Poids (${unitOf(draft.weightUnit)})`} optional hint="Décimales possibles"><NumberInput decimals value={l.weight ?? 0} onChange={v => setLine(l.id, { weight: v || undefined })} unit={unitOf(draft.weightUnit)} /></Field>}
             </div>
             <div className="cx-line-foot">
-              <div>{!l.contract && !showContract[l.id] && <button type="button" className="cx-btn cx-btn-link cx-inline" onClick={() => setShowContract(s => ({ ...s, [l.id]: true }))}>+ Ajouter une référence de contrat</button>}
-                {draft.lines.length > 1 && <button type="button" className="cx-btn cx-btn-link cx-inline cx-quiet-link" onClick={() => set({ lines: draft.lines.filter(x => x.id !== l.id) })}><Trash2 size={14} /> Retirer cet article</button>}</div>
-              <span>Montant de l’article : <strong>{money(lineAmount(l))}</strong></span>
+              <div>{draft.lines.length > 1 && <button type="button" className="cx-btn cx-btn-link cx-inline cx-quiet-link" onClick={() => set({ lines: draft.lines.filter(x => x.id !== l.id) })}><Trash2 size={14} /> Retirer cet article</button>}</div>
+              <span>{decimalLabel(l.quantity)}{volume ? " m³" : ""} × {money(l.unitPrice)} = <strong>{money(lineAmount(l))}</strong></span>
             </div>
           </fieldset>)}
           <Button icon={<Plus size={18} />} onClick={() => set({ lines: [...draft.lines, emptyLine()] })}>Ajouter un article</Button>
@@ -154,6 +178,7 @@ export default function Composer({ editId, clientId, requestId, by, validated, l
             <p><span>Date</span><strong>{dateFr(draft.date)}</strong></p>
             {draft.purchaseOrder && <p><span>Bon de commande</span><strong>{draft.purchaseOrder}</strong></p>}
             <p><span>Type</span><strong>{draft.taxMode === "ttc" ? `TTC, TVA ${String(draft.taxRate).replace(".", ",")} %` : "Hors taxe"}</strong></p>
+            <p><span>Calcul</span><strong>{volume ? "Volume (m³) × prix unitaire" : "Quantité × prix unitaire"}</strong></p>
             <p><span>Articles</span><strong>{draft.lines.filter(l => l.designation.trim()).length}</strong></p>
             {draft.discountRate > 0 && <p><span>Remise</span><strong>{String(draft.discountRate).replace(".", ",")} %, soit − {money(totals.discount)}</strong></p>}
             {draft.advance > 0 && <p><span>Avance reçue</span><strong>{money(draft.advance)}</strong></p>}
@@ -162,7 +187,7 @@ export default function Composer({ editId, clientId, requestId, by, validated, l
             <div className="cx-summary-total"><span>{draft.advance > 0 ? "Reste à payer" : totals.totalLabel}</span><strong>{money(totals.due)}</strong></div>
             {editing && balance(editing, d.payments, d.credits).received > 0 && <p className="cx-muted">Paiements déjà reçus sur cette facture : {money(balance(editing, d.payments, d.credits).received)}.</p>}
           </div>
-          <Paper invoice={{ ...(editing ?? {} as Invoice), id: editing?.id ?? "draft", number, date: draft.date, client: chosen, company: editing?.company ?? d.company, lines: draft.lines.filter(l => l.designation.trim()), taxRate: draft.taxRate, taxMode: draft.taxMode, discountRate: draft.discountRate, advance: draft.advance, payment: draft.payment, note: draft.note, purchaseOrder: draft.purchaseOrder }} title="Aperçu avant émission" />
+          <Paper invoice={{ ...(editing ?? {} as Invoice), id: editing?.id ?? "draft", number, date: draft.date, client: chosen, company: editing?.company ?? d.company, lines: draft.lines.filter(l => l.designation.trim()), taxRate: draft.taxRate, taxMode: draft.taxMode, discountRate: draft.discountRate, advance: draft.advance, payment: draft.payment, note: draft.note, purchaseOrder: draft.purchaseOrder, measure: draft.measure, columns: cols, weightUnit: draft.weightUnit }} title="Aperçu avant émission" />
         </div>}
       </div>
       {step < 3 && summary}
@@ -172,6 +197,6 @@ export default function Composer({ editId, clientId, requestId, by, validated, l
       {step < 3 ? <Button kind="primary" onClick={next}>Continuer</Button>
         : <Button kind="primary" icon={<FileText size={18} />} onClick={save}>{editing ? "Enregistrer les modifications" : legacy ? `Enregistrer l’ancienne facture n° ${number}` : `Émettre la facture n° ${number}`}</Button>}
     </footer>
-    {form && <ClientForm client={form} by={by} onClose={() => setForm(null)} onSaved={c => { setForm(null); set({ clientId: c.id }); }} />}
+    {form && <ClientForm client={form} by={by} onClose={() => setForm(null)} onSaved={c => { setForm(null); pickClient(c.id); }} />}
   </section>;
 }

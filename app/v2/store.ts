@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { correctLegacyQuantities, invoiceTotals } from "../invoice-math";
+import { invoiceTotals } from "../invoice-math";
+import type { InvoiceColumns, Measure, WeightUnit } from "../invoice-math";
 import type { TaxMode } from "../invoice-math";
 import { balance as v1Balance } from "../client-account";
 import { defaultFormat, restoreFormat } from "../invoice-format";
@@ -24,8 +25,9 @@ export const receives = (r: Role, to: Role) => to === r || (r === "bureau" && (t
 
 export type Client = { id: string; name: string; contact: string; address: string; phone: string; email: string; niu: string; rc: string; archived?: boolean; archivedAt?: string };
 export type Company = { name: string; subtitle: string; address: string; phone: string; email: string; niu: string; rc: string; website: string; logo: string };
-export type Line = { id: string; contract: string; designation: string; destination: string; quantity: number; unitPrice: number };
-export type Invoice = { id: string; number: string; date: string; client: Client; company: Company; lines: Line[]; taxRate: number; advance: number; payment: string; note: string; taxMode?: TaxMode; discountRate?: number; purchaseOrder?: string; revisedAt?: string; history?: Invoice[] & { savedAt?: string }[]; template?: unknown; createdBy?: string;
+/** `quantity` is the quantity, or the volume in m³ on a volume invoice (Invoice.measure); `lot` and `weight` are optional columns. */
+export type Line = { id: string; contract: string; designation: string; destination: string; quantity: number; unitPrice: number; lot?: string; weight?: number };
+export type Invoice = { id: string; number: string; date: string; client: Client; company: Company; lines: Line[]; taxRate: number; advance: number; payment: string; note: string; taxMode?: TaxMode; discountRate?: number; purchaseOrder?: string; measure?: Measure; columns?: InvoiceColumns; weightUnit?: WeightUnit; revisedAt?: string; history?: Invoice[] & { savedAt?: string }[]; template?: unknown; createdBy?: string;
   /** Made before the app and typed in afterwards, with its original number and date. */
   legacy?: boolean;
   /** Set by the cloud: made or changed by the office in a month already closed (a computer that was offline). */
@@ -144,8 +146,8 @@ function seed(): Data {
 export function fromBackup(d: Record<string, unknown>, keep?: Data): Data {
   const base = keep ?? seed();
   const clients = (d.clients as Client[]) ?? base.clients, invoices = (d.invoices as Invoice[]) ?? base.invoices, payments = (d.payments as Payment[]) ?? [], credits = (d.credits as CreditNote[]) ?? [], invoiceDeliveries = (d.invoiceDeliveries as Delivery[]) ?? [], closedMonths = (d.closedMonths as string[]) ?? [];
-  const fixed = correctLegacyQuantities(invoices, credits, closedMonths).items as Invoice[];
-  const core = { clients, invoices: fixed, payments, credits, invoiceDeliveries };
+  // Decimal quantities and volumes are kept as they are (19,245 m³ is a real volume).
+  const core = { clients, invoices, payments, credits, invoiceDeliveries };
   return {
     ...base, ...core, version: 2, company: (d.company as Company) ?? base.company, format: d.format || d.models ? restoreFormat(d) : base.format, closedMonths, month: (d.month as string) ?? base.month,
     requests: (d.requests as Request[]) ?? base.requests, events: (d.events as Event[]) ?? base.events, accounts: (d.accounts as Account[]) ?? base.accounts,

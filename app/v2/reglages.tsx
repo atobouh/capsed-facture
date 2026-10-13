@@ -1,6 +1,7 @@
 /** Réglages: five short pages instead of one long one. Each page answers one question. */
 import { useEffect, useState } from "react";
-import { BookOpen, Building2, Check, ChevronRight, Copy, Download, Eye, EyeOff, FileUp, Database, KeyRound, Monitor, ShieldCheck, UserPlus, Users, WifiOff } from "lucide-react";
+import { BookOpen, Building2, Check, ChevronRight, Copy, Download, Eye, EyeOff, FileUp, Database, KeyRound, Monitor, ShieldCheck, UserPlus, Users, WifiOff, Trash2 } from "lucide-react";
+import { BinPage } from "./corbeille";
 import { Button, Choice, Confirm, Empty, Field, Modal, Notice, PageHead, Row, TextArea, TextInput, toast } from "./ui";
 import { BackupSettings, CompanySettings, FormatSettings, TermSettings } from "./settings";
 import { ACTIONS, liftRule, undoOverride } from "./overrides";
@@ -20,6 +21,7 @@ const PAGES = [
   { key: "equipe", title: "Équipe et accès", sub: CLOUD ? "Personnes, mots de passe, ordinateurs du bureau" : "Personnes et mots de passe", icon: <Users size={18} aria-hidden="true" /> },
   { key: "regles", title: "Règles et dérogations", sub: "Délai de paiement, mois clôturés, retour en arrière", icon: <ShieldCheck size={18} aria-hidden="true" /> },
   { key: "entreprise", title: "Entreprise et factures", sub: "Coordonnées et en-tête imprimés", icon: <Building2 size={18} aria-hidden="true" /> },
+  { key: "corbeille", title: "Éléments supprimés", sub: "Clients, factures et paiements supprimés, à restaurer", icon: <Trash2 size={18} aria-hidden="true" /> },
   { key: "donnees", title: "Données et sauvegarde", sub: CLOUD ? "Envois des postes, sauvegarde, restauration" : "Sauvegarde et restauration", icon: <Database size={18} aria-hidden="true" /> },
   { key: "aide", title: "Aide", sub: "Les gestes essentiels et quoi faire en cas de souci", icon: <BookOpen size={18} aria-hidden="true" /> },
 ];
@@ -34,6 +36,7 @@ export function Reglages({ page, nav, by }: { page?: string; nav: Nav; by: strin
     <PageHead back={{ label: "Réglages", onClick: () => nav({ name: "reglages" }) }} title={p.title} />
     {p.key === "equipe" && <><Team by={by} />{CLOUD && <Devices />}{MODE === "site" && <Sessions />}</>}
     {p.key === "regles" && <Rules by={by} />}
+    {p.key === "corbeille" && <BinPage by={by} />}
     {p.key === "entreprise" && <><CompanySettings by={by} /><FormatSettings by={by} /></>}
     {p.key === "donnees" && <>{CLOUD && <SyncStatus />}<ExportAll /><ClientImport by={by} /><BackupSettings by={by} />{MODE === "demo" && <DemoTools />}</>}
     {p.key === "aide" && <Help />}
@@ -49,7 +52,7 @@ async function withPassword(a: Account, password: string): Promise<Account> {
   return { ...rest, ...(await makeHash(password)), visiblePassword: password, passwordAt: nowIso() };
 }
 const shownPassword = (a: Account) => a.visiblePassword ?? a.password;
-const ROLE_OPTIONS: { value: Role; label: string; sub: string }[] = [{ value: "facturation", label: "Facturation", sub: "Factures, avoirs, clients" }, { value: "encaissement", label: "Encaissement", sub: "Paiements" }, { value: "bureau", label: "Facturation et encaissement", sub: "Tout le bureau, une seule connexion" }, { value: "responsable", label: "Direction", sub: "Ce site" }];
+const ROLE_OPTIONS: { value: Role; label: string; sub: string }[] = [{ value: "facturation", label: "Facturation", sub: "Factures, avoirs, clients" }, { value: "encaissement", label: "Encaissement", sub: "Paiements" }, { value: "bureau", label: "Facturation et encaissement", sub: "Tout le bureau, une seule connexion" }, { value: "responsable", label: "Direction", sub: "Ce site, et les ordinateurs du bureau" }];
 function copy(text: string, done = "Copié.") { navigator.clipboard?.writeText(text).then(() => toast(done)).catch(() => toast("Copie impossible : recopiez-le à la main.", "warn")); }
 function PasswordLine({ a, onSet }: { a: Account; onSet: () => void }) {
   const [show, setShow] = useState(false), pw = shownPassword(a);
@@ -153,7 +156,7 @@ function CredentialSheet({ a, password, onClose }: { a: Account; password?: stri
   const text = `CAPSED, accès de ${a.name}\nEspace : ${ROLE_LABEL[a.role]}\nIdentifiant : ${a.login}${password ? `\nMot de passe : ${password}` : ""}`;
   return <Modal title={`Accès de ${a.name}`} subtitle="Remettez ces informations à cette personne uniquement." onClose={onClose} actions={<><Button kind="quiet" icon={<Copy size={16} aria-hidden="true" />} onClick={() => copy(text)}>Copier la fiche</Button><Button kind="primary" onClick={onClose}>C’est noté</Button></>}>
     <dl className="cx-credential"><div><dt>Espace</dt><dd>{ROLE_LABEL[a.role]}</dd></div><div><dt>Identifiant</dt><dd translate="no">{a.login}</dd></div><div><dt>Mot de passe</dt><dd translate="no">{password ? <span className="cx-pw-sheet">{password}<button type="button" className="cx-icon-mini" onClick={() => copy(password, "Mot de passe copié.")} aria-label="Copier le mot de passe" title="Copier le mot de passe"><Copy size={15} aria-hidden="true" /></button></span> : "pas encore visible : « Définir le mot de passe »"}</dd></div></dl>
-    <p className="cx-muted">{a.role === "responsable" ? "Se connecte sur ce site." : "Se connecte dans l’application de bureau, sur un ordinateur relié."} Vous retrouvez cette fiche à tout moment dans Réglages, Équipe et accès.</p>
+    <p className="cx-muted">{a.role === "responsable" ? "Se connecte sur ce site, et aussi sur un ordinateur relié du bureau (même sans internet) pour le travail du bureau et les suppressions." : "Se connecte dans l’application de bureau, sur un ordinateur relié."} Vous retrouvez cette fiche à tout moment dans Réglages, Équipe et accès.</p>
   </Modal>;
 }
 

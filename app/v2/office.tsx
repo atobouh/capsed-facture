@@ -3,14 +3,17 @@ import { Check, FileText, Pencil, Plus, Printer, Undo2 } from "lucide-react";
 import { invoiceTotals } from "../invoice-math";
 import { exportInvoice } from "../receipt-export";
 import { downloadStatement, exportStatementExcel } from "../account-statement";
-import { periodTitle, periodTotals } from "../statement-period";
-import type { StatementPeriod } from "../statement-period";
+import { filterInvoices, periodTotals, statementTitle } from "../statement-period";
+import type { StatementFilter, StatementPeriod } from "../statement-period";
 import { Button, Confirm, CreditPaperView, DateInput, Empty, Field, Modal, MonthStepper, MoreMenu, Notice, PageHead, Paper, Row, SearchBox, Stamp, StatementPaper, StatusChip, TextArea, Timeline, matches, toast, useWide } from "./ui";
 import { ClientAccount, ClientForm, ClientsDirectory } from "./clients";
 import type { OfficeRoute } from "./clients";
 import Composer from "./composer";
+import { ImportDropDialog, ImportPdf, queueFiles } from "./import-pdf";
+import { OfficeInvoiceReport } from "./invoice-report";
 import { findIssues } from "./checks";
 import { CreditModal, CreditPicker, PaymentModal } from "./payments";
+import { DeleteDialog, useCanDelete } from "./corbeille";
 import { CLOUD, REQUEST_LABEL, accountName, balance, canBill, canCash, commit, receives, dateFr, dateValid, delivery, dueDateOf, overdueDays, termOf, methodName, monthLabel, money, nowIso, timeFr, todayIso, useData } from "./store";
 import type { Data, Request, Role } from "./store";
 import { words } from "./words";
@@ -21,6 +24,8 @@ export function OfficeScreen({ role, by, route, nav }: { role: Role; by: string;
   switch (route.name) {
     case "compose": return <Composer key={`${route.id}-${route.extra}`} editId={route.id} legacy={route.extra === "ancienne"} clientId={route.extra && !route.extra.startsWith("req:") && route.extra !== "ancienne" ? route.extra : undefined} requestId={route.extra?.startsWith("req:") ? route.extra.slice(4) : undefined} by={by}
       onDone={id => nav({ name: "invoice", id })} onCancel={() => nav(route.id ? { name: "invoice", id: route.id } : { name: "register" })} />;
+    case "report": return canBill(role) ? <OfficeInvoiceReport onBack={() => nav({ name: "register" })} /> : <ClientsDirectory role={role} by={by} nav={nav} />;
+    case "import": return canBill(role) ? <ImportPdf by={by} onBack={() => nav({ name: "register" })} onOpen={id => nav({ name: "invoice", id })} /> : <ClientsDirectory role={role} by={by} nav={nav} />;
     case "invoice": return <InvoiceView id={route.id!} role={role} by={by} nav={nav} />;
     case "credit": return <CreditView id={route.id!} nav={nav} />;
     case "clients": return <ClientsDirectory role={role} by={by} nav={nav} />;
@@ -34,7 +39,7 @@ function ClientStatement({ id, nav }: { id: string; nav: Nav }) { const d = useD
 
 function Register({ role, by, nav }: { role: Role; by: string; nav: Nav }) {
   const d = useData(), month = d.month, closed = d.closedMonths.includes(month), wide = useWide(1360);
-  const [q, setQ] = useState(""), [picker, setPicker] = useState(false), [credit, setCredit] = useState<string | null>(null), [closing, setClosing] = useState(false), [sel, setSel] = useState<{ kind: "invoice" | "credit"; id: string } | null>(null);
+  const [q, setQ] = useState(""), [picker, setPicker] = useState(false), [credit, setCredit] = useState<string | null>(null), [closing, setClosing] = useState(false), [importing, setImporting] = useState(false), [sel, setSel] = useState<{ kind: "invoice" | "credit"; id: string } | null>(null);
   const bills = d.invoices.filter(i => i.date.startsWith(month)).sort((a, b) => b.number.localeCompare(a.number)), notes = d.credits.filter(c => c.date.startsWith(month)).sort((a, b) => b.number.localeCompare(a.number));
   const shownBills = bills.filter(i => matches(q, i.number, i.client.name)), shownNotes = notes.filter(c => matches(q, c.number, c.client.name, c.invoiceNumber));
   const eligible = d.invoices.some(i => { const b = balance(i, d.payments, d.credits); return b.credited < b.total; });
@@ -48,7 +53,7 @@ function Register({ role, by, nav }: { role: Role; by: string; nav: Nav }) {
   return <div className={`cx-page${wide ? " cx-page-split" : ""}`}>
     <PageHead title="Factures" sub={closed ? `${monthLabel(month)} est clôturé` : undefined}
       tools={<><MonthStepper value={month} onChange={v => { commit(by, () => ({ month: v })); setSel(null); }} /><SearchBox value={q} onChange={setQ} placeholder="Chercher un client ou un numéro" /></>}
-      actions={<><MoreMenu iconOnly label="Autres actions" items={[{ label: "Ajouter une ancienne facture", hint: "Faite avant l’application, avec son numéro d’origine", onClick: () => nav({ name: "compose", extra: "ancienne" }) }]} /><Button disabled={!eligible || closed} onClick={() => setPicker(true)}>Créer un avoir</Button><Button kind="primary" icon={<Plus size={16} aria-hidden="true" />} disabled={closed} title={closed ? "Ce mois est clôturé" : "Ctrl+N"} onClick={() => nav({ name: "compose" })}>Nouvelle facture</Button></>} />
+      actions={<><MoreMenu iconOnly label="Autres actions" items={[{ label: "Ajouter une ancienne facture", hint: "Faite avant l’application, avec son numéro d’origine", onClick: () => nav({ name: "compose", extra: "ancienne" }) }, { label: "Situation de facturation", hint: "Factures TTC et hors taxe d’une période, à imprimer ou exporter", onClick: () => nav({ name: "report" }) }, { label: "Importer d’anciennes factures", hint: "PDF ou Word, glisser-déposer, plusieurs à la fois", onClick: () => setImporting(true) }]} /><Button disabled={!eligible || closed} onClick={() => setPicker(true)}>Créer un avoir</Button><Button kind="primary" icon={<Plus size={16} aria-hidden="true" />} disabled={closed} title={closed ? "Ce mois est clôturé" : "Ctrl+N"} onClick={() => nav({ name: "compose" })}>Nouvelle facture</Button></>} />
     <div className={wide ? "cx-split cx-split-panel" : ""}>
       <section className="cx-col" aria-label={`Factures de ${monthLabel(month)}`}>
         <dl className="cx-strip"><div><dt>Facturé en {monthLabel(month).split(" ")[0]}</dt><dd>{money(sum("total"))}</dd></div><div><dt>Encaissé</dt><dd>{money(sum("received"))}</dd></div><div><dt>Reste à recevoir</dt><dd className="cx-strong">{money(sum("due"))}</dd></div><div><dt>Pas encore remises au client</dt><dd>{undelivered} facture{undelivered > 1 ? "s" : ""}</dd></div></dl>
@@ -69,6 +74,7 @@ function Register({ role, by, nav }: { role: Role; by: string; nav: Nav }) {
     </div>
     {picker && <CreditPicker onClose={() => setPicker(false)} onPick={id => { setPicker(false); setCredit(id); }} />}
     {credit && <CreditModal invoiceId={credit} by={by} onClose={() => setCredit(null)} onIssued={id => { setCredit(null); open("credit", id); }} />}
+    {importing && <ImportDropDialog onClose={() => setImporting(false)} onFiles={files => { const refused = queueFiles(files); setImporting(false); if (refused.length) toast(`Ignoré : ${refused.join(", ")} (seuls les PDF et les Word .docx sont lus).`, "warn"); if (refused.length < files.length) nav({ name: "import" }); }} />}
     {closing && <Confirm title={`Clôturer ${monthLabel(month)} ?`} confirm={`Clôturer ${monthLabel(month)}`} cancel="Ne pas clôturer" onClose={() => setClosing(false)} onConfirm={() => { const [y, m] = month.split("-").map(Number), n = new Date(y, m, 1), nextM = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}`; commit(by, x => ({ closedMonths: [...x.closedMonths, month], month: nextM }), { text: `${monthLabel(month)} clôturé` }); setClosing(false); toast(`${monthLabel(month)} clôturé. Le mois suivant est ouvert.`); }}>
       <p>Après la clôture, plus aucune facture ni aucun avoir ne pourra être créé ou modifié pour {monthLabel(month)}. Les factures resteront consultables et les paiements pourront toujours être enregistrés.</p></Confirm>}
   </div>;
@@ -76,7 +82,7 @@ function Register({ role, by, nav }: { role: Role; by: string; nav: Nav }) {
 
 /** The selected invoice beside the list: state, the next actions, the figures, the A4 page, its history. */
 function InvoicePanel({ id, role, by, nav }: { id: string; role: Role; by: string; nav: Nav }) {
-  const d = useData(), i = d.invoices.find(x => x.id === id), [credit, setCredit] = useState(false), [undo, setUndo] = useState(false), [pay, setPay] = useState(false);
+  const d = useData(), i = d.invoices.find(x => x.id === id), [credit, setCredit] = useState(false), [undo, setUndo] = useState(false), [pay, setPay] = useState(false), canDelete = useCanDelete(), [del, setDel] = useState(false);
   if (!i) return <Empty title="Facture introuvable." />;
   const b = balance(i, d.payments, d.credits), closed = d.closedMonths.includes(i.date.slice(0, 7)), deliv = delivery(d, i.id);
   const deliver = () => { commit(by, x => ({ invoiceDeliveries: [...x.invoiceDeliveries, { invoiceId: i.id, declaredAt: nowIso(), by }] }), { text: `Facture ${i.number} remise au client`, clientId: i.client.id, invoiceId: i.id }); toast("Facture marquée comme remise au client."); };
@@ -88,6 +94,7 @@ function InvoicePanel({ id, role, by, nav }: { id: string; role: Role; by: strin
     ...(b.credited < b.total && !closed ? [{ label: "Créer un avoir", hint: "Réduire ou annuler le montant de cette facture", onClick: () => setCredit(true) }] : []),
     ...(deliv ? [{ label: "Annuler la remise", hint: "Si la facture n’a pas été donnée au client", onClick: () => setUndo(true) }] : []),
     { label: "Voir le compte du client", onClick: () => nav({ name: "client", id: i.client.id }) },
+    ...(canDelete ? [{ label: "Supprimer la facture", hint: "Restaurable sur le site de la Direction", onClick: () => setDel(true) }] : []),
   ];
   return <div className="cx-panel-body">
     <header className="cx-panel-head">
@@ -118,11 +125,12 @@ function InvoicePanel({ id, role, by, nav }: { id: string; role: Role; by: strin
     {credit && <CreditModal invoiceId={i.id} by={by} onClose={() => setCredit(false)} onIssued={cid => { setCredit(false); nav({ name: "credit", id: cid }); }} />}
     {undo && <Confirm title="Annuler la remise ?" confirm="Annuler la remise" cancel="Garder la remise" onClose={() => setUndo(false)} onConfirm={() => { commit(by, x => ({ invoiceDeliveries: x.invoiceDeliveries.map(r => r.invoiceId === i.id && !r.cancelledAt ? { ...r, cancelledAt: nowIso(), cancelledBy: by } : r) }), { text: `Remise de la facture ${i.number} annulée`, clientId: i.client.id, invoiceId: i.id }); setUndo(false); toast("Remise annulée. L’historique la garde."); }}>
       <p>La facture sera de nouveau notée comme pas encore remise. La déclaration du {deliv ? dateFr(deliv.declaredAt) : ""} reste dans l’historique.</p></Confirm>}
+    {del && <DeleteDialog target={{ collection: "invoices", id: i.id }} by={by} onClose={() => setDel(false)} />}
   </div>;
 }
 
 export function InvoiceView({ id, role, by, nav, pane }: { id: string; role: Role; by: string; nav: Nav; pane?: boolean }) {
-  const d = useData(), i = d.invoices.find(x => x.id === id), [pay, setPay] = useState(false), [credit, setCredit] = useState(false), [undo, setUndo] = useState(false);
+  const d = useData(), i = d.invoices.find(x => x.id === id), [pay, setPay] = useState(false), [credit, setCredit] = useState(false), [undo, setUndo] = useState(false), canDelete = useCanDelete(), [del, setDel] = useState(false);
   if (!i) return <Empty title="Facture introuvable." action={<Button onClick={() => nav({ name: canBill(role) ? "register" : "clients" })}>Retour</Button>} />;
   const b = balance(i, d.payments, d.credits), closed = d.closedMonths.includes(i.date.slice(0, 7)), deliv = delivery(d, i.id), biller = canBill(role), cashier = canCash(role);
   const more = [
@@ -130,6 +138,7 @@ export function InvoiceView({ id, role, by, nav, pane }: { id: string; role: Rol
     ...(biller && b.credited < b.total ? [{ label: "Créer un avoir", hint: "Réduire ou annuler le montant de cette facture", onClick: () => setCredit(true) }] : []),
     ...(biller && deliv ? [{ label: "Annuler la remise", hint: "Si la facture n’a pas été donnée au client", onClick: () => setUndo(true) }] : []),
     { label: "Voir le compte du client", onClick: () => nav({ name: "client", id: i.client.id }) },
+    ...(canDelete ? [{ label: "Supprimer la facture", hint: "Restaurable sur le site de la Direction", onClick: () => setDel(true) }] : []),
   ];
   return <div className={pane ? "cx-detail" : "cx-page"}>
     <PageHead pane={pane} back={pane ? undefined : { label: biller ? "Factures" : i.client.name, onClick: () => nav(biller ? { name: "register" } : { name: "client", id: i.client.id }) }} title={<>Facture {i.number}{i.legacy && <span className="cx-legacy-tag">Ancienne</span>}{b.status === "Payée" && <Stamp tone="good">Payée</Stamp>}</>} sub={`${i.client.name}, ${i.legacy ? "ancienne facture du" : "le"} ${dateFr(i.date)}`}
@@ -155,6 +164,7 @@ export function InvoiceView({ id, role, by, nav, pane }: { id: string; role: Rol
     {credit && <CreditModal invoiceId={i.id} by={by} onClose={() => setCredit(false)} onIssued={cid => { setCredit(false); nav({ name: "credit", id: cid }); }} />}
     {undo && <Confirm title="Annuler la remise ?" confirm="Annuler la remise" cancel="Garder la remise" onClose={() => setUndo(false)} onConfirm={() => { commit(by, x => ({ invoiceDeliveries: x.invoiceDeliveries.map(r => r.invoiceId === i.id && !r.cancelledAt ? { ...r, cancelledAt: nowIso(), cancelledBy: by } : r) }), { text: `Remise de la facture ${i.number} annulée`, clientId: i.client.id, invoiceId: i.id }); setUndo(false); toast("Remise annulée. L’historique la garde."); }}>
       <p>La facture sera de nouveau notée comme pas encore remise. La déclaration du {deliv ? dateFr(deliv.declaredAt) : ""} reste dans l’historique.</p></Confirm>}
+    {del && <DeleteDialog target={{ collection: "invoices", id: i.id }} by={by} onClose={() => setDel(false)} onDone={() => nav(biller ? { name: "register" } : { name: "client", id: i.client.id })} />}
   </div>;
 }
 
@@ -170,20 +180,21 @@ function CreditView({ id, nav, pane }: { id: string; nav: Nav; pane?: boolean })
 
 /** Statement for a period. Direction: any client or all; Encaissement: one client. Chosen inline, shown whole. */
 export function Situation({ data, clientId: initial, fixedClient, onBack }: { data: Pick<Data, "clients" | "invoices" | "payments" | "credits" | "format">; clientId: string; fixedClient?: boolean; onBack?: () => void }) {
-  const year = todayIso().slice(0, 4), [clientId, setClientId] = useState(initial), [period, setPeriod] = useState<StatementPeriod>({ from: year + "-01-01", to: todayIso() });
+  const year = todayIso().slice(0, 4), [clientId, setClientId] = useState(initial), [period, setPeriod] = useState<StatementPeriod>({ from: year + "-01-01", to: todayIso() }), [filter, setFilter] = useState<StatementFilter>("toutes");
   const valid = dateValid(period.from) && dateValid(period.to) && period.from <= period.to, client = data.clients.find(c => c.id === clientId);
   return <div className="cx-page">
-    <PageHead back={onBack ? { label: client?.name ?? "Retour", onClick: onBack } : undefined} title={client ? `Relevé de ${client.name}` : "Situation de tous les clients"} sub={valid ? periodTitle(period) : undefined}
-      actions={valid ? <><MoreMenu label="Exporter" items={[{ label: "Excel", onClick: () => exportStatementExcel(data.clients, data.invoices, data.payments, data.credits, clientId, period) }, { label: "CSV", onClick: () => downloadStatement(data.clients, data.invoices, data.payments, data.credits, clientId, period) }]} /><Button kind="primary" icon={<Printer size={18} aria-hidden="true" />} onClick={() => window.print()}>Imprimer</Button></> : undefined} />
+    <PageHead back={onBack ? { label: client?.name ?? "Retour", onClick: onBack } : undefined} title={client ? `Relevé de ${client.name}` : "Situation de tous les clients"} sub={valid ? statementTitle(period, filter) : undefined}
+      actions={valid ? <><MoreMenu label="Exporter" items={[{ label: "Excel", onClick: () => exportStatementExcel(data.clients, data.invoices, data.payments, data.credits, clientId, period, filter) }, { label: "CSV", onClick: () => downloadStatement(data.clients, data.invoices, data.payments, data.credits, clientId, period, filter) }]} /><Button kind="primary" icon={<Printer size={18} aria-hidden="true" />} onClick={() => window.print()}>Imprimer</Button></> : undefined} />
     <div className="cx-toolbar cx-noprint">
       {!fixedClient && <label className="cx-select"><span>Pour</span><select value={clientId} onChange={e => setClientId(e.target.value)}><option value="">Tous les clients</option>{data.clients.filter(c => !c.archived).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
       <label className="cx-month"><span>Du</span><DateInput value={period.from} onChange={v => setPeriod(p => ({ ...p, from: v }))} /></label>
       <label className="cx-month"><span>Au</span><DateInput value={period.to} min={period.from} onChange={v => setPeriod(p => ({ ...p, to: v }))} /></label>
       <div className="cx-quick"><button type="button" className="cx-pill" onClick={() => setPeriod({ from: todayIso().slice(0, 8) + "01", to: todayIso() })}>Ce mois-ci</button><button type="button" className="cx-pill" onClick={() => setPeriod({ from: year + "-01-01", to: todayIso() })}>Cette année</button></div>
     </div>
-    {valid && (() => { const t = periodTotals(clientId ? data.invoices.filter(i => i.client.id === clientId) : data.invoices, data.payments, data.credits, period);
+    <div className="cx-seg cx-noprint" role="group" aria-label="Factures à montrer">{(["toutes", "impayees", "payees"] as const).map(k => <button type="button" key={k} aria-pressed={filter === k} onClick={() => setFilter(k)}>{k === "toutes" ? "Toutes" : k === "impayees" ? "Non payées" : "Payées"}</button>)}</div>
+    {valid && (() => { const shown = filterInvoices(data.invoices, data.payments, data.credits, period, filter), t = periodTotals(clientId ? shown.filter(i => i.client.id === clientId) : shown, data.payments, data.credits, period);
       return <dl className="cx-strip cx-noprint" aria-label="Totaux de la période"><div><dt>Facturé HT</dt><dd>{money(t.ht)}</dd></div><div><dt>TVA</dt><dd>{money(t.tax)}</dd></div><div><dt>Facturé TTC</dt><dd>{money(t.total)}</dd></div><div><dt>Reçu</dt><dd>{money(t.received)}</dd></div><div><dt>Reste à recevoir</dt><dd className="cx-strong">{money(t.due)}</dd></div></dl>; })()}
-    {valid ? <StatementPaper d={data} clientId={clientId} period={period} /> : <Notice tone="bad">La date de début doit être avant la date de fin.</Notice>}
+    {valid ? <StatementPaper d={data} clientId={clientId} period={period} filter={filter} /> : <Notice tone="bad">La date de début doit être avant la date de fin.</Notice>}
   </div>;
 }
 

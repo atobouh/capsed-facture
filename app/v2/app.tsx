@@ -75,12 +75,14 @@ export function SignInBrand() {
 }
 
 export function OfficeShell({ me, route, nav, onHelp, onSignOut, onLock, children }: { me: Account; route: OfficeRoute; nav: (r: OfficeRoute) => void; onHelp: () => void; onSignOut: () => void; onLock?: () => void; children: ReactNode }) {
-  const d = useData(), inbox = d.requests.filter(r => receives(me.role, r.to) && (CLOUD || r.receivedAt) && !r.resolvedAt).length, bill = canBill(me.role), cash = canCash(me.role);
+  // The Direction signed in here works as the full office; the requests are its own, so it has no inbox.
+  const direction = me.role === "responsable", role: Role = direction ? "bureau" : me.role;
+  const d = useData(), inbox = d.requests.filter(r => receives(role, r.to) && (CLOUD || r.receivedAt) && !r.resolvedAt).length, bill = canBill(role), cash = canCash(role);
   // Every office tab is listed once; the login decides which ones show.
   const items: { key: string; label: string; icon: ReactNode; show: boolean; count?: number }[] = [
     { key: "register", label: "Factures", icon: <FileText size={20} aria-hidden="true" />, show: bill },
     { key: "clients", label: cash ? "Clients et paiements" : "Clients", icon: cash ? <Wallet size={20} aria-hidden="true" /> : <Users size={20} aria-hidden="true" />, show: true },
-    { key: "inbox", label: "Demandes", icon: <Inbox size={20} aria-hidden="true" />, show: true, count: inbox },
+    { key: "inbox", label: "Demandes", icon: <Inbox size={20} aria-hidden="true" />, show: !direction, count: inbox },
   ];
   const section = ["compose", "invoice", "credit"].includes(route.name) ? (bill ? "register" : "clients") : ["client", "situation"].includes(route.name) ? "clients" : route.name;
   // Desktop shortcuts: F1 help, Ctrl+F search on this page, Ctrl+N new invoice (Facturation).
@@ -89,13 +91,13 @@ export function OfficeShell({ me, route, nav, onHelp, onSignOut, onLock, childre
       if (document.querySelector(".cx-overlay")) return;
       if (e.key === "F1") { e.preventDefault(); onHelp(); }
       else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") { const box = document.querySelector<HTMLInputElement>("#contenu .cx-search input"); if (box) { e.preventDefault(); box.focus(); box.select(); } }
-      else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "n" && canBill(me.role) && route.name !== "compose") { e.preventDefault(); nav({ name: "compose" }); }
+      else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "n" && bill && route.name !== "compose") { e.preventDefault(); nav({ name: "compose" }); }
     };
     window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k);
-  }, [me.role, nav, onHelp, route.name]);
+  }, [bill, nav, onHelp, route.name]);
   return <div className="cx-office">
     <aside className="cx-sidebar cx-noprint">
-      <div className="cx-brand"><img src="capsed-logo.png" alt="" width="32" height="32" className="cx-brand-logo" /><div><strong>CAPSED</strong><small>{ROLE_LABEL[me.role]}</small></div></div>
+      <div className="cx-brand"><img src="capsed-logo.png" alt="" width="32" height="32" className="cx-brand-logo" /><div><strong>CAPSED</strong><small>{direction ? "Direction" : ROLE_LABEL[me.role]}</small></div></div>
       <nav aria-label="Navigation principale">{items.filter(i => i.show).map(i => <button type="button" key={i.key} aria-current={section === i.key ? "page" : undefined} className={section === i.key ? "cx-on" : ""} onClick={() => nav({ name: i.key })}>{i.icon}<span>{i.label}</span>{!!i.count && <b className="cx-count" aria-label={`${i.count} à traiter`}>{i.count}</b>}</button>)}</nav>
       <div className="cx-sidebar-foot">
         {CLOUD ? <SyncLine /> : <p className={`cx-sync${d.officeOnline ? "" : " cx-sync-off"}`}>{d.officeOnline ? <><span className="cx-sync-dot" aria-hidden="true" />Synchronisé avec la Direction</> : <><WifiOff size={14} aria-hidden="true" />Hors ligne, saisies gardées ici</>}</p>}

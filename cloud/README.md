@@ -14,7 +14,8 @@ record is kept in `versions`.
 - When two people changed the same record, fields are merged (each keeps what they changed). A payment corrected offline
   after the Direction validated it is kept and goes back to the Direction to validate.
 - Permissions are checked by the server for every change (`src/rules.ts`). An office computer acts for the person signed in
-  on it and can never act as the Direction.
+  on it. The Direction signed in on an office computer gets the office's rights plus deleting; validating, restoring,
+  the team and the settings are refused there and stay on the website.
 
 ## Deploying
 

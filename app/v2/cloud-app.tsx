@@ -1,3 +1,5 @@
+import { readLocal, readRawLocal, writeRawLocal, prepareLocalRepair, getLocalHealth } from "./local-storage";
+import { LocalRecovery, useLocalHealth, RepairAction } from "./local-recovery";
 import { documentIssues } from "./document-health";
 /** The two real applications around the same screens:
  *  - the Direction website (online, data from the cloud, kept on the phone for bad connections);
@@ -17,15 +19,15 @@ import { DeleteRight } from "./corbeille";
 import { checkPassword } from "./password";
 import { ROLE_LABEL, commit, forgetLocalData, getData, nowIso, receives, setSeriesLetter, useData } from "./store";
 import type { Account, Role } from "./store";
-import { resetSync, startSync, stopSync, syncNow, recoverSync, useSync } from "./sync";
+import { resetSync, startSync, stopSync, syncNow, useSync } from "./sync";
 import { fetchJson } from "./net";
 import type { NetOptions } from "./net";
 
 declare const __CAPSED_API__: string | undefined;
 // The desktop app has the server address built in; served from the cloud itself (/bureau/), it uses that address.
 const DEFAULT_API = (typeof __CAPSED_API__ === "string" && __CAPSED_API__) || (typeof location !== "undefined" && location.protocol.startsWith("http") ? location.origin : "");
-const read = (k: string) => { try { return localStorage.getItem(k) ?? ""; } catch { throw new Error("STORAGE_ACCESS : stockage local inaccessible. Vérifiez les autorisations du poste."); } };
-const write = (k: string, v: string) => { try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); } catch { throw new Error("STORAGE_WRITE : enregistrement impossible. Arrêtez la saisie et vérifiez l’espace disque et les autorisations."); } };
+const read = readRawLocal;
+const write = (k: string, v: string) => writeRawLocal(k, v || null);
 
 function call<T>(base: string, path: string, body?: unknown, opts?: NetOptions): Promise<T> {
   return fetchJson<T>(base + path, { method: body === undefined ? "GET" : "POST", headers: { "content-type": "application/json", "x-capsed": "1" }, body: body === undefined ? undefined : JSON.stringify(body), credentials: base ? "omit" : "same-origin" }, opts);
@@ -218,16 +220,28 @@ function DirectionSetup({ onDone }: { onDone: (a: Account) => void }) {
 // ——— Office desktop app ———
 const DEVICE = "capsed-office-device", SESSION = "capsed-office-session";
 type Device = { api: string; id: string; name: string; letter: string; token: string };
-const readDevice = (): Device | null => {
-  const raw = read(DEVICE); if (!raw) return null;
-  let d: Partial<Device> | null;
-  try { d = JSON.parse(raw); } catch { throw new Error("DEVICE_JSON : configuration du poste illisible. Contactez l’assistance sans effacer les données."); }
-  if (!d || ![d.api, d.id, d.name, d.letter, d.token].every(v => typeof v === "string") || !d.token || !d.id) throw new Error("DEVICE_SCHEMA : configuration du poste incomplète. Contactez l’assistance.");
-  return d as Device;
-};
+const readDevice = (): Device | null => readLocal<Device | null>(DEVICE, null, (v): v is Device => {
+  const d = v as Partial<Device> | null;
+  return !!d && [d.api, d.id, d.name, d.letter, d.token].every(x => typeof x === "string") && !!d.token && !!d.id;
+});
 
 const REVOKED = "capsed-office-revoked";
+/** A minimal screen which does not render damaged financial records. */
+export function OfficeRecoveryApp({ reason, onRetry }: { reason: string; onRetry: () => void }) {
+  const [device] = useState<Device | null>(readDevice);
+  useEffect(() => {
+    if (device) startSync({ api: device.api, token: device.token, by: () => read(SESSION) || undefined, interval: 20_000 });
+    return () => stopSync();
+  }, [device]);
+  return <Screen><Notice tone="bad" title="Affichage interrompu">{reason}. Les données sont conservées. Synchronisez pour récupérer une copie complète ; si le problème persiste, transmettez ce message à l’assistance.</Notice>
+    <LocalRecovery linked={!!device} />
+    <Button kind="quiet" onClick={onRetry}>Rouvrir CAPSED</Button>
+  </Screen>;
+}
+
 export function OfficeApp() {
+  getData(); // Validate before selecting screens; bad local data must not prevent boot.
+  const health = useLocalHealth();
   const [device, setDevice] = useState<Device | null>(readDevice), sync = useSync();
   useEffect(() => {
     if (!device) return;
@@ -236,7 +250,7 @@ export function OfficeApp() {
   }, [device]);
   const unlink = useCallback((keepUnsent: boolean) => {
     // Changes not yet sent stay on this computer and leave as soon as it is linked again; otherwise its copy is wiped.
-    if (keepUnsent) stopSync(); else { resetSync(); forgetLocalData(); }
+    if (keepUnsent || getLocalHealth().some(v => v.code !== "REPAIR_SNAPSHOT" && /-(data|sync-outbox)$/.test(v.key))) stopSync(); else { resetSync(); forgetLocalData(); }
     write(DEVICE, ""); write(SESSION, ""); write(LOCKED, ""); setDevice(null);
   }, []);
   // The Direction removed this computer: as soon as the cloud says so, whoever was working is signed out and the app asks for a new code.
@@ -245,7 +259,8 @@ export function OfficeApp() {
     write(REVOKED, String(sync.pending || 0));
     unlink(sync.pending > 0);
   }, [device, sync.authLost, sync.pending, unlink]);
-  if (!device) return <Screen><Enroll revoked={read(REVOKED)} onDone={d => { write(REVOKED, ""); write(DEVICE, JSON.stringify(d)); setDevice(d); }} /></Screen>;
+  if (device && health.some(v => !v.resolved)) return <Screen><LocalRecovery /></Screen>;
+  if (!device) return <Screen>{health.length > 0 && <LocalRecovery linked={false} />}<Enroll revoked={read(REVOKED)} onDone={d => { prepareLocalRepair(); write(REVOKED, ""); write(DEVICE, JSON.stringify(d)); setDevice(d); }} /></Screen>;
   return <OfficeSignedIn device={device} onUnlink={() => unlink(false)} />;
 }
 
@@ -271,7 +286,7 @@ function OfficeSignedIn({ device, onUnlink }: { device: Device; onUnlink: () => 
     <ul>{damaged.slice(0, 20).map((message, index) => <li key={index}>{message}</li>)}</ul>
     <p>Vos données et les saisies non envoyées sont conservées. Avec internet, récupérez une nouvelle copie des documents depuis le serveur. Si le problème reste présent, transmettez les références ci-dessus à la Direction pour restaurer les documents concernés.</p>
     {sync.error && <Notice tone="warn">{sync.error}</Notice>}
-    <Button kind="primary" disabled={sync.busy} onClick={recoverSync}>{sync.busy ? "Récupération en cours…" : "Récupérer depuis le serveur"}</Button>
+    <RepairAction />
     <Button kind="quiet" onClick={() => { write(SESSION, ""); setSid(""); unlock(); }}>Revenir à la connexion</Button>
   </div></Screen>;
   if (!sync.firstPullDone && !d.accounts.length) return <Loading title="Première récupération des données…" detail={sync.received ? `${sync.received} éléments reçus` : `Poste « ${device.name} ». Une seule fois, ensuite le poste travaille même sans internet.`} error={sync.authLost ? "Ce poste n’est plus autorisé. Demandez un nouveau code à la Direction." : sync.error} onRetry={sync.authLost ? onUnlink : sync.error ? syncNow : undefined} />;

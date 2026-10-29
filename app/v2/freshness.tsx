@@ -1,3 +1,4 @@
+import { RepairAction, useLocalHealth } from "./local-recovery";
 import { useState } from "react";
 import { WifiOff } from "lucide-react";
 import { Button, Modal, Notice } from "./ui";
@@ -10,8 +11,10 @@ const when = (iso?: string) => !iso ? "" : new Date(iso).toDateString() === new 
 
 /** Office app: is everything sent? Shown in the side menu and in the status bar. */
 export function SyncLine({ bar }: { bar?: boolean }) {
+  const health = useLocalHealth();
+  const damaged = health.some(v => !v.resolved), archived = health.some(v => v.backupKey && v.code !== "REPAIR_SNAPSHOT" && /-(data|sync-outbox)$/.test(v.key));
   const s = useSync(), [open, setOpen] = useState(false);
-  const [tone, text, sub] = s.authLost ? ["bad", "Ce poste n’est plus relié", "Demandez un nouveau code à la Direction."]
+  const [tone, text, sub] = damaged ? ["bad", "Données locales à réparer", "Les données illisibles restent conservées."] : archived ? ["warn", "Envois à vérifier · sauvegarde de récupération", "Une copie illisible a été archivée ; son contenu non envoyé peut nécessiter une récupération manuelle."] : s.error ? ["warn", "Synchronisation à vérifier", s.error] : s.authLost ? ["bad", "Ce poste n’est plus relié", "Demandez un nouveau code à la Direction."]
     : !s.online ? ["warn", s.pending ? `${plural(s.pending, "modification", "modifications")} en attente d’envoi` : "Pas de connexion", `Hors ligne depuis ${when(s.offlineSince)}. Vous pouvez continuer à travailler normalement.`]
     : s.pending ? ["info", `Envoi de ${plural(s.pending, "modification", "modifications")}…`, ""]
     : ["good", s.lastOkAt ? `Tout est envoyé · ${when(s.lastOkAt)}` : "Synchronisation…", ""];
@@ -21,6 +24,7 @@ export function SyncLine({ bar }: { bar?: boolean }) {
       <span>{text}{bar && sub ? <small> {sub}</small> : null}</span>
       {bar && (tone === "warn" || tone === "bad") && !s.authLost && <button type="button" className="cx-link-btn" onClick={syncNow}>Réessayer</button>}
     </p>
+    <RepairAction />
     {!bar && s.rejected.length > 0 && <button type="button" className="cx-sync-rejected" onClick={() => setOpen(true)}>{plural(s.rejected.length, "modification refusée", "modifications refusées")}</button>}
     {open && <Modal title="Modifications refusées par le serveur" subtitle="Le serveur a gardé sa version ; rien n’a été perdu ailleurs." onClose={() => setOpen(false)} actions={<Button kind="primary" onClick={() => { dismissRejected(); setOpen(false); }}>J’ai compris</Button>}>
       <ul className="cx-mini-list">{s.rejected.map((r, i) => <li key={i}>{timeFr(r.at)} · {r.text}</li>)}</ul>

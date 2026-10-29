@@ -1,4 +1,4 @@
-import { readLocal, writeLocal, objectRecord, recordList } from "./local-storage";
+import { readLocal, writeLocal, objectRecord, recordList, hasLocalDamage, prepareLocalRepair, completeLocalRepair } from "./local-storage";
 /** Sync with the cloud, built for a bad network.
  *  Every change made in the app becomes a small record in an outbox kept on this computer or phone.
  *  The outbox is sent in batches (compressed); a send cut halfway is simply sent again, the cloud ignores what it already has.
@@ -6,14 +6,14 @@ import { readLocal, writeLocal, objectRecord, recordList } from "./local-storage
 import { useSyncExternalStore } from "react";
 import { DATA_KEY, LIST_COLLECTIONS, SETTINGS_FIELDS, keyOf } from "./collections";
 import type { CollectionName } from "./collections";
-import { MODE, applyRemote, nowIso, setCommitHook, setReceivedAt, uid } from "./store";
+import { MODE, applyRemote, getData, setData, nowIso, setCommitHook, setReceivedAt, uid } from "./store";
 import type { Data } from "./store";
 
 type Rec = Record<string, unknown>;
 export type Change = { changeId: string; collection: CollectionName; id: string; data: Rec; base: number; at: string; by: string };
 export type DeviceStatus = { id: string; name: string; letter: string; last_push: string | null; last_pull: string | null; pending: number; revoked_at: string | null; created_at: string };
 export type SyncState = {
-  online: boolean; busy: boolean; pending: number; firstPullDone: boolean;
+  online: boolean; busy: boolean; repairing?: boolean; pending: number; firstPullDone: boolean;
   lastOkAt?: string; lastPullAt?: string; lastPushAt?: string; offlineSince?: string;
   error?: string; authLost?: boolean; rejected: { at: string; text: string }[]; devices: DeviceStatus[]; received?: number;
 };
@@ -30,6 +30,7 @@ const read = <T,>(k: string, d: T): T => readLocal(P + k, d, (v): v is T => {
 const write = (k: string, v: unknown) => writeLocal(P + k, v);
 let outbox: Change[] = read("outbox", []), revs: Record<string, number> = read("revs", {}), cursor: number = read("cursor", 0);
 let state: SyncState = { ...read<Partial<SyncState>>("state", {}), online: typeof navigator === "undefined" || navigator.onLine, busy: false, pending: outbox.length, rejected: read("rejected", []), devices: read("devices", []), firstPullDone: read("firstPullDone", false) } as SyncState;
+let repairRequested = false;
 let config: SyncConfig | null = null, timer: ReturnType<typeof setTimeout> | null = null, running = false, again = false, backoff = 0;
 const listeners = new Set<() => void>();
 
@@ -171,16 +172,23 @@ async function cycle() {
   let delay = typeof document !== "undefined" && document.visibilityState === "hidden" ? 120_000 : config.interval ?? 30_000;
   try {
     if (typeof navigator !== "undefined" && !navigator.onLine) throw new Error("Pas de connexion internet.");
+    if (hasLocalDamage() && !repairRequested) throw new Error("Des données locales nécessitent une réparation. Utilisez « Synchroniser et réparer ».");
     set({ busy: true });
     await push();
     await pull();
+    if (repairRequested) {
+      setData(getData());
+      persist(); write("rejected", state.rejected);
+      completeLocalRepair(); repairRequested = false;
+      set({ repairing: false });
+    }
     backoff = 0;
     set({ busy: false, online: true, error: undefined, authLost: false, lastOkAt: nowIso(), offlineSince: undefined });
   } catch (e) {
     // A slow link keeps going right away with smaller pieces; a cut link is retried within a minute at most.
     backoff = e instanceof SlowError ? 2_000 : Math.min(backoff ? backoff * 2 : 5_000, 60_000); delay = backoff;
     const slow = e instanceof SlowError; // slow is not offline: the next piece leaves in 2 seconds
-    set({ busy: false, online: slow, error: (e as Error).message, authLost: e instanceof AuthError, offlineSince: slow ? state.offlineSince : state.offlineSince ?? nowIso() });
+    set({ busy: false, repairing: false, online: slow, error: (e as Error).message, authLost: e instanceof AuthError, offlineSince: slow ? state.offlineSince : state.offlineSince ?? nowIso() });
     if (e instanceof AuthError) delay = 300_000;
   } finally {
     running = false;
@@ -206,12 +214,20 @@ export function startSync(cfg: SyncConfig) {
   void cycle();
 }
 /** Replay server records without clearing local documents or pending writes. */
-export function recoverSync() {
-  // Do not move a cursor underneath an active page fetch.
-  if (running) return;
-  write("cursor", 0);
-  cursor = 0;
-  syncNow();
+export async function recoverSync() {
+  if (running || !config) return;
+  try {
+    getData(); // Discover data damage before creating the repair backups.
+    prepareLocalRepair([`capsed-${MODE}-data`, P + "outbox"]);
+    write("cursor", 0);
+    cursor = 0;
+    repairRequested = true;
+    set({ repairing: true, error: undefined });
+    await cycle();
+  } catch {
+    repairRequested = false;
+    set({ repairing: false, error: "Réparation impossible : la sauvegarde locale n’a pas pu être créée. Vérifiez l’espace disque et les autorisations. Aucune donnée endommagée n’a été effacée." });
+  }
 }
 export function syncNow() { backoff = 0; void cycle(); }
 export function stopSync() { config = null; if (timer) clearTimeout(timer); timer = null; setCommitHook(null); set({ authLost: false, busy: false }); }

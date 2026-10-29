@@ -4,6 +4,8 @@
   var failed = false;
   function show(message) {
     if (failed) return;
+    var recovery = new CustomEvent('capsed-recovery-request', { detail: String(message || 'Erreur inconnue'), cancelable: true });
+    if (!window.dispatchEvent(recovery)) return;
     failed = true;
     details.textContent = String(message || 'Erreur inconnue').slice(0, 400) + '\nVersion des fichiers : ' + panel.getAttribute('data-build') + '\nDate : ' + new Date().toISOString() + '\nMoteur : ' + navigator.userAgent;
     panel.hidden = false;

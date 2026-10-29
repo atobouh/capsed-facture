@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>CAPSED Bureau</title>
+<!-- The small card shown the moment CAPSED Bureau is clicked, while the main window gets ready. Everything is inline: nothing to load. -->
+<style>
+  html,body{margin:0;height:100%;background:#5E3A6B;overflow:hidden;user-select:none;cursor:default}
+  body{display:grid;place-items:center;background:linear-gradient(135deg,#6E4580,#3A2443);color:#fff;font:500 14px/1.4 "Segoe UI",system-ui,sans-serif}
+  .card{display:grid;justify-items:center;gap:14px}
+  svg{width:64px;height:64px}
+  strong{display:block;font-size:20px;font-weight:600;letter-spacing:.03em;text-align:center}
+  small{display:block;font-size:13px;opacity:.75;text-align:center;margin-top:2px}
+  i{display:block;width:150px;height:3px;border-radius:3px;background:#ffffff33;overflow:hidden;position:relative;margin-top:6px}
+  i::after{content:"";position:absolute;inset:0 auto 0 0;width:40%;border-radius:3px;background:#fff;animation:go 1s ease-in-out infinite}
+  @keyframes go{from{transform:translateX(-100%)}to{transform:translateX(250%)}}
+  @media (prefers-reduced-motion:reduce){i::after{animation:none;width:100%;opacity:.6}}
+</style>
+</head>
+<body>
+<div class="card" role="status" aria-label="Ouverture de CAPSED Bureau">
+  <svg viewBox="0 0 256 256" aria-hidden="true"><g fill="none" stroke="#fff" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" transform="translate(0 6)"><path d="M128 50 L54 188 L204 188"/><path d="M128 50 L170 128"/></g></svg>
+  <div><strong>CAPSED Bureau</strong><small>Ouverture…</small></div>
+  <i></i>
+</div>
+</body>
+</html>

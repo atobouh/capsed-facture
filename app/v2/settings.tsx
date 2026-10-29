@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Download, FolderOpen, Image as ImageIcon, RotateCcw } from "lucide-react";
 import { imageData } from "../document-model";
 import { Button, Confirm, Field, Notice, NumberInput, Paper, TextInput, toast } from "./ui";
-import { DEFAULT_TERM, commit, fromBackup, getData, nowIso, setData, todayIso, useData } from "./store";
+import { CLOUD, DEFAULT_TERM, commit, fromBackup, getData, nowIso, setData, todayIso, useData } from "./store";
 import type { Company } from "./store";
 
 export function downloadBackup() {
@@ -52,14 +52,14 @@ export function FormatSettings({ by }: { by: string }) {
   </section>;
 }
 
-export function BackupSettings() {
+export function BackupSettings({ by }: { by?: string }) {
   const [restore, setRestore] = useState<Record<string, unknown> | null>(null);
   async function pick(file?: File) { if (!file) return; try { const raw = JSON.parse(await file.text()); if (!Array.isArray(raw.clients) || !Array.isArray(raw.invoices) || typeof raw.company?.name !== "string") throw new Error("Ce fichier n’est pas une sauvegarde de CAPSED Facture."); setRestore(raw); } catch (e) { toast((e as Error).message || "Impossible de lire ce fichier.", "warn"); } }
   return <section className="cx-section" aria-labelledby="set-backup">
     <div className="cx-section-head"><h2 id="set-backup">Sauvegarde</h2><p>Un fichier avec tous les clients, factures, avoirs et paiements. Les sauvegardes du premier prototype sont acceptées.</p></div>
     <div className="cx-form-actions cx-left"><Button kind="primary" icon={<Download size={17} aria-hidden="true" />} onClick={downloadBackup}>Télécharger une sauvegarde</Button>
       <label className="cx-btn cx-btn-secondary cx-file"><FolderOpen size={17} aria-hidden="true" /><span>Restaurer une sauvegarde</span><input type="file" accept="application/json,.json" onChange={e => { pick(e.target.files?.[0]); e.target.value = ""; }} /></label></div>
-    {restore && <Confirm title="Remplacer toutes les données ?" confirm="Restaurer cette sauvegarde" cancel="Garder les données actuelles" onClose={() => setRestore(null)} onConfirm={() => { setData(fromBackup(restore, getData())); setRestore(null); toast("Sauvegarde restaurée."); }}>
+    {restore && <Confirm title="Remplacer toutes les données ?" confirm="Restaurer cette sauvegarde" cancel="Garder les données actuelles" onClose={() => setRestore(null)} onConfirm={() => { if (CLOUD && by) { const { accounts: _a, snapshot: _s, officeOnline: _o, month: _m, ...rest } = fromBackup(restore, getData()); void _a; void _s; void _o; void _m; commit(by, () => rest, { text: "Sauvegarde restaurée" }); } else setData(fromBackup(restore, getData())); setRestore(null); toast(CLOUD ? "Sauvegarde restaurée. Elle part vers le bureau et le cloud." : "Sauvegarde restaurée."); }}>
       <p>Les données actuelles seront remplacées par celles du fichier : {(restore.invoices as unknown[]).length} factures et {(restore.clients as unknown[]).length} clients.</p><p className="cx-muted">Téléchargez d’abord une sauvegarde des données actuelles si vous voulez les garder.</p></Confirm>}
   </section>;
 }

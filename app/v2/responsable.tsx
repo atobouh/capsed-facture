@@ -1,14 +1,21 @@
 import { useState } from "react";
-import { ChevronRight, FilePlus2, Plus, ClipboardCheck, Clock, Copy, KeyRound, Lock, Phone, Printer, Send, UserPlus, WifiOff } from "lucide-react";
+import { ChevronRight, FilePlus2, Plus, ClipboardCheck, Clock, Lock, Phone, Printer, Send, UserPlus, WifiOff } from "lucide-react";
 import { Button, Choice, Confirm, DateInput, Empty, Field, Modal, Monogram, MoneyInput, MonthStepper, MoreMenu, Notice, PageHead, Paper, Row, SearchBox, Stamp, StatusChip, TextArea, TextInput, Timeline, matches, toast } from "./ui";
 import { RequestState, Situation } from "./office";
 import { TeamReport } from "./team";
+import { InvoiceReport } from "./invoice-report";
+import { LiftDialog, Reglages } from "./reglages";
+import { liftRule } from "./overrides";
 import Composer from "./composer";
 import { exportInvoice } from "../receipt-export";
 import { words } from "./words";
-import { BackupSettings, CompanySettings, FormatSettings, TermSettings } from "./settings";
-import { METHODS, REQUEST_LABEL, ROLE_LABEL, accountName, accountTotals, ago, balance, commit, dateFr, delivery, generateLogin, generatePassword, getData, methodName, money, monthLabel, overdueDays, dueDateOf, nowIso, resetDemo, setOnline, timeFr, todayIso, uid, useData } from "./store";
-import type { Account, Client, Request, RequestKind, Role, Snapshot } from "./store";
+import { CancelPayment } from "./payments";
+import { DeleteDialog } from "./corbeille";
+import type { BinTarget } from "./corbeille";
+import { findIssues, numberKey } from "./checks";
+import type { Invoice, Payment } from "./store";
+import { METHODS, REQUEST_LABEL, ROLE_LABEL, accountName, accountTotals, ago, balance, commit, dateFr, delivery, getData, methodName, money, monthLabel, overdueDays, dueDateOf, nowIso, timeFr, todayIso, uid, useData } from "./store";
+import type { Client, Request, RequestKind, Snapshot } from "./store";
 
 /** `extra: "factures"` marks an invoice opened from the Factures page, so « retour » goes back there. */
 export type RRoute = { name: "clients" | "client" | "factures" | "facture" | "nouvelle" | "valider" | "situation" | "reglages"; id?: string; extra?: string };
@@ -18,23 +25,25 @@ export function ResponsableScreen({ route, nav, by }: { route: RRoute; nav: Nav;
   switch (route.name) {
     case "client": return <ClientStory id={route.id!} nav={nav} by={by} />;
     case "valider": case "factures": return <Invoices nav={nav} by={by} />;
-    case "nouvelle": return <Composer key={route.id ?? "new"} clientId={route.id} by={by} validated onDone={id => nav({ name: "facture", id, extra: "factures" })} onCancel={() => nav(route.id ? { name: "client", id: route.id } : { name: "factures" })} />;
+    case "nouvelle": return <Composer key={`${route.id ?? "new"}-${route.extra ?? ""}`} clientId={route.id} legacy={route.extra === "ancienne"} by={by} validated onDone={id => nav({ name: "facture", id, extra: "factures" })} onCancel={() => nav(route.id ? { name: "client", id: route.id } : { name: "factures" })} />;
     case "facture": return <InvoiceSheet id={route.id!} fromList={route.extra === "factures"} nav={nav} by={by} />;
     case "situation": return <GlobalSituation key={route.id ?? "all"} clientId={route.id ?? ""} />;
-    case "reglages": return <Settings by={by} />;
+    case "reglages": return <Reglages page={route.id} nav={nav} by={by} />;
     default: return <Overview nav={nav} by={by} />;
   }
 }
-/** New invoices and payments the Direction has not validated yet. Validation is never required: nothing waits on it. */
-const newInvoices = (s: Snapshot) => s.invoices.filter(i => !i.validatedAt).sort((a, b) => a.date.localeCompare(b.date) || a.number.localeCompare(b.number));
+/** New invoices and payments the Direction has not validated yet. Validation is never required: nothing waits on it.
+ *  Old invoices (made before the app, typed in or read from their PDF) are checked by whoever adds them: nothing to validate,
+ *  unless something needs a look (a number used twice, a month already closed). */
+const newInvoices = (s: Snapshot) => { const issues = findIssues(s); return s.invoices.filter(i => !i.validatedAt && (!i.legacy || issues.sameNumber.has(i.id) || issues.afterClose.has(i.id))).sort((a, b) => a.date.localeCompare(b.date) || a.number.localeCompare(b.number)); };
 const newPayments = (s: Snapshot) => s.payments.filter(p => !p.lockedAt && !p.cancelledAt).sort((a, b) => a.date.localeCompare(b.date));
 export function pendingCount(d: { snapshot: Snapshot }) { return newInvoices(d.snapshot).length + newPayments(d.snapshot).length; }
 /** Situation: the clients' statement (HT and TTC) or what the team did, one switch, nothing else. */
 function GlobalSituation({ clientId }: { clientId: string }) {
-  const d = useData(), [view, setView] = useState<"clients" | "equipe">("clients");
+  const d = useData(), [view, setView] = useState<"clients" | "factures" | "equipe">("clients");
   return <>
-    {!clientId && <div className="cx-seg cx-noprint" role="group" aria-label="Situation à afficher">{([["clients", "Les clients"], ["equipe", "L’équipe"]] as const).map(([k, label]) => <button type="button" key={k} aria-pressed={view === k} onClick={() => setView(k)}>{label}</button>)}</div>}
-    {view === "equipe" && !clientId ? <TeamReport /> : <Situation data={{ ...d.snapshot, format: d.format }} clientId={clientId} />}
+    {!clientId && <div className="cx-seg cx-noprint" role="group" aria-label="Situation à afficher">{([["clients", "Les clients"], ["factures", "Les factures"], ["equipe", "L’équipe"]] as const).map(([k, label]) => <button type="button" key={k} aria-pressed={view === k} onClick={() => setView(k)}>{label}</button>)}</div>}
+    {view === "equipe" && !clientId ? <TeamReport /> : view === "factures" && !clientId ? <InvoiceReport data={{ invoices: d.snapshot.invoices, format: d.format }} /> : <Situation data={{ ...d.snapshot, format: d.format }} clientId={clientId} />}
   </>;
 }
 
@@ -78,9 +87,9 @@ function Overview({ nav, by }: { nav: Nav; by: string }) {
   return <div className="cx-page cx-home">
     <div className="cx-home-side">
       <section className="cx-hero" aria-label="Total à recevoir">
-        <p className="cx-hero-top"><span>Il reste à recevoir</span><span className="cx-hero-fresh">{d.officeOnline ? <><i aria-hidden="true" />Bureau {ago(s.receivedAt)}</> : <><WifiOff size={13} aria-hidden="true" />Bureau hors ligne</>}</span></p>
+        <p className="cx-hero-top"><span>Il reste à recevoir</span><span className="cx-hero-fresh">{d.officeOnline ? <><i aria-hidden="true" />{s.receivedAt ? `Bureau ${ago(s.receivedAt)}` : "Rien reçu du bureau pour l’instant"}</> : <><WifiOff size={13} aria-hidden="true" />Bureau hors ligne</>}</span></p>
         <p className="cx-hero-amount">{money(total).replace(/\s*FCFA$/, "")} <small>FCFA</small></p>
-        {total > 0 && <><div className="cx-aging" aria-hidden="true"><span style={{ flexGrow: total - late }} /><span className="cx-aging-late" style={{ flexGrow: late }} /></div>
+        {total > 0 && <><div className="cx-aging" aria-hidden="true"><span style={{ flexGrow: total - late }} />{late > 0 && <span className="cx-aging-late" style={{ flexGrow: late }} />}</div>
         <p className="cx-aging-legend"><span><i />À jour {money(total - late)}</span><span><i className="cx-aging-late" />En retard {money(late)}</span></p></>}
       </section>
       {(toCheck > 0 || lateClients.length > 0) && <section aria-labelledby="todo"><h2 id="todo" className="cx-sec-title">À faire</h2>
@@ -107,18 +116,18 @@ function Overview({ nav, by }: { nav: Nav; by: string }) {
 }
 
 function ClientStory({ id, nav, by }: { id: string; nav: Nav; by: string }) {
-  const d = useData(), s = d.snapshot, c = s.clients.find(x => x.id === id), [ask, setAsk] = useState(false);
+  const d = useData(), s = d.snapshot, c = s.clients.find(x => x.id === id), [ask, setAsk] = useState(false), [del, setDel] = useState(false);
   if (!c) return <Empty title="Client introuvable." action={<Button onClick={() => nav({ name: "clients" })}>Accueil</Button>} />;
   const items = s.invoices.filter(i => i.client.id === c.id).sort((a, b) => b.date.localeCompare(a.date)), a = accountTotals(items, s.payments, s.credits);
   const open = items.filter(i => balance(i, s.payments, s.credits).due > 0), done = items.filter(i => !balance(i, s.payments, s.credits).due);
   const pays = s.payments.filter(p => items.some(i => i.id === p.invoiceId)).sort((x, y) => y.date.localeCompare(x.date)), reqs = d.requests.filter(r => r.clientId === c.id);
   const inv = (i: typeof items[number]) => { const b = balance(i, s.payments, s.credits), dv = delivery(s, i.id), late = overdueDays(i);
-    return <Row key={i.id} title={<span className="cx-nowrap">{i.number}</span>} sub={<><span>{dateFr(i.date)}</span>{!dv && <span className="cx-warn-text">pas encore remise au client</span>}</>}
+    return <Row key={i.id} title={<span className="cx-nowrap">{i.number}{i.legacy && <span className="cx-legacy-tag">Ancienne</span>}</span>} sub={<><span>{dateFr(i.date)}</span>{!dv && <span className="cx-warn-text">pas encore remise au client</span>}</>}
       amount={b.due ? money(b.due) : money(b.total)} state={b.due > 0 && late > 0 ? <span className="cx-chip cx-tone-bad">{late} j de retard</span> : <StatusChip status={b.status} />} onClick={() => nav({ name: "facture", id: i.id })} />; };
   const paid = Math.max(0, a.total - a.credited - a.due);
   return <div className="cx-page cx-story">
     <PageHead back={{ label: "Accueil", onClick: () => nav({ name: "clients" }) }} title={c.name} sub={[c.contact, c.phone].filter(Boolean).join(" · ") || undefined}
-      actions={<>{c.phone && <a className="cx-btn cx-btn-secondary" href={`tel:${c.phone.replace(/\s/g, "")}`}><Phone size={15} aria-hidden="true" /><span>Appeler</span></a>}<MoreMenu iconOnly label="Autres actions" items={[{ label: "Voir le relevé du client", onClick: () => nav({ name: "situation", id: c.id }) }]} /></>} />
+      actions={<>{c.phone && <a className="cx-btn cx-btn-secondary" href={`tel:${c.phone.replace(/\s/g, "")}`}><Phone size={15} aria-hidden="true" /><span>Appeler</span></a>}<MoreMenu iconOnly label="Autres actions" items={[{ label: "Voir le relevé du client", onClick: () => nav({ name: "situation", id: c.id }) }, { label: "Supprimer le client", hint: "Restaurable", onClick: () => setDel(true) }]} /></>} />
     <div className="cx-story-grid">
       <div className="cx-story-side">
         <section className="cx-card cx-sum" aria-label="Solde du client">
@@ -143,14 +152,20 @@ function ClientStory({ id, nav, by }: { id: string; nav: Nav; by: string }) {
       </div>
     </div>
     {ask && <RequestForm kind="paiement" client={c} by={by} onClose={() => setAsk(false)} />}
+    {del && <DeleteDialog target={{ collection: "clients", id: c.id }} by={by} onClose={() => setDel(false)} onDone={() => nav({ name: "clients" })} />}
   </div>;
 }
 function PaymentRow({ p, by }: { p: Snapshot["payments"][number]; by: string }) {
-  const d = useData(), i = d.snapshot.invoices.find(x => x.id === p.invoiceId), [ask, setAsk] = useState(false);
+  const d = useData(), i = d.snapshot.invoices.find(x => x.id === p.invoiceId), [ask, setAsk] = useState(false), [lift, setLift] = useState<"unlock-payment" | "restore-payment" | null>(null), [del, setDel] = useState(false);
   return <div className={`cx-list-row cx-static${p.cancelledAt ? " cx-cancelled" : ""}`}>
-    <span className="cx-list-main"><strong>{money(p.amount)} · {methodName(p.method)}</strong><small>{dateFr(p.date)} · facture {i?.number}{p.reference ? ` · ${p.reference}` : ""} · saisi par {accountName(p.by)}</small></span>
-    <span className="cx-list-actions">{p.cancelledAt ? <Stamp tone="bad">Annulé</Stamp> : p.lockedAt ? <Stamp tone="good"><Lock size={12} aria-hidden="true" />Validé</Stamp> : <Button size="sm" disabled={!d.officeOnline} title={!d.officeOnline ? "Le bureau est hors ligne" : undefined} onClick={() => setAsk(true)}>Valider</Button>}</span>
-    {ask && <Confirm title={`Valider ce paiement de ${money(p.amount)} ?`} confirm="Valider le paiement" cancel="Pas maintenant" onClose={() => setAsk(false)} onConfirm={() => { setAsk(false); if (validate([], [p.id], by)) toast("Paiement validé."); }}><p>Une fois validé, l’encaissement ne pourra plus le corriger ni l’annuler.</p></Confirm>}
+    <span className="cx-list-main"><strong>{money(p.amount)} · {methodName(p.method)}</strong><small>{dateFr(p.date)} · facture {i?.number}{p.reference ? ` · ${p.reference}` : ""} · saisi par {accountName(p.by)}</small>{p.changedAfterLock && !p.lockedAt && <span className="cx-chip cx-tone-warn">Modifié après validation</span>}</span>
+    <span className="cx-list-actions">{p.cancelledAt ? <><Stamp tone="bad">Annulé</Stamp><button type="button" className="cx-text-btn" onClick={() => setLift("restore-payment")}>Rétablir</button></>
+      : p.lockedAt ? <><Stamp tone="good"><Lock size={12} aria-hidden="true" />Validé</Stamp><button type="button" className="cx-text-btn" onClick={() => setLift("unlock-payment")}>Déverrouiller</button></>
+      : <Button size="sm" disabled={!d.officeOnline} title={!d.officeOnline ? "Le bureau est hors ligne" : undefined} onClick={() => setAsk(true)}>Valider</Button>}<button type="button" className="cx-text-btn" onClick={() => setDel(true)}>Supprimer</button></span>
+    {del && <DeleteDialog target={{ collection: "payments", id: p.id }} by={by} onClose={() => setDel(false)} />}
+    {ask && <Confirm title={`Valider ce paiement de ${money(p.amount)} ?`} confirm="Valider le paiement" cancel="Pas maintenant" onClose={() => setAsk(false)} onConfirm={() => { setAsk(false); if (validate([], [p.id], by)) toast("Paiement validé."); }}><p>Une fois validé, l’encaissement ne pourra plus le corriger ni l’annuler. Vous pourrez le déverrouiller si besoin.</p></Confirm>}
+    {lift === "unlock-payment" && <LiftDialog title={`Déverrouiller ce paiement de ${money(p.amount)} ?`} effect="L’encaissement pourra de nouveau le corriger ou l’annuler. Il reviendra dans vos éléments à valider." confirm="Déverrouiller" onClose={() => setLift(null)} onConfirm={r => { liftRule(by, "unlock-payment", p.id, r); setLift(null); toast("Paiement déverrouillé."); }} />}
+    {lift === "restore-payment" && <LiftDialog title={`Rétablir ce paiement de ${money(p.amount)} ?`} effect="Il comptera de nouveau dans le solde du client. Son annulation reste dans l’historique." confirm="Rétablir le paiement" onClose={() => setLift(null)} onConfirm={r => { liftRule(by, "restore-payment", p.id, r); setLift(null); toast("Paiement rétabli."); }} />}
   </div>;
 }
 function RequestRow({ r }: { r: Request }) {
@@ -190,41 +205,78 @@ function RequestForm({ kind, client, invoiceId, by, onClose }: { kind: Exclude<R
   </Modal>;
 }
 
+function InvoiceFlags({ i, issues, onFix }: { i: Invoice; issues: ReturnType<typeof findIssues>; onFix: () => void }) {
+  const same = issues.sameNumber.get(i.id);
+  return <>
+    {same && <span className="cx-flag">Numéro en double : aussi utilisé par {same.map(x => `la facture de ${x.client.name} du ${dateFr(x.date)}`).join(", ")}.
+      <button type="button" className="cx-link-btn" onClick={e => { e.preventDefault(); onFix(); }}>Corriger le numéro</button></span>}
+    {issues.afterClose.has(i.id) && <span className="cx-flag">Faite dans un mois déjà clôturé ({monthLabel(i.date.slice(0, 7))}), sur un ordinateur qui ne le savait pas encore. Elle est gardée : vérifiez-la avant de valider.</span>}
+  </>;
+}
+/** A number used twice is corrected by the Direction; the previous version stays in the invoice's history. */
+function FixNumber({ invoice, by, onClose }: { invoice: Invoice; by: string; onClose: () => void }) {
+  const [number, setNumber] = useState(invoice.number), [error, setError] = useState("");
+  function save() {
+    const n = number.trim(), cur = getData();
+    if (!n) return setError("Écrivez le nouveau numéro.");
+    if (n.length > 40) return setError("Ce numéro est trop long (40 caractères au plus).");
+    const other = cur.invoices.find(x => x.id !== invoice.id && numberKey(x.number) === numberKey(n));
+    if (other) return setError(`Ce numéro est déjà celui de la facture de ${other.client.name} du ${dateFr(other.date)}.`);
+    const stamp = nowIso(), now = cur.invoices.find(x => x.id === invoice.id)!, { history, ...previous } = now;
+    commit(by, x => ({
+      invoices: x.invoices.map(y => y.id === invoice.id ? { ...y, number: n, revisedAt: stamp, history: [...(history ?? []), { ...previous, savedAt: stamp }] as Invoice["history"] } : y),
+      credits: x.credits.map(c => c.invoiceId === invoice.id ? { ...c, invoiceNumber: n } : c),
+    }), { text: `Numéro de facture corrigé : ${invoice.number} → ${n}`, clientId: invoice.client.id, invoiceId: invoice.id });
+    toast(`Numéro corrigé : ${n}.`); onClose();
+  }
+  return <Modal title={`Corriger le numéro ${invoice.number}`} subtitle={`${invoice.client.name}, facture du ${dateFr(invoice.date)}`} onClose={onClose} actions={<><Button kind="quiet" onClick={onClose}>Annuler</Button><Button kind="primary" onClick={save}>Enregistrer le numéro</Button></>}>
+    <Field label="Nouveau numéro" required error={error || undefined} hint="Le numéro imprimé change. L’ancienne version reste dans l’historique de la facture."><TextInput value={number} onChange={v => { setNumber(v); setError(""); }} autoFocus /></Field>
+  </Modal>;
+}
+
 /** One tab for invoices: what is new since the last validation on top, then every invoice month by month.
  *  Validating is a review, never a gate: an invoice or payment not validated counts everywhere like the others. */
 function Invoices({ nav, by }: { nav: Nav; by: string }) {
   const d = useData(), s = d.snapshot, [month, setMonth] = useState(() => todayIso().slice(0, 7)), [q, setQ] = useState("");
   const bills = newInvoices(s), pays = newPayments(s), keys = [...bills.map(i => "i:" + i.id), ...pays.map(p => "p:" + p.id)];
-  const [sel, setSel] = useState<string[]>(keys), [confirm, setConfirm] = useState(false);
+  // Items that need a second look are not ticked by default: « Valider » never passes them without anyone looking.
+  const issues = findIssues(s), flagged = (k: string) => k.startsWith("p:") ? issues.twinOf.has(k.slice(2)) : issues.sameNumber.has(k.slice(2)) || issues.afterClose.has(k.slice(2));
+  const [fix, setFix] = useState<Invoice | null>(null), [cancel, setCancel] = useState<Payment | null>(null);
+  // Everything new is ticked until the Direction changes the selection (items can arrive after the page opened).
+  const [picked, setSel] = useState<string[] | null>(null), sel = picked ?? keys.filter(k => !flagged(k)), [confirm, setConfirm] = useState(false);
   const chosenBills = bills.filter(i => sel.includes("i:" + i.id)), chosenPays = pays.filter(p => sel.includes("p:" + p.id)), n = chosenBills.length + chosenPays.length, all = n === keys.length;
-  const toggle = (k: string, on: boolean) => setSel(v => on ? [...v, k] : v.filter(x => x !== k));
+  const toggle = (k: string, on: boolean) => setSel(on ? [...sel, k] : sel.filter(x => x !== k));
   const searching = !!q.trim(), ofMonth = s.invoices.filter(i => i.date.startsWith(month));
   const list = (searching ? s.invoices.filter(i => matches(q, i.number, i.client.name)) : ofMonth).sort((a, b) => b.date.localeCompare(a.date) || b.number.localeCompare(a.number));
   const sum = (f: "total" | "received" | "due") => ofMonth.reduce((t, i) => t + balance(i, s.payments, s.credits)[f], 0);
   const open = (id: string) => nav({ name: "facture", id, extra: "factures" });
   const row = (i: typeof list[number]) => { const b = balance(i, s.payments, s.credits), dv = delivery(s, i.id), late = overdueDays(i);
-    return <Row key={i.id} title={<span className="cx-nowrap">{i.number}</span>} sub={<><span>{i.client.name}</span><span>{dateFr(i.date)}{!dv && <> · <span className="cx-warn-text cx-nowrap">pas encore remise</span></>}</span></>}
+    return <Row key={i.id} title={<span className="cx-nowrap">{i.number}{i.legacy && <span className="cx-legacy-tag">Ancienne</span>}{issues.sameNumber.has(i.id) && <span className="cx-legacy-tag cx-tag-bad">Numéro en double</span>}</span>} sub={<><span>{i.client.name}</span><span>{dateFr(i.date)}{!dv && <> · <span className="cx-warn-text cx-nowrap">pas encore remise</span></>}</span></>}
       amount={money(b.total)} state={b.due > 0 && late > 0 ? <span className="cx-chip cx-tone-bad">{late} j de retard</span> : <StatusChip status={b.status} />} onClick={() => open(i.id)} />; };
   return <div className="cx-page cx-bills cx-validate">
     <PageHead title="Factures" sub="Les factures et paiements du bureau. Validez-les quand vous voulez : rien n’attend votre validation."
-      actions={<Button kind="primary" icon={<Plus size={16} aria-hidden="true" />} disabled={!d.officeOnline} title={!d.officeOnline ? "Le bureau est hors ligne" : undefined} onClick={() => nav({ name: "nouvelle" })}>Nouvelle facture</Button>} />
+      actions={<><MoreMenu iconOnly label="Autres actions" items={[{ label: "Ajouter une ancienne facture", hint: "Faite avant l’application, avec son numéro d’origine", onClick: () => nav({ name: "nouvelle", extra: "ancienne" }) }]} /><Button kind="primary" icon={<Plus size={16} aria-hidden="true" />} disabled={!d.officeOnline} title={!d.officeOnline ? "Le bureau est hors ligne" : undefined} onClick={() => nav({ name: "nouvelle" })}>Nouvelle facture</Button></>} />
     {!d.officeOnline && <Notice tone="warn">Le bureau est hors ligne. La validation reprendra à sa reconnexion ; tout reste consultable.</Notice>}
     <div className="cx-validate-grid">
       <section aria-labelledby="new-title">
         <div className="cx-sec-head"><h2 id="new-title" className="cx-sec-title">Nouveau à valider</h2>{keys.length > 1 && <button type="button" className="cx-link-btn" onClick={() => setSel(all ? [] : keys)}>{all ? "Tout décocher" : "Tout cocher"}</button>}</div>
+        {issues.count > 0 && <Notice tone="warn" title={`${issues.count} point${issues.count > 1 ? "s" : ""} à vérifier`}>{[issues.twinOf.size && `${issues.twinOf.size} paiement(s) qui ressemblent à un autre (doublon possible)`, issues.sameNumber.size && "des factures avec le même numéro", issues.afterClose.size && `${issues.afterClose.size} facture(s) faite(s) dans un mois déjà clôturé`].filter(Boolean).join(" ; ")}. Ils sont signalés en rouge ci-dessous et ne sont pas cochés. Rien n’est supprimé : vous décidez.</Notice>}
         {keys.length ? <div className="cx-pay-cards">
           {bills.map(i => { const on = sel.includes("i:" + i.id), b = balance(i, s.payments, s.credits); return <label key={i.id} className={`cx-pay-card${on ? " cx-on" : ""}`}>
             <input type="checkbox" checked={on} onChange={e => toggle("i:" + i.id, e.target.checked)} />
-            <span className="cx-pay-body"><span className="cx-pay-top"><strong>{money(b.total)}</strong><span className={`cx-chip cx-tone-${i.revisedAt ? "warn" : "info"}`}>{i.revisedAt ? "Facture modifiée" : "Nouvelle facture"}</span></span>
+            <span className="cx-pay-body"><span className="cx-pay-top"><strong>{money(b.total)}</strong><span className={`cx-chip cx-tone-${i.revisedAt ? "warn" : "info"}`}>{i.revisedAt ? "Facture modifiée" : i.legacy ? "Ancienne facture" : "Nouvelle facture"}</span></span>
               <span className="cx-pay-who">{i.client.name} · facture {i.number}</span>
               <small>Émise le {dateFr(i.date)} par {accountName(i.createdBy)}{i.revisedAt ? ` · modifiée le ${dateFr(i.revisedAt)}` : ""}</small>
+              <InvoiceFlags i={i} issues={issues} onFix={() => setFix(i)} />
               <button type="button" className="cx-link-btn cx-pay-open" onClick={e => { e.preventDefault(); open(i.id); }}>Voir la facture</button></span>
           </label>; })}
           {pays.map(p => { const i = s.invoices.find(x => x.id === p.invoiceId), on = sel.includes("p:" + p.id); return <label key={p.id} className={`cx-pay-card${on ? " cx-on" : ""}`}>
             <input type="checkbox" checked={on} onChange={e => toggle("p:" + p.id, e.target.checked)} />
-            <span className="cx-pay-body"><span className="cx-pay-top"><strong>{money(p.amount)}</strong><span className="cx-chip cx-tone-good">Paiement · {methodName(p.method)}</span></span>
+            <span className="cx-pay-body"><span className="cx-pay-top"><strong>{money(p.amount)}</strong><span className={`cx-chip cx-tone-${p.changedAfterLock ? "warn" : "good"}`}>{p.changedAfterLock ? "Corrigé après validation" : `Paiement · ${methodName(p.method)}`}</span></span>
               <span className="cx-pay-who">{i?.client.name} · facture {i?.number}</span>
-              <small>Payé le {dateFr(p.date)}{p.reference ? ` · réf. ${p.reference}` : ""} · saisi par {accountName(p.by)}{p.history?.length ? ` · corrigé ${p.history.length} fois` : ""}</small></span>
+              <small>Payé le {dateFr(p.date)}{p.reference ? ` · réf. ${p.reference}` : ""} · saisi par {accountName(p.by)}{p.history?.length ? ` · corrigé ${p.history.length} fois` : ""}</small>
+              {issues.twinOf.has(p.id) && (() => { const t = issues.twinOf.get(p.id)!; return <span className="cx-flag">Doublon possible : même montant que le paiement du {dateFr(t.date)} saisi par {accountName(t.by)}{t.lockedAt ? " (déjà validé)" : ""}.
+                <button type="button" className="cx-link-btn" onClick={e => { e.preventDefault(); setCancel(p); }}>Annuler ce doublon</button></span>; })()}</span>
           </label>; })}
         </div> : <div className="cx-card"><Empty title="Tout est validé.">Les nouvelles factures et les nouveaux paiements du bureau apparaîtront ici.</Empty></div>}
         {keys.length > 0 && <p className="cx-validate-note">Un paiement validé ne peut plus être corrigé par l’encaissement. Une facture validée reste modifiable ; si elle change, elle revient ici.</p>}
@@ -239,7 +291,9 @@ function Invoices({ nav, by }: { nav: Nav; by: string }) {
           : <Empty title={searching ? "Aucune facture ne correspond." : `Aucune facture en ${monthLabel(month)}.`}>{searching ? "Essayez un autre numéro ou nom de client." : "Changez de mois avec les flèches."}</Empty>}</div>
       </section>
     </div>
-    {confirm && <Confirm title={`Valider ${n} élément${n > 1 ? "s" : ""} ?`} confirm="Valider" cancel="Pas maintenant" onClose={() => setConfirm(false)} onConfirm={() => { const done = validate(chosenBills.map(i => i.id), chosenPays.map(p => p.id), by); setConfirm(false); if (done) { toast(`${done} élément${done > 1 ? "s validés" : " validé"}.`); setSel([]); } }}>
+    {fix && <FixNumber invoice={fix} by={by} onClose={() => setFix(null)} />}
+    {cancel && <CancelPayment payment={cancel} by={by} onClose={() => setCancel(null)} />}
+    {confirm && <Confirm title={`Valider ${n} élément${n > 1 ? "s" : ""} ?`} confirm="Valider" cancel="Pas maintenant" onClose={() => setConfirm(false)} onConfirm={() => { const done = validate(chosenBills.map(i => i.id), chosenPays.map(p => p.id), by); setConfirm(false); if (done) { toast(`${done} élément${done > 1 ? "s validés" : " validé"}.`); setSel(null); } }}>
       <ul className="cx-mini-list">{chosenBills.map(i => <li key={i.id}>Facture {i.number}, {money(balance(i, s.payments, s.credits).total)}, {i.client.name}</li>)}{chosenPays.map(p => <li key={p.id}>Paiement de {money(p.amount)}, {methodName(p.method)}, {s.invoices.find(x => x.id === p.invoiceId)?.client.name}</li>)}</ul>
       {chosenPays.length > 0 && <p>Les paiements validés ne pourront plus être corrigés ni annulés par l’encaissement.</p>}</Confirm>}
   </div>;
@@ -247,12 +301,14 @@ function Invoices({ nav, by }: { nav: Nav; by: string }) {
 
 /** One invoice for the Direction: the whole A4 document, what is paid, whether it was handed over. */
 function InvoiceSheet({ id, fromList, nav, by }: { id: string; fromList: boolean; nav: Nav; by: string }) {
-  const d = useData(), s = d.snapshot, i = s.invoices.find(x => x.id === id), [ask, setAsk] = useState(false);
+  const d = useData(), s = d.snapshot, i = s.invoices.find(x => x.id === id), [ask, setAsk] = useState(false), [fix, setFix] = useState(false), [del, setDel] = useState<BinTarget | null>(null);
   if (!i) return <Empty title="Facture introuvable." action={<Button onClick={() => nav({ name: "factures" })}>Toutes les factures</Button>} />;
   const b = balance(i, s.payments, s.credits), dv = delivery(s, i.id), client = s.clients.find(c => c.id === i.client.id) ?? i.client, pays = s.payments.filter(p => p.invoiceId === i.id);
   return <div className="cx-page cx-story">
-    <PageHead back={fromList ? { label: "Factures", onClick: () => nav({ name: "factures" }) } : { label: i.client.name, onClick: () => nav({ name: "client", id: i.client.id }) }} title={`Facture ${i.number}`} sub={`${i.client.name}, émise le ${dateFr(i.date)}`}
-      actions={<><Button icon={<Printer size={16} aria-hidden="true" />} onClick={() => window.print()}>Imprimer</Button><MoreMenu iconOnly label="Autres actions" items={[{ label: "Exporter en Excel", onClick: () => exportInvoice(i, words) }, { label: `Voir le client ${i.client.name}`, onClick: () => nav({ name: "client", id: i.client.id }) }]} /></>} />
+    <PageHead back={fromList ? { label: "Factures", onClick: () => nav({ name: "factures" }) } : { label: i.client.name, onClick: () => nav({ name: "client", id: i.client.id }) }} title={`Facture ${i.number}`} sub={`${i.client.name}, ${i.legacy ? "ancienne facture du" : "émise le"} ${dateFr(i.date)}`}
+      actions={<><Button icon={<Printer size={16} aria-hidden="true" />} onClick={() => window.print()}>Imprimer</Button><MoreMenu iconOnly label="Autres actions" items={[{ label: "Exporter en Excel", onClick: () => exportInvoice(i, words) }, { label: `Voir le client ${i.client.name}`, onClick: () => nav({ name: "client", id: i.client.id }) }, { label: "Supprimer la facture", hint: "Restaurable", onClick: () => setDel({ collection: "invoices", id: i.id }) }]} /></>} />
+    {(() => { const issues = findIssues(s); return (issues.sameNumber.has(i.id) || issues.afterClose.has(i.id)) && <div className="cx-flags-block cx-noprint"><InvoiceFlags i={i} issues={issues} onFix={() => setFix(true)} /></div>; })()}
+    {fix && <FixNumber invoice={i} by={by} onClose={() => setFix(false)} />}
     <div className="cx-story-grid">
       <div className="cx-story-side cx-noprint">
         <section className="cx-card cx-sum" aria-label="Paiement de la facture">
@@ -278,51 +334,6 @@ function InvoiceSheet({ id, fromList, nav, by }: { id: string; fromList: boolean
       </div>
     </div>
     {ask && <RequestForm kind="paiement" client={client as Client} invoiceId={i.id} by={by} onClose={() => setAsk(false)} />}
+    {del && <DeleteDialog target={del} by={by} onClose={() => setDel(null)} onDone={() => nav(fromList ? { name: "factures" } : { name: "client", id: i.client.id })} />}
   </div>;
-}
-
-function Settings({ by }: { by: string }) {
-  const d = useData(), [add, setAdd] = useState(false), [sheet, setSheet] = useState<Account | null>(null), [reset, setReset] = useState<Account | null>(null), [toggle, setToggle] = useState<Account | null>(null), [demo, setDemo] = useState(false);
-  return <div className="cx-page">
-    <PageHead title="Réglages" />
-    <section className="cx-section" aria-labelledby="set-team">
-      <div className="cx-section-head cx-section-head-row"><div><h2 id="set-team">Équipe</h2><p>Chacun se connecte avec l’identifiant et le mot de passe que vous lui remettez.</p></div><Button icon={<UserPlus size={17} aria-hidden="true" />} onClick={() => setAdd(true)}>Ajouter une personne</Button></div>
-      <div className="cx-panel cx-list">{d.accounts.map(a => <div key={a.id} className={`cx-list-row cx-static${a.active ? "" : " cx-cancelled"}`}>
-        <span className="cx-list-main"><strong>{a.name}{!a.active && <span className="cx-chip">Désactivé</span>}</strong><small>{ROLE_LABEL[a.role]}. Identifiant : {a.login}</small></span>
-        <span className="cx-list-actions"><button type="button" className="cx-text-btn" onClick={() => setReset(a)}><KeyRound size={15} aria-hidden="true" />Nouveau mot de passe</button>{a.id !== by && <button type="button" className="cx-text-btn" onClick={() => setToggle(a)}>{a.active ? "Désactiver" : "Réactiver"}</button>}</span>
-      </div>)}</div>
-    </section>
-    <TermSettings by={by} />
-    <CompanySettings by={by} />
-    <FormatSettings by={by} />
-    <BackupSettings />
-    <section className="cx-section" aria-labelledby="set-demo"><div className="cx-section-head"><h2 id="set-demo">Démonstration</h2><p>Ces boutons servent seulement à essayer la maquette.</p></div>
-      <div className="cx-form-actions cx-left"><Button onClick={() => { setOnline(!d.officeOnline); toast(d.officeOnline ? "Coupure du bureau simulée." : "Bureau reconnecté."); }}>{d.officeOnline ? <><WifiOff size={16} aria-hidden="true" />Simuler une coupure du bureau</> : "Reconnecter le bureau"}</Button><Button kind="quiet" onClick={() => setDemo(true)}>Recharger les données d’exemple</Button></div>
-    </section>
-    {add && <AddMember by={by} onClose={() => setAdd(false)} onCreated={a => { setAdd(false); setSheet(a); }} />}
-    {sheet && <CredentialSheet a={sheet} onClose={() => setSheet(null)} />}
-    {reset && <Confirm title={`Nouveau mot de passe pour ${reset.name} ?`} confirm="Créer le mot de passe" cancel="Annuler" onClose={() => setReset(null)} onConfirm={() => { const pw = generatePassword(), at = nowIso(); commit(by, x => ({ accounts: x.accounts.map(a => a.id === reset.id ? { ...a, password: pw, passwordAt: at } : a) }), { text: `Nouveau mot de passe pour ${reset.name}` }); setSheet({ ...reset, password: pw, passwordAt: at }); setReset(null); }}><p>L’ancien mot de passe ne marchera plus. Vous remettrez le nouveau à {reset.name}.</p></Confirm>}
-    {toggle && <Confirm title={toggle.active ? `Désactiver ${toggle.name} ?` : `Réactiver ${toggle.name} ?`} confirm={toggle.active ? "Désactiver" : "Réactiver"} cancel="Annuler" onClose={() => setToggle(null)} onConfirm={() => { commit(by, x => ({ accounts: x.accounts.map(a => a.id === toggle.id ? { ...a, active: !a.active } : a) }), { text: `Compte de ${toggle.name} ${toggle.active ? "désactivé" : "réactivé"}` }); setToggle(null); toast(toggle.active ? "Compte désactivé." : "Compte réactivé."); }}><p>{toggle.active ? "Cette personne ne pourra plus se connecter. Ce qu’elle a saisi reste dans l’historique." : "Cette personne pourra de nouveau se connecter."}</p></Confirm>}
-    {demo && <Confirm title="Recharger les données d’exemple ?" confirm="Recharger" cancel="Garder mes essais" onClose={() => setDemo(false)} onConfirm={() => { resetDemo(); setDemo(false); toast("Données d’exemple rechargées."); }}><p>Les essais faits dans ce navigateur seront remplacés par les données de départ.</p></Confirm>}
-  </div>;
-}
-function AddMember({ by, onClose, onCreated }: { by: string; onClose: () => void; onCreated: (a: Account) => void }) {
-  const [name, setName] = useState(""), [role, setRole] = useState<Role | "">(""), [error, setError] = useState("");
-  function create() {
-    if (!name.trim()) return setError("Écrivez le nom de la personne."); if (!role) return setError("Choisissez ce qu’elle fera.");
-    const d = getData(), a: Account = { id: uid(), name: name.trim(), role, login: generateLogin(name, d.accounts), password: generatePassword(), active: true, createdAt: nowIso(), passwordAt: nowIso() };
-    commit(by, x => ({ accounts: [...x.accounts, a] }), { text: `Compte créé pour ${a.name} (${ROLE_LABEL[a.role]})` }); onCreated(a);
-  }
-  return <Modal side title="Ajouter une personne" subtitle="L’identifiant et le mot de passe sont créés pour vous." onClose={onClose} actions={<><Button kind="quiet" onClick={onClose}>Annuler</Button><Button kind="primary" onClick={create}>Créer son accès</Button></>}>
-    <Field label="Nom et prénom" required><TextInput value={name} onChange={v => { setName(v); setError(""); }} autoFocus placeholder="Ex. Marie Ndjock…" /></Field>
-    <Field label="Que fera-t-elle ?" required><Choice columns={2} value={role} onChange={v => { setRole(v); setError(""); }} options={[{ value: "facturation", label: "Facturation", sub: "Factures, avoirs, clients" }, { value: "encaissement", label: "Encaissement", sub: "Paiements" }, { value: "bureau", label: "Facturation et encaissement", sub: "Tout le bureau, une seule connexion" }, { value: "responsable", label: "Direction", sub: "Ce site" }]} /></Field>
-    {error && <Notice tone="bad">{error}</Notice>}
-  </Modal>;
-}
-function CredentialSheet({ a, onClose }: { a: Account; onClose: () => void }) {
-  const text = `CAPSED, accès de ${a.name}\nEspace : ${ROLE_LABEL[a.role]}\nIdentifiant : ${a.login}\nMot de passe : ${a.password}`;
-  return <Modal title={`Accès de ${a.name}`} subtitle="Remettez ces informations à cette personne uniquement." onClose={onClose} actions={<><Button kind="quiet" icon={<Copy size={16} aria-hidden="true" />} onClick={() => { navigator.clipboard?.writeText(text).then(() => toast("Copié.")).catch(() => toast("Copie impossible : recopiez les informations.", "warn")); }}>Copier</Button><Button kind="primary" onClick={onClose}>C’est noté</Button></>}>
-    <dl className="cx-credential"><div><dt>Espace</dt><dd>{ROLE_LABEL[a.role]}</dd></div><div><dt>Identifiant</dt><dd translate="no">{a.login}</dd></div><div><dt>Mot de passe</dt><dd translate="no">{a.password}</dd></div></dl>
-    <p className="cx-muted">En cas de perte, créez un nouveau mot de passe : l’ancien ne marchera plus.</p>
-  </Modal>;
 }

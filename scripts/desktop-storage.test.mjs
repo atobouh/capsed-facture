@@ -101,3 +101,39 @@ test('full repair survives corrupt data and outbox and retains both original val
     sync.stopSync(); globalThis.fetch = oldFetch; globalThis.window = oldWindow; globalThis.document = oldDocument;
   }
 });
+test('rebuild is staged, keeps acknowledged work, and archives local-only records', async () => {
+  const account = { id: 'a', name: 'Test', login: 'a', role: 'bureau', active: true };
+  const pending = { id: 'new', name: 'Pending client' };
+  const original = JSON.stringify({ version: 2, accounts: [account], clients: [{ id: 'orphan', name: 'Local only' }, pending] });
+  const queue = JSON.stringify([{ changeId: 'pending', collection: 'clients', id: 'new', base: 0, at: '2026-10-29T00:00:00Z', by: 'a', data: pending }]);
+  const s = await storage({ 'capsed-office-data': original, 'capsed-office-sync-outbox': queue });
+  const oldFetch = globalThis.fetch, oldWindow = globalThis.window, oldDocument = globalThis.document;
+  Object.defineProperty(globalThis, 'navigator', { value: { onLine: true }, configurable: true });
+  globalThis.window = { addEventListener() {} };
+  globalThis.document = { visibilityState: 'visible', addEventListener() {} };
+  const sync = await import(new URL(`sync.mjs?test=${sequence++}`, folder));
+  const reply = x => new Response(JSON.stringify(x), { headers: { 'content-type': 'application/json' } });
+  globalThis.fetch = async () => { throw Error('offline'); };
+  let accepted = false;
+  try {
+    sync.startSync({ api: 'https://test.invalid', token: 'test', by: () => 'a' });
+    await new Promise(r => setTimeout(r, 0));
+    globalThis.fetch = async (url, init) => {
+      if (init.method === 'POST') { accepted = true; return reply({ results: [{ changeId: 'pending', ok: true, rev: 1, record: pending }] }); }
+      if (url.includes('since=0')) return reply({ records: [{ collection: 'accounts', id: 'a', rev: 1, data: account }], cursor: 1, more: true, devices: [] });
+      throw Error('connection lost on page two');
+    };
+    await sync.recoverSync();
+    assert.equal(accepted, true);
+    assert.equal(s.records.get('capsed-office-data'), original, 'partial server snapshot must not replace local data');
+    assert.deepEqual(JSON.parse(s.records.get('capsed-office-sync-outbox')), []);
+    assert.ok(sync.getSync().error);
+    globalThis.fetch = async () => reply({ records: [{ collection: 'accounts', id: 'a', rev: 1, data: account }, { collection: 'clients', id: 'new', rev: 1, data: pending }], cursor: 2, more: false, devices: [] });
+    await sync.recoverSync();
+    assert.equal(sync.getSync().error, undefined);
+    assert.deepEqual(JSON.parse(s.records.get('capsed-office-data')).clients, [pending]);
+    const backups = JSON.parse(s.records.get('capsed-office-recovery-index'));
+    assert.ok(backups.some(v => v.code === 'LOCAL_RECORDS_ARCHIVED' && s.records.get(v.backupKey) === original));
+    assert.ok(backups.some(v => s.records.get(v.backupKey) === queue));
+  } finally { sync.stopSync(); globalThis.fetch = oldFetch; globalThis.window = oldWindow; globalThis.document = oldDocument; }
+});

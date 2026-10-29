@@ -60,6 +60,12 @@ export function prepareLocalRepair(preserveKeys: string[] = []) {
   localStorage.setItem(INDEX, JSON.stringify(next));
   publish(next);
 }
+/** Server-only rebuilds archive local records absent from the authoritative copy. */
+export function markRepairArchivesForReview(key: string) {
+  const next = getLocalHealth().map(v => v.key === key && v.code === 'REPAIR_SNAPSHOT' ? { ...v, code: 'LOCAL_RECORDS_ARCHIVED' } : v);
+  localStorage.setItem(INDEX, JSON.stringify(next));
+  publish(next);
+}
 export function completeLocalRepair() {
   const next = getLocalHealth().map(v => ({ ...v, resolved: true }));
   localStorage.setItem(INDEX, JSON.stringify(next));

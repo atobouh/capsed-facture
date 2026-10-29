@@ -202,9 +202,9 @@ export function setData(next: Data) {
 /** Clear this browser's copy (sign-out on the Direction site, or a computer being reset). */
 export function forgetLocalData() { try { localStorage.removeItem(KEY); } catch { /* rien */ } state = null; listeners.forEach(l => l()); }
 /** Records received from the cloud: replace or add them, without sending them back. */
-export function applyRemote(items: { collection: string; id: string; data: Record<string, unknown> | null }[]) {
-  if (!items.length) return;
-  const d = getData(), next: Data = { ...d };
+export function applyRemote(items: { collection: string; id: string; data: Record<string, unknown> | null }[], fresh = false) {
+  if (!items.length && !fresh) return;
+  const d = fresh ? emptyData() : getData(), next: Data = { ...d };
   const lists = new Map<string, Record<string, unknown>[]>();
   let bin: BinItem[] | null = null;
   for (const it of items) {

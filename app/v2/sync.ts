@@ -1,4 +1,4 @@
-import { readLocal, writeLocal, objectRecord, recordList, hasLocalDamage, prepareLocalRepair, completeLocalRepair } from "./local-storage";
+import { readLocal, writeLocal, objectRecord, recordList, hasLocalDamage, prepareLocalRepair, completeLocalRepair, markRepairArchivesForReview } from "./local-storage";
 /** Sync with the cloud, built for a bad network.
  *  Every change made in the app becomes a small record in an outbox kept on this computer or phone.
  *  The outbox is sent in batches (compressed); a send cut halfway is simply sent again, the cloud ignores what it already has.
@@ -6,7 +6,7 @@ import { readLocal, writeLocal, objectRecord, recordList, hasLocalDamage, prepar
 import { useSyncExternalStore } from "react";
 import { DATA_KEY, LIST_COLLECTIONS, SETTINGS_FIELDS, keyOf } from "./collections";
 import type { CollectionName } from "./collections";
-import { MODE, applyRemote, getData, setData, nowIso, setCommitHook, setReceivedAt, uid } from "./store";
+import { MODE, applyRemote, getData, nowIso, setCommitHook, setReceivedAt, uid } from "./store";
 import type { Data } from "./store";
 
 type Rec = Record<string, unknown>;
@@ -163,6 +163,43 @@ async function pull() {
   set({ lastPullAt: nowIso(), firstPullDone: true });
 }
 
+/** Stage every page before replacing the cache; a failed fetch leaves the old copy usable. */
+async function rebuildFromServer() {
+  const before = getData();
+  const records: { collection: string; id: string; data: Rec | null }[] = [];
+  const nextRevs = { ...revs };
+  let nextCursor = 0;
+  for (;;) {
+    let page: { records: { collection: string; id: string; rev: number; data: Rec | null }[]; cursor: number; more: boolean; devices: DeviceStatus[] };
+    try { page = await request("GET", `/api/sync?since=${nextCursor}&limit=${pageSize}`); }
+    catch (error) { if (error instanceof SlowError) pageSize = Math.max(25, pageSize >> 1); throw error; }
+    if (!Array.isArray(page.records) || !recordList(page.devices) || !Number.isSafeInteger(page.cursor) || page.cursor < 0 || typeof page.more !== "boolean" || (page.more && page.cursor <= nextCursor)) throw new Error("SERVER_DATA : réponse de synchronisation invalide. Réessayez ou contactez l’assistance.");
+    for (const r of page.records) {
+      if (!objectRecord(r) || typeof r.id !== "string" || typeof r.collection !== "string" || !Number.isSafeInteger(r.rev) || r.rev < 0 || !(r.data === null || objectRecord(r.data))) throw new Error("SERVER_DATA : enregistrement reçu invalide. La copie précédente est conservée.");
+      nextRevs[k(r.collection, r.id)] = r.rev;
+      records.push(r);
+    }
+    nextCursor = page.cursor;
+    set({ received: records.length });
+    if (page.more) continue;
+    // Edits made while pages were fetched take precedence until acknowledged.
+    const pending = outbox.map(c => ({ collection: c.collection, id: c.id, data: c.data }));
+    const seen = new Set([...records, ...pending].map(r => k(r.collection, r.id)));
+    const orphaned = (["clients", "invoices", "payments", "credits", "deliveries"] as const).some(collection => {
+      const rows = before[DATA_KEY[collection] as keyof Data] as unknown as Rec[];
+      return rows.some(r => !seen.has(k(collection, keyOf(collection, r))));
+    });
+    if (orphaned) markRepairArchivesForReview(`capsed-${MODE}-data`);
+    applyRemote([...records, ...pending], true);
+    cursor = nextCursor; revs = nextRevs;
+    persist();
+    write("devices", Array.isArray(page.devices) ? page.devices : []);
+    write("firstPullDone", true);
+    set({ devices: Array.isArray(page.devices) ? page.devices : [], firstPullDone: true, lastPullAt: nowIso() });
+    return;
+  }
+}
+
 async function cycle() {
   if (!config) return;
   if (running) { again = true; return; }
@@ -175,9 +212,8 @@ async function cycle() {
     if (hasLocalDamage() && !repairRequested) throw new Error("Des données locales nécessitent une réparation. Utilisez « Synchroniser et réparer ».");
     set({ busy: true });
     await push();
-    await pull();
+    if (repairRequested) await rebuildFromServer(); else await pull();
     if (repairRequested) {
-      setData(getData());
       persist(); write("rejected", state.rejected);
       completeLocalRepair(); repairRequested = false;
       set({ repairing: false });

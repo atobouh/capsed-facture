@@ -205,6 +205,14 @@ export function startSync(cfg: SyncConfig) {
   }
   void cycle();
 }
+/** Replay server records without clearing local documents or pending writes. */
+export function recoverSync() {
+  // Do not move a cursor underneath an active page fetch.
+  if (running) return;
+  write("cursor", 0);
+  cursor = 0;
+  syncNow();
+}
 export function syncNow() { backoff = 0; void cycle(); }
 export function stopSync() { config = null; if (timer) clearTimeout(timer); timer = null; setCommitHook(null); set({ authLost: false, busy: false }); }
 /** Forget everything kept for sync on this browser (sign-out on a shared phone). */

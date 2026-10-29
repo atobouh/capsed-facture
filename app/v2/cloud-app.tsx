@@ -1,3 +1,4 @@
+import { documentIssues } from "./document-health";
 /** The two real applications around the same screens:
  *  - the Direction website (online, data from the cloud, kept on the phone for bad connections);
  *  - the office desktop app (works offline, linked to the cloud with a code from the Direction). */
@@ -16,7 +17,7 @@ import { DeleteRight } from "./corbeille";
 import { checkPassword } from "./password";
 import { ROLE_LABEL, commit, forgetLocalData, getData, nowIso, receives, setSeriesLetter, useData } from "./store";
 import type { Account, Role } from "./store";
-import { resetSync, startSync, stopSync, syncNow, useSync } from "./sync";
+import { resetSync, startSync, stopSync, syncNow, recoverSync, useSync } from "./sync";
 import { fetchJson } from "./net";
 import type { NetOptions } from "./net";
 
@@ -263,6 +264,16 @@ function OfficeSignedIn({ device, onUnlink }: { device: Device; onUnlink: () => 
   }, [d.requests, me, direction]);
   useEffect(() => { document.title = me ? `CAPSED, ${direction ? "Direction" : ROLE_LABEL[me.role]}` : "CAPSED, Connexion"; }, [me, direction]);
   const [locked, lock, unlock] = useAutoLock(!!me);
+  const damaged = documentIssues(d);
+  if (me && damaged.length) return <Screen><div className="cx-signin-form" role="alert">
+    <h2>Récupération des documents</h2>
+    <Notice tone="bad">DOCUMENT_CLIENT : certains documents enregistrés sont incomplets. Leur affichage est suspendu pour éviter une erreur et des totaux incorrects. Ce message ne signale pas une panne Windows.</Notice>
+    <ul>{damaged.slice(0, 20).map((message, index) => <li key={index}>{message}</li>)}</ul>
+    <p>Vos données et les saisies non envoyées sont conservées. Avec internet, récupérez une nouvelle copie des documents depuis le serveur. Si le problème reste présent, transmettez les références ci-dessus à la Direction pour restaurer les documents concernés.</p>
+    {sync.error && <Notice tone="warn">{sync.error}</Notice>}
+    <Button kind="primary" disabled={sync.busy} onClick={recoverSync}>{sync.busy ? "Récupération en cours…" : "Récupérer depuis le serveur"}</Button>
+    <Button kind="quiet" onClick={() => { write(SESSION, ""); setSid(""); unlock(); }}>Revenir à la connexion</Button>
+  </div></Screen>;
   if (!sync.firstPullDone && !d.accounts.length) return <Loading title="Première récupération des données…" detail={sync.received ? `${sync.received} éléments reçus` : `Poste « ${device.name} ». Une seule fois, ensuite le poste travaille même sans internet.`} error={sync.authLost ? "Ce poste n’est plus autorisé. Demandez un nouveau code à la Direction." : sync.error} onRetry={sync.authLost ? onUnlink : sync.error ? syncNow : undefined} />;
   if (!me) return <Screen><OfficeLogin device={device} authLost={!!sync.authLost} onUnlink={onUnlink} onDone={a => { write(SESSION, a.id); setSid(a.id); setRoute(HOME[a.role === "responsable" ? "bureau" : a.role]); unlock(); }} /></Screen>;
   return <div className={`cx-app cx-role-${role}`}>

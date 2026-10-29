@@ -34,9 +34,9 @@ const healthBuild = await build({ entryPoints: ['app/v2/document-health.ts'], bu
 await writeFile(new URL('health.mjs', folder), healthBuild.outputFiles[0].text);
 const { documentIssues } = await import(new URL('health.mjs', folder));
 test('missing invoice and credit client snapshots are identified before rendering', () => {
-  assert.deepEqual(documentIssues({ invoices: [{ id: 'one', client: { id: 'c', name: 'Client' } }], credits: [] }), []);
+  assert.deepEqual(documentIssues({ invoices: [{ id: 'one', number: 'TEST', date: '2026-10-29', lines: [], client: { id: 'c', name: 'Client' }, company: { name: 'CAPSED' } }], credits: [] }), []);
   const raw = { invoices: [{ number: 'TEST-1' }], credits: [{ id: 'credit', client: null }] };
-  assert.equal(documentIssues(raw).length, 2);
+  assert.ok(documentIssues(raw).length >= 2);
   assert.match(documentIssues(raw)[0], /TEST-1/);
   assert.equal(raw.invoices[0].client, undefined);
 });

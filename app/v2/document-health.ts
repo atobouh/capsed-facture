@@ -9,6 +9,10 @@ export function documentIssues(data: { invoices: unknown[]; credits: unknown[] }
       if (!client || typeof client !== 'object' || typeof client.id !== 'string' || typeof client.name !== 'string') {
         issues.push(`${kind} ${label} : fiche client absente ou incomplète.`);
       }
+      const company = r?.company as Record<string, unknown> | undefined;
+      if (!company || typeof company !== 'object' || typeof company.name !== 'string') issues.push(`${kind} ${label} : fiche entreprise absente ou incomplète.`);
+      if (typeof r?.number !== 'string' || typeof r?.date !== 'string') issues.push(`${kind} ${label} : numéro ou date absent.`);
+      if (kind === 'Facture' && (!Array.isArray(r?.lines) || !r.lines.every(line => line && typeof line === 'object' && typeof line.designation === 'string' && typeof line.quantity === 'number' && Number.isFinite(line.quantity) && typeof line.unitPrice === 'number' && Number.isFinite(line.unitPrice)))) issues.push(`${kind} ${label} : lignes de facturation incomplètes.`);
     }
   }
   return issues;

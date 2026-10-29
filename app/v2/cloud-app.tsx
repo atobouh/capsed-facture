@@ -267,7 +267,7 @@ function OfficeSignedIn({ device, onUnlink }: { device: Device; onUnlink: () => 
   const damaged = documentIssues(d);
   if (me && damaged.length) return <Screen><div className="cx-signin-form" role="alert">
     <h2>Récupération des documents</h2>
-    <Notice tone="bad">DOCUMENT_CLIENT : certains documents enregistrés sont incomplets. Leur affichage est suspendu pour éviter une erreur et des totaux incorrects. Ce message ne signale pas une panne Windows.</Notice>
+    <Notice tone="bad">DOCUMENT_INCOMPLETE : certains documents enregistrés sont incomplets. Leur affichage est suspendu pour éviter une erreur et des totaux incorrects. Ce message ne signale pas une panne Windows.</Notice>
     <ul>{damaged.slice(0, 20).map((message, index) => <li key={index}>{message}</li>)}</ul>
     <p>Vos données et les saisies non envoyées sont conservées. Avec internet, récupérez une nouvelle copie des documents depuis le serveur. Si le problème reste présent, transmettez les références ci-dessus à la Direction pour restaurer les documents concernés.</p>
     {sync.error && <Notice tone="warn">{sync.error}</Notice>}

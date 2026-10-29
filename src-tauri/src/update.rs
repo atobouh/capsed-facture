@@ -5,7 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
@@ -81,7 +81,15 @@ fn check<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
 }
 
 fn sha256_of(path: &PathBuf) -> std::io::Result<String> {
-    Ok(format!("{:x}", Sha256::digest(std::fs::read(path)?)))
+    let mut file = std::fs::File::open(path)?;
+    let mut hash = Sha256::new();
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        let n = file.read(&mut buffer)?;
+        if n == 0 { break; }
+        hash.update(&buffer[..n]);
+    }
+    Ok(format!("{:x}", hash.finalize()))
 }
 
 /// Checks a few seconds after start, then every 6 hours. Without internet it simply tries again later.
@@ -108,23 +116,34 @@ fn download<R: Runtime>(app: &AppHandle<R>, a: &Available) -> Result<PathBuf, St
     }
     let response = agent().get(&a.url).call().map_err(|_| "Pas de connexion au serveur des mises à jour. Réessayez plus tard.".to_string())?;
     state.total.store(response.header("Content-Length").and_then(|v| v.parse().ok()).unwrap_or(0), Ordering::SeqCst);
-    let mut reader = response.into_reader().take(200 * 1024 * 1024);
-    let (mut body, mut chunk) = (Vec::new(), vec![0u8; 64 * 1024]);
-    loop {
-        if state.cancel.load(Ordering::SeqCst) {
-            return Err("annulé".into());
+    // The offline WebView2 runtime makes the installer larger. Stream it to disk:
+    // neither download nor checksum needs a second full installer in RAM.
+    let partial = path.with_extension("part");
+    let result = (|| -> Result<(), String> {
+        let mut reader = response.into_reader();
+        let mut file = std::fs::File::create(&partial).map_err(|_| "Impossible d’enregistrer la mise à jour. Vérifiez l’espace disque et les autorisations.".to_string())?;
+        let mut hash = Sha256::new();
+        let mut chunk = [0u8; 64 * 1024];
+        let mut bytes = 0u64;
+        loop {
+            if state.cancel.load(Ordering::SeqCst) { return Err("annulé".into()); }
+            let n = reader.read(&mut chunk).map_err(|_| "La connexion a été coupée pendant le téléchargement. Réessayez plus tard.".to_string())?;
+            if n == 0 { break; }
+            bytes += n as u64;
+            if bytes > 512 * 1024 * 1024 { return Err("Le fichier dépasse la taille autorisée. Contactez l’assistance.".into()); }
+            file.write_all(&chunk[..n]).map_err(|_| "Impossible d’enregistrer la mise à jour. Vérifiez l’espace disque et les autorisations.".to_string())?;
+            hash.update(&chunk[..n]);
+            state.done.store(bytes, Ordering::SeqCst);
         }
-        let n = reader.read(&mut chunk).map_err(|_| "La connexion a été coupée pendant le téléchargement. Réessayez plus tard.".to_string())?;
-        if n == 0 {
-            break;
-        }
-        body.extend_from_slice(&chunk[..n]);
-        state.done.store(body.len() as u64, Ordering::SeqCst);
-    }
-    if format!("{:x}", Sha256::digest(&body)) != a.sha256 {
-        return Err("Le fichier reçu est incomplet ou modifié. Réessayez plus tard.".into());
-    }
-    std::fs::write(&path, &body).map_err(|e| e.to_string())?;
+        if format!("{:x}", hash.finalize()) != a.sha256 { return Err("Le fichier reçu est incomplet ou modifié. Réessayez plus tard.".into()); }
+        file.sync_all().map_err(|e| e.to_string())?;
+        drop(file);
+        if path.exists() { std::fs::remove_file(&path).map_err(|e| e.to_string())?; }
+        std::fs::rename(&partial, &path).map_err(|e| e.to_string())?;
+        Ok(())
+    })();
+    if result.is_err() { let _ = std::fs::remove_file(&partial); }
+    result?;
     Ok(path)
 }
 

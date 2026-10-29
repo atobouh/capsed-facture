@@ -14,7 +14,7 @@ export function SyncLine({ bar }: { bar?: boolean }) {
   const health = useLocalHealth();
   const damaged = health.some(v => !v.resolved), archived = health.some(v => v.backupKey && v.code !== "REPAIR_SNAPSHOT" && /-(data|sync-outbox)$/.test(v.key));
   const s = useSync(), [open, setOpen] = useState(false);
-  const [tone, text, sub] = damaged ? ["bad", "Données locales à réparer", "Les données illisibles restent conservées."] : archived ? ["warn", "Envois à vérifier · sauvegarde de récupération", "Une copie illisible a été archivée ; son contenu non envoyé peut nécessiter une récupération manuelle."] : s.error ? ["warn", "Synchronisation à vérifier", s.error] : s.authLost ? ["bad", "Ce poste n’est plus relié", "Demandez un nouveau code à la Direction."]
+  const [tone, text, sub] = damaged ? ["bad", "Données locales à réparer", "Les données illisibles restent conservées."] : archived ? ["warn", "Envois à vérifier · sauvegarde de récupération", s.error || "Une copie illisible a été archivée ; son contenu non envoyé peut nécessiter une récupération manuelle."] : s.error ? ["warn", "Synchronisation à vérifier", s.error] : s.authLost ? ["bad", "Ce poste n’est plus relié", "Demandez un nouveau code à la Direction."]
     : !s.online ? ["warn", s.pending ? `${plural(s.pending, "modification", "modifications")} en attente d’envoi` : "Pas de connexion", `Hors ligne depuis ${when(s.offlineSince)}. Vous pouvez continuer à travailler normalement.`]
     : s.pending ? ["info", `Envoi de ${plural(s.pending, "modification", "modifications")}…`, ""]
     : ["good", s.lastOkAt ? `Tout est envoyé · ${when(s.lastOkAt)}` : "Synchronisation…", ""];

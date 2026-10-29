@@ -1,3 +1,4 @@
+import { readLocal, writeLocal, objectRecord, recordList } from "./local-storage";
 import { useEffect, useState } from "react";
 import { invoiceTotals } from "../invoice-math";
 import type { InvoiceColumns, Measure, WeightUnit } from "../invoice-math";
@@ -166,10 +167,16 @@ function emptyData(): Data {
   return { version: 2, company, format: defaultFormat, ...core, closedMonths: [], month: todayIso().slice(0, 7), requests: [], events: [], accounts: [], overrides: [], bin: [], officeOnline: true, snapshot: { ...core, deliveries: [], receivedAt: "" } };
 }
 function load(): Data {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (raw) { const d = JSON.parse(raw); if (d?.version === 2 && d.accounts) return CLOUD ? withSnapshot({ ...emptyData(), ...d, month: todayIso().slice(0, 7) }) : d.snapshot ? withDemoAccounts(d) : seed(); }
-  } catch { /* stockage indisponible */ }
+  const d = readLocal<Partial<Data> | null>(KEY, null, (v): v is Partial<Data> | null => {
+    if (!objectRecord(v) || v.version !== 2) return false;
+    for (const field of ["accounts", "clients", "invoices", "payments", "credits", "requests", "events", "invoiceDeliveries", "overrides", "bin"]) {
+      if (v[field] !== undefined && !recordList(v[field])) return false;
+    }
+    if (!recordList(v.accounts) || !v.accounts.every(a => typeof a.id === "string" && typeof a.login === "string" && typeof a.name === "string" && ["facturation", "encaissement", "bureau", "responsable"].includes(String(a.role)))) return false;
+    if (v.closedMonths !== undefined && (!Array.isArray(v.closedMonths) || !v.closedMonths.every(m => typeof m === "string"))) return false;
+    return true;
+  });
+  if (d) return CLOUD ? withSnapshot({ ...emptyData(), ...d, month: todayIso().slice(0, 7) } as Data) : d.snapshot ? withDemoAccounts(d as Data) : seed();
   return CLOUD ? withSnapshot(emptyData()) : seed();
 }
 /** Outside the demo there is one copy of the data: the Direction's « snapshot » is the cloud copy itself. */
@@ -187,8 +194,9 @@ let state: Data | null = null;
 const listeners = new Set<() => void>();
 export function getData() { return state ??= load(); }
 export function setData(next: Data) {
-  state = CLOUD ? withSnapshot(next) : next;
-  try { localStorage.setItem(KEY, JSON.stringify(CLOUD ? { ...state, snapshot: undefined } : state)); } catch { /* stockage plein */ }
+  const prepared = CLOUD ? withSnapshot(next) : next;
+  writeLocal(KEY, CLOUD ? { ...prepared, snapshot: undefined } : prepared);
+  state = prepared;
   listeners.forEach(l => l());
 }
 /** Clear this browser's copy (sign-out on the Direction site, or a computer being reset). */

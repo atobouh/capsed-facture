@@ -23,8 +23,8 @@ import type { NetOptions } from "./net";
 declare const __CAPSED_API__: string | undefined;
 // The desktop app has the server address built in; served from the cloud itself (/bureau/), it uses that address.
 const DEFAULT_API = (typeof __CAPSED_API__ === "string" && __CAPSED_API__) || (typeof location !== "undefined" && location.protocol.startsWith("http") ? location.origin : "");
-const read = (k: string) => { try { return localStorage.getItem(k) ?? ""; } catch { return ""; } };
-const write = (k: string, v: string) => { try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); } catch { /* rien */ } };
+const read = (k: string) => { try { return localStorage.getItem(k) ?? ""; } catch { throw new Error("STORAGE_ACCESS : stockage local inaccessible. Vérifiez les autorisations du poste."); } };
+const write = (k: string, v: string) => { try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); } catch { throw new Error("STORAGE_WRITE : enregistrement impossible. Arrêtez la saisie et vérifiez l’espace disque et les autorisations."); } };
 
 function call<T>(base: string, path: string, body?: unknown, opts?: NetOptions): Promise<T> {
   return fetchJson<T>(base + path, { method: body === undefined ? "GET" : "POST", headers: { "content-type": "application/json", "x-capsed": "1" }, body: body === undefined ? undefined : JSON.stringify(body), credentials: base ? "omit" : "same-origin" }, opts);
@@ -217,7 +217,13 @@ function DirectionSetup({ onDone }: { onDone: (a: Account) => void }) {
 // ——— Office desktop app ———
 const DEVICE = "capsed-office-device", SESSION = "capsed-office-session";
 type Device = { api: string; id: string; name: string; letter: string; token: string };
-const readDevice = (): Device | null => { try { return JSON.parse(read(DEVICE)) as Device; } catch { return null; } };
+const readDevice = (): Device | null => {
+  const raw = read(DEVICE); if (!raw) return null;
+  let d: Partial<Device> | null;
+  try { d = JSON.parse(raw); } catch { throw new Error("DEVICE_JSON : configuration du poste illisible. Contactez l’assistance sans effacer les données."); }
+  if (!d || ![d.api, d.id, d.name, d.letter, d.token].every(v => typeof v === "string") || !d.token || !d.id) throw new Error("DEVICE_SCHEMA : configuration du poste incomplète. Contactez l’assistance.");
+  return d as Device;
+};
 
 const REVOKED = "capsed-office-revoked";
 export function OfficeApp() {
@@ -347,8 +353,8 @@ function OfficeLogin({ device, authLost, onDone, onUnlink }: { device: Device; a
     if (!login.trim() || !password) return setError("Saisissez votre identifiant et votre mot de passe.");
     const a = getData().accounts.find(x => x.login.toLowerCase() === login.trim().toLowerCase());
     setBusy(true);
-    const ok = !!a && await checkPassword(password, a);
-    setBusy(false);
+    let ok = false;
+    try { ok = !!a && await checkPassword(password, a); } catch { setError("PASSWORD_CHECK : vérification locale impossible. Vérifiez WebView2 et contactez l’assistance ; vos données sont conservées."); return; } finally { setBusy(false); }
     if (!a || !ok) return setError("Identifiant ou mot de passe incorrect. Vérifiez la fiche remise par la Direction.");
     if (!a.active) return setError("Ce compte est désactivé. Adressez-vous à la Direction.");
     onDone(a);

@@ -1,3 +1,4 @@
+import { readLocal, writeLocal, objectRecord, recordList } from "./local-storage";
 /** Sync with the cloud, built for a bad network.
  *  Every change made in the app becomes a small record in an outbox kept on this computer or phone.
  *  The outbox is sent in batches (compressed); a send cut halfway is simply sent again, the cloud ignores what it already has.
@@ -19,9 +20,14 @@ export type SyncState = {
 export type SyncConfig = { api: string; token?: string; by: () => string | undefined; interval?: number };
 
 const P = `capsed-${MODE}-sync-`;
-const read = <T,>(k: string, d: T): T => { try { const v = localStorage.getItem(P + k); return v ? JSON.parse(v) as T : d; } catch { return d; } };
-const write = (k: string, v: unknown) => { try { localStorage.setItem(P + k, JSON.stringify(v)); } catch { /* stockage plein */ } };
-
+const read = <T,>(k: string, d: T): T => readLocal(P + k, d, (v): v is T => {
+  if (k === "outbox") return recordList(v) && v.every(c => typeof c.changeId === "string" && typeof c.collection === "string" && typeof c.id === "string" && objectRecord(c.data) && typeof c.base === "number");
+  if (["devices", "rejected"].includes(k)) return recordList(v);
+  if (k === "cursor") return typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
+  if (k === "firstPullDone") return typeof v === "boolean";
+  return objectRecord(v);
+});
+const write = (k: string, v: unknown) => writeLocal(P + k, v);
 let outbox: Change[] = read("outbox", []), revs: Record<string, number> = read("revs", {}), cursor: number = read("cursor", 0);
 let state: SyncState = { ...read<Partial<SyncState>>("state", {}), online: typeof navigator === "undefined" || navigator.onLine, busy: false, pending: outbox.length, rejected: read("rejected", []), devices: read("devices", []), firstPullDone: read("firstPullDone", false) } as SyncState;
 let config: SyncConfig | null = null, timer: ReturnType<typeof setTimeout> | null = null, running = false, again = false, backoff = 0;
@@ -30,7 +36,7 @@ const listeners = new Set<() => void>();
 function set(p: Partial<SyncState>) {
   state = { ...state, ...p, pending: outbox.length };
   const { busy: _b, online: _o, ...keep } = state; void _b; void _o;
-  write("state", { lastOkAt: keep.lastOkAt, lastPullAt: keep.lastPullAt, lastPushAt: keep.lastPushAt, offlineSince: keep.offlineSince });
+  try { write("state", { lastOkAt: keep.lastOkAt, lastPullAt: keep.lastPullAt, lastPushAt: keep.lastPushAt, offlineSince: keep.offlineSince }); } catch { state = { ...state, error: "STORAGE_WRITE : sauvegarde locale impossible. Arrêtez la saisie et contactez l’assistance." }; }
   listeners.forEach(l => l());
 }
 export const getSync = () => state;
@@ -145,9 +151,9 @@ async function pull() {
     // A record still waiting in the outbox stays as typed here; sending it will merge it with the cloud's version.
     const take = res.records.filter(r => !outbox.some(o => o.collection === r.collection && o.id === r.id));
     for (const r of res.records) revs[k(r.collection, r.id)] = r.rev;
+    applyRemote(take);
     cursor = res.cursor; received += res.records.length;
     persist();
-    applyRemote(take);
     write("devices", res.devices);
     set({ devices: res.devices, received });
     if (!res.more) break;

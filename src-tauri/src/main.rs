@@ -3,6 +3,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod update;
+mod diagnostics;
 
 use std::time::Duration;
 use tauri::webview::PageLoadEvent;
@@ -23,9 +24,10 @@ fn reveal<R: Runtime>(app: &AppHandle<R>) {
 }
 
 fn main() {
-    tauri::Builder::default()
+    std::panic::set_hook(Box::new(|_| diagnostics::startup_failure("RUST_PANIC : arrêt interne inattendu")));
+    let result = tauri::Builder::default()
         .manage(update::Updates::default())
-        .invoke_handler(tauri::generate_handler![update::update_ready, update::update_progress, update::install_update, update::cancel_update])
+        .invoke_handler(tauri::generate_handler![diagnostics::interface_alive, update::update_ready, update::update_progress, update::install_update, update::cancel_update])
         // Opening the app a second time brings the open window to the front instead of a second copy.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             reveal(app);
@@ -48,8 +50,9 @@ fn main() {
                 reveal(&handle);
             });
             update::start(app.handle());
+            diagnostics::watch(app.handle().clone());
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("CAPSED Bureau n'a pas pu démarrer");
+        .run(tauri::generate_context!());
+    if let Err(error) = result { diagnostics::startup_failure(&error.to_string()); }
 }

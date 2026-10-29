@@ -7,6 +7,13 @@
     failed = true;
     details.textContent = String(message || 'Erreur inconnue').slice(0, 400) + '\nVersion des fichiers : ' + panel.getAttribute('data-build') + '\nDate : ' + new Date().toISOString() + '\nMoteur : ' + navigator.userAgent;
     panel.hidden = false;
+    // A working error screen is not a dead WebView. Keep the native watchdog
+    // informed until reload, so storage errors are not misreported as a crash.
+    var bridge = window.__TAURI_INTERNALS__;
+    if (bridge && typeof bridge.invoke === 'function') {
+      var beat = function () { bridge.invoke('interface_alive').catch(function () {}); };
+      beat(); window.setInterval(beat, 5000);
+    }
   }
   window.addEventListener('capsed-fatal', function (e) { show('Erreur de démarrage : ' + e.detail); });
   window.addEventListener('error', function (e) {

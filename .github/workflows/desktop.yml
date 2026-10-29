@@ -89,7 +89,8 @@ jobs:
           node --test scripts/desktop-storage.test.mjs
           npx tsc --noEmit --incremental false
           npm run build:office
-          cargo test --locked --manifest-path src-tauri/Cargo.toml
+          # The Version step changes the root package version in Cargo.toml.
+          cargo test --manifest-path src-tauri/Cargo.toml
 
       - name: Build the installer
         run: npx tauri build

@@ -15,6 +15,8 @@ export type ReadInvoice = {
   lines: Line[];
   /** How the document counts (a « VOLUME (M³) » column means volume) and which optional columns it prints. */
   measure: Measure; columns: InvoiceColumns; weightUnit: WeightUnit;
+  /** « down » when the document's VAT drops its centimes (8 662 for 8 662,50), so the totals match it to the franc. */
+  taxRounding?: "down";
   taxMode: "ht" | "ttc"; taxRate: number; discountRate: number; advance: number;
   /** The totals printed on the PDF, to compare with what the lines give. */
   printed: { ht?: number; tax?: number; ttc?: number; total?: number };
@@ -81,6 +83,15 @@ export function quantityOf(token: string): number | null {
   if (/^\d{1,3}(\.\d{3})+$|^\d+$/.test(t)) return Number(t.replace(/\./g, ""));
   return null;
 }
+/** A number whose last group may be decimals: CAPSED's Word invoices write 100,320 t as « 100 320 ».
+ *  Every reading is offered; the one whose product with the unit price gives the line amount is kept. */
+function numberReadings(token: string): number[] {
+  const out: number[] = [], whole = quantityOf(token), t = token.trim().replace(/\(.*\)$/, "").trim();
+  if (whole !== null) out.push(whole);
+  const m = t.match(/^(\d{1,3}(?:[\s\u00a0\u202f.]\d{3})*)[\s\u00a0\u202f.](\d{3})$/);
+  if (m) { const v = Number(m[1].replace(/[\s\u00a0\u202f.]/g, "") + "." + m[2]); if (!out.includes(v)) out.push(v); }
+  return out;
+}
 const MONTHS = ["janvier", "fevrier", "mars", "avril", "mai", "juin", "juillet", "aout", "septembre", "octobre", "novembre", "decembre"];
 const plain = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 const iso = (y: number, m: number, d: number) => { const t = new Date(Date.UTC(y, m - 1, d)); return t.getUTCFullYear() === y && t.getUTCMonth() === m - 1 && t.getUTCDate() === d ? `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}` : ""; };
@@ -119,6 +130,8 @@ function readTable(lines: TextLine[], warnings: string[]): Table {
       const head = near.map(h => h.text).join(" ");
       if (/volume|m\s*[³3](?![a-z0-9])/i.test(head) && !/quantit[ée]|qt[ée]/i.test(head)) measure = "volume";
       if (/tonnage|tonnes?\b|poids\s*\(?\s*t\b/i.test(head)) weightUnit = "t";
+      // A POIDS column and no QUANTITÉ / VOLUME: the amount is weight × unit price (fumigation of cocoa lots, per tonne).
+      if (cols.some(c => c.col === "weight") && !cols.some(c => c.col === "quantity")) measure = "poids";
       if (!cols.some(c => c.col === "amount")) cols = null;
       if (cols && near.includes(lines[i + 1])) i++;
       continue;
@@ -150,13 +163,15 @@ function readTable(lines: TextLine[], warnings: string[]): Table {
     const text = (c: Col) => parts.map(p => p.cells[c].join(" ").replace(/[\s\u00a0\u202f]+/g, " ").trim()).filter(Boolean);
     let designation = [...text("designation"), ...text("container")], contract = text("contract").join(" ");
     designation = designation.filter(t => { const m = t.match(/^contrat\s*:?\s*(.+)$/i); if (m) { contract = m[1].trim(); return false; } return true; });
-    const amount = r.amount!, q = quantityOf(text("quantity").join(" ")), pu = amountOf(text("unitPrice").join(" "));
+    const base = measure === "poids" && !text("quantity").length ? "weight" : "quantity";
+    const amount = r.amount!, pu = amountOf(text("unitPrice").join(" ")), readings = numberReadings(text(base).join(" "));
+    const q = readings.find(v => pu !== null && Math.round(v * pu) === amount) ?? readings[0] ?? null;
     let quantity = q && q > 0 ? q : pu ? Math.max(1, Math.round(amount / pu)) : 1, unitPrice = pu ?? Math.round(amount / quantity);
     if (Math.round(quantity * unitPrice) !== amount) {
       warnings.push(`Article « ${(designation[0] ?? "").slice(0, 40)} » : ${quantity} × ${unitPrice} ne fait pas ${amount}. Vérifiez la quantité et le prix.`);
       if (quantity > 0 && amount % quantity === 0) unitPrice = amount / quantity; else { quantity = 1; unitPrice = amount; }
     }
-    const lot = text("lot").join(" "), weight = quantityOf(text("weight").join(" "));
+    const lot = text("lot").join(" "), weight = base === "weight" ? null : quantityOf(text("weight").join(" "));
     return { ...emptyLine(), id: uid(), designation: designation.join("\n"), destination: text("destination").join("\n"), contract, quantity, unitPrice, ...(lot ? { lot } : {}), ...(weight && weight > 0 ? { weight } : {}) };
   });
   // The columns the document really has, filled on at least one line.
@@ -265,7 +280,9 @@ export function readInvoice(lines: TextLine[]): ReadInvoice {
     let t = l.text;
     const isVat = /\btva\b/i.test(t) && !/^\s*(n°|niu|num)/i.test(t);
     // On a VAT line, « 19,25 » (with or without %) is the rate: amounts in FCFA have no decimals.
-    if (isVat) { const r = t.match(/(\d{1,2}[.,]\d{1,2})(?!\d)\s*%?|(\d{1,2})\s*%/); if (r) { rate = Number((r[1] ?? r[2]).replace(",", ".")); t = t.replace(r[0], " "); } }
+    // Lines after the TTC total (« TVA 481,25 », « P.U TTC 2981,25 ») are per-unit notes, not the invoice's totals.
+    if (printed.ttc !== undefined && (isVat || /p\.?\s*u\b|h\.?t\b|t\.?t\.?c\b/i.test(t))) continue;
+    if (isVat) { const r = t.match(/(?<![\d,.])(\d{1,2}[.,]\d{1,2})(?!\d)\s*%?|(?<![\d,.])(\d{1,2})\s*%/); if (r) { rate = Number((r[1] ?? r[2]).replace(",", ".")); t = t.replace(r[0], " "); } }
     let v = lastAmount(t);
     // « TVA 19,25 % » with its amount on the line just below.
     if (isVat) {
@@ -305,6 +322,10 @@ export function readInvoice(lines: TextLine[]): ReadInvoice {
   if (!date) warnings.push("Date non trouvée.");
   if (!client.name) warnings.push("Client non trouvé.");
   const draft = { lines: items, measure: table.measure, columns: table.lines.length ? table.columns : { destination: items.some(l => l.destination.trim()) }, weightUnit: table.weightUnit, taxRate: taxMode === "ttc" ? taxRate : 0, taxMode, discountRate, advance };
+  if (items.length && taxMode === "ttc" && printed.tax !== undefined) {
+    const t = invoiceTotals(draft);
+    if (t.tax !== printed.tax && invoiceTotals({ ...draft, taxRounding: "down" }).tax === printed.tax) (draft as typeof draft & { taxRounding?: "down" }).taxRounding = "down";
+  }
   if (items.length) {
     const t = invoiceTotals(draft);
     if (printed.ttc !== undefined && taxMode === "ttc" && t.ttc !== printed.ttc) warnings.push(`Le total TTC calculé (${t.ttc}) diffère de celui du document (${printed.ttc}).`);

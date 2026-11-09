@@ -1005,3 +1005,4 @@ button.cx-list-row:hover,label.cx-list-row:hover{background:var(--hover)}
 .cx-import-tiles .cx-tone-warn dd{color:#8A5A12}
 .cx-new-clients{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
 .cx-import .cx-list-main small svg{vertical-align:-1px}
+.cx-bulk-summary{margin:0 0 12px;padding-left:18px;display:grid;gap:6px;font-size:14px}

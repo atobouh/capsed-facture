@@ -3,7 +3,9 @@
  *  turned into invoice drafts, and let go: no file is ever kept or sent.
  *  Each draft is checked, then saved as an old invoice (« Ancienne »), with its own number and date.
  *  Old invoices need no validation by the Direction.
- *  A document that shows no payment mode is imported as « Virement ». « Tout annuler » drops what is not saved. */
+ *  A document that shows no payment mode is imported as « Virement ». « Tout annuler » drops what is not saved.
+ *  « Tout enregistrer » saves the whole batch at once: missing clients are created once, and only invoices with a real
+ *  blocker (number already used, closed month, no number or date…) stay to be checked one by one. */
 import { useEffect, useRef, useState } from "react";
 import { Check, FileText, FileUp, Loader2, UserPlus, X } from "lucide-react";
 import { invoiceTotals } from "../invoice-math";
@@ -11,7 +13,7 @@ import Composer, { emptyDraft, newInvoiceRecord, numberTaken } from "./composer"
 import type { Draft } from "./composer";
 import { ClientForm } from "./clients";
 import { Button, Confirm, Modal, Notice, PageHead, toast } from "./ui";
-import { commit, dateFr, emptyClient, getData, money, monthLabel, todayIso, useData } from "./store";
+import { commit, dateFr, emptyClient, getData, money, monthLabel, todayIso, uid, useData } from "./store";
 import type { Client, Data } from "./store";
 import { pdfLines, readInvoice, splitInvoices } from "./pdf-read";
 import type { ReadInvoice } from "./pdf-read";
@@ -49,20 +51,23 @@ export function matchClient(clients: Client[], c: Partial<Client>) {
 const IMPORT_PAYMENT = "Virement";
 function draftOf(r: ReadInvoice, clientId: string): Draft {
   const payment = r.payment || IMPORT_PAYMENT;
-  return { ...emptyDraft(true), number: r.number, date: r.date, clientId, lines: r.lines, taxMode: r.taxMode, taxRate: r.taxMode === "ttc" ? r.taxRate : 19.25, discountRate: r.discountRate, advance: r.advance, purchaseOrder: r.purchaseOrder, reference: r.reference, payment, measure: r.measure, columns: { ...r.columns }, weightUnit: r.weightUnit };
+  return { ...emptyDraft(true), number: r.number, date: r.date, clientId, lines: r.lines, taxMode: r.taxMode, taxRate: r.taxMode === "ttc" ? r.taxRate : 19.25, discountRate: r.discountRate, advance: r.advance, purchaseOrder: r.purchaseOrder, reference: r.reference, payment, measure: r.measure, columns: { ...r.columns }, weightUnit: r.weightUnit, ...(r.taxRounding ? { taxRounding: r.taxRounding } : {}) };
 }
 /** What stops a draft from being saved as it is, and what only deserves a look. */
 function issues(d: Data, r: ReadInvoice, twins = 0) {
-  const stop: string[] = [], look = [...r.warnings], client = matchClient(d.clients.filter(c => !c.archived), r.client);
+  const stop: string[] = [], look = r.warnings.filter(w => !/^(Numéro de facture|Date|Client) non trouvée?\./.test(w)), client = matchClient(d.clients.filter(c => !c.archived), r.client);
+  if (!r.number) stop.push("Numéro de facture non trouvé.");
+  if (!r.date) stop.push("Date non trouvée.");
+  if (!client && !r.client.name) stop.push("Client non trouvé.");
   const taken = r.number ? numberTaken(d, r.number) : undefined;
   if (taken) stop.push(taken.client ? `Déjà dans l’application (facture de ${taken.client.name}).` : `Le numéro ${r.number} a déjà servi.`);
   else if (twins > 1) stop.push(`Le numéro ${r.number} apparaît ${twins} fois dans les fichiers.`);
   if (r.date && d.closedMonths.includes(r.date.slice(0, 7))) stop.push(`${monthLabel(r.date.slice(0, 7))} est clôturé.`);
   if (r.date && r.date > todayIso()) stop.push("La date est dans le futur.");
-  if (!client && r.client.name) look.push(`Nouveau client : ${r.client.name}.`);
+
   const t = invoiceTotals(draftOf(r, ""));
   if (r.advance > t.ttc) stop.push("L’avance dépasse le total.");
-  return { stop, look, client, total: t.ttc, ready: !stop.length && !look.length && !!client, known: !!taken };
+  return { stop, look, client, newClient: !client && !!r.client.name, total: t.ttc, ready: !stop.length && !look.length, known: !!taken };
 }
 
 /** Step 1, over the Factures page: a large place to drop the files, or choose them. */
@@ -103,7 +108,7 @@ type Filter = "all" | "ready" | "check" | "saved";
 export function ImportPdf({ by, onBack, onOpen }: { by: string; onBack: () => void; onOpen: (invoiceId: string) => void }) {
   const d = useData(), [jobs, setJobsState] = useState<Job[]>(keptJobs), [items, setItemsState] = useState<Item[]>(keptItems);
   const [check, setCheck] = useState<Item | null>(null), [bulk, setBulk] = useState(false), [drop, setDrop] = useState(false), [filter, setFilter] = useState<Filter>("all"), [newClient, setNewClient] = useState<Client | null>(null);
-  const [cancelAll, setCancelAll] = useState(false);
+  const [cancelAll, setCancelAll] = useState(false), [withRemarks, setWithRemarks] = useState(false);
   const setJobs = (f: (x: Job[]) => Job[]) => setJobsState(() => (keptJobs = f(keptJobs)));
   const setItems = (f: (x: Item[]) => Item[]) => setItemsState(() => (keptItems = f(keptItems)));
   const job = (key: string, p: Partial<Job>) => setJobs(x => x.map(j => j.key === key ? { ...j, ...p } : j));
@@ -133,17 +138,25 @@ export function ImportPdf({ by, onBack, onOpen }: { by: string; onBack: () => vo
   }
   useEffect(() => { void readWaiting(); });
 
-  /** Saved as they are: only drafts with nothing to look at, and a client already in the app. */
-  function saveReady(list: Item[]) {
-    let n = 0;
+  /** « Tout enregistrer »: every invoice without a blocker, its client created first when it is new (once for all its
+   *  invoices). Invoices with a remark are included only when asked. */
+  function saveAll(list: Item[], withRemarks: boolean) {
+    let n = 0; const made: string[] = [];
     for (const it of list) {
       const cur = getData(), x = issues(cur, it.read);
-      if (!x.ready || !x.client) continue;
-      const invoice = newInvoiceRecord(cur, draftOf(it.read, x.client.id), x.client, by, { legacy: true });
+      if (x.stop.length || (x.look.length && !withRemarks)) continue;
+      let client = x.client;
+      if (!client) {
+        client = { ...emptyClient(), ...it.read.client, id: uid() } as Client;
+        const c = client;
+        commit(by, y => ({ clients: [...y.clients, c] }), { text: `Client ${c.name} ajouté depuis l’import d’anciennes factures`, clientId: c.id });
+        made.push(c.name);
+      }
+      const invoice = newInvoiceRecord(cur, draftOf(it.read, client.id), client, by, { legacy: true });
       commit(by, y => ({ invoices: [...y.invoices, invoice] }), { text: `Ancienne facture ${invoice.number} du ${dateFr(invoice.date)} reprise de son fichier, ${money(invoiceTotals(invoice).ttc)}`, clientId: invoice.client.id, invoiceId: invoice.id });
       update(it.key, { state: "saved", invoiceId: invoice.id, number: invoice.number }); n++;
     }
-    toast(n ? `${n} ancienne(s) facture(s) enregistrée(s).` : "Rien à enregistrer.");
+    toast(n ? `${n} ancienne(s) facture(s) enregistrée(s)${made.length ? `, ${made.length} client(s) ajouté(s)` : ""}.` : "Rien à enregistrer.");
   }
   /** Back to an empty import: files and invoices not saved leave this page. What was saved stays in the app. */
   function discard() {
@@ -163,6 +176,8 @@ export function ImportPdf({ by, onBack, onOpen }: { by: string; onBack: () => vo
   for (const it of items) if (it.state === "read" && it.read.number) counts.set(it.read.number.toLowerCase(), (counts.get(it.read.number.toLowerCase()) ?? 0) + 1);
   const rows = items.map(it => ({ it, x: issues(d, it.read, counts.get(it.read.number.toLowerCase())) }));
   const open = rows.filter(r => r.it.state === "read"), ready = open.filter(r => r.x.ready), toCheck = open.filter(r => !r.x.ready), saved = rows.filter(r => r.it.state === "saved");
+  // What « Tout enregistrer » can take: nothing blocking; with or without remarks.
+  const savable = open.filter(r => !r.x.stop.length), plain = savable.filter(r => !r.x.look.length), remarks = savable.length - plain.length, blocked = open.length - savable.length;
   // Clients read in the files that are not in the app yet: created once, for all their invoices.
   const unknown = new Map<string, { client: Partial<Client>; n: number }>();
   for (const r of open) if (!r.x.client && r.it.read.client.name) { const k = simple(r.it.read.client.name); const u = unknown.get(k); unknown.set(k, { client: u?.client ?? r.it.read.client, n: (u?.n ?? 0) + 1 }); }
@@ -172,7 +187,7 @@ export function ImportPdf({ by, onBack, onOpen }: { by: string; onBack: () => vo
 
   return <div className="cx-page cx-import">
     <PageHead back={{ label: "Factures", onClick: onBack }} title="Importer d’anciennes factures" sub="PDF ou Word, une ou plusieurs factures par fichier"
-      actions={<>{jobs.length > 0 && <Button kind="quiet" onClick={() => setCancelAll(true)} icon={<X size={16} aria-hidden="true" />}>Tout annuler</Button>}<Button onClick={() => setDrop(true)} icon={<FileUp size={16} aria-hidden="true" />}>Ajouter des fichiers</Button>{ready.length > 0 && !reading && <Button kind="primary" onClick={() => setBulk(true)}>{ready.length === 1 ? "Enregistrer la facture prête" : `Enregistrer les ${ready.length} factures prêtes`}</Button>}</>} />
+      actions={<>{jobs.length > 0 && <Button kind="quiet" onClick={() => setCancelAll(true)} icon={<X size={16} aria-hidden="true" />}>Tout annuler</Button>}<Button onClick={() => setDrop(true)} icon={<FileUp size={16} aria-hidden="true" />}>Ajouter des fichiers</Button>{savable.length > 0 && !reading && <Button kind="primary" icon={<Check size={16} aria-hidden="true" />} onClick={() => { setWithRemarks(false); setBulk(true); }}>Tout enregistrer ({savable.length})</Button>}</>} />
     <ol className="cx-import-steps" aria-label="Étapes">{["Déposer les fichiers", "Lecture", "Vérifier et enregistrer"].map((t, i) => <li key={t} className={i + 1 < step ? "cx-done" : i + 1 === step ? "cx-now" : ""}><span>{i + 1 < step ? <Check size={14} strokeWidth={3} aria-label="fait" /> : i + 1}</span>{t}</li>)}</ol>
 
     {!jobs.length && <button type="button" className="cx-dropzone cx-dropzone-big" onClick={() => setDrop(true)}><span className="cx-drop-icon" aria-hidden="true"><FileUp size={34} /></span><span className="cx-drop-title">Choisir ou déposer les fichiers</span><span className="cx-drop-kinds"><span className="cx-file-badge cx-file-pdf">PDF</span><span className="cx-file-badge cx-file-doc">Word .docx</span></span></button>}
@@ -186,7 +201,7 @@ export function ImportPdf({ by, onBack, onOpen }: { by: string; onBack: () => vo
         <div><dt>Enregistrées</dt><dd>{saved.length}</dd></div>
       </dl>
       {unknown.size > 0 && <Notice tone="warn" title="Nouveaux clients">
-        Ces clients ne sont pas encore dans l’application. Créez-les une fois : toutes leurs factures deviennent prêtes.
+        Ces clients ne sont pas encore dans l’application. « Tout enregistrer » les crée avec les coordonnées lues ; ou créez-les ici pour les compléter d’abord.
         <span className="cx-new-clients">{[...unknown.values()].map(u => <Button key={u.client.name} size="sm" icon={<UserPlus size={15} aria-hidden="true" />} onClick={() => setNewClient({ ...emptyClient(), ...u.client } as Client)}>Créer {u.client.name} ({u.n} facture{u.n > 1 ? "s" : ""})</Button>)}</span>
       </Notice>}
       <div className="cx-seg" role="group" aria-label="Factures à montrer">{([["all", `Toutes (${items.length})`], ["ready", `Prêtes (${ready.length})`], ["check", `À vérifier (${toCheck.length})`], ["saved", `Enregistrées (${saved.length})`]] as const).map(([k, l]) => <button type="button" key={k} aria-pressed={filter === k} onClick={() => setFilter(k)}>{l}</button>)}</div>
@@ -197,7 +212,7 @@ export function ImportPdf({ by, onBack, onOpen }: { by: string; onBack: () => vo
         return <div key={it.key} className="cx-list-row cx-static">
           <span className="cx-list-main"><strong>{r.number || "Numéro ?"} · {x.client?.name ?? r.client.name ?? "Client ?"} · {money(x.total)}</strong>
             <small>{r.date ? dateFr(r.date) : "date ?"}{r.reference ? ` · réf. ${r.reference}` : ""} · {r.lines.length} article{r.lines.length > 1 ? "s" : ""} · {r.taxMode === "ttc" ? "TTC" : "hors taxe"} · <FileText size={11} aria-hidden="true" /> {where}</small>
-            {x.stop.map(s => <small key={s} className="cx-bad-text">{s}</small>)}{x.look.map(s => <small key={s} className="cx-warn-text">{s}</small>)}</span>
+            {x.newClient && <small><UserPlus size={11} aria-hidden="true" /> Nouveau client, créé à l’enregistrement.</small>}{x.stop.map(s => <small key={s} className="cx-bad-text">{s}</small>)}{x.look.map(s => <small key={s} className="cx-warn-text">{s}</small>)}</span>
           <span className="cx-list-actions">{x.ready ? <span className="cx-chip cx-tone-good">Prête</span> : x.known ? <span className="cx-chip">Déjà présente</span> : <span className="cx-chip cx-tone-warn">À vérifier</span>}
             {!x.known && <Button size="sm" kind={x.ready ? "secondary" : "primary"} onClick={() => setCheck(it)}>Vérifier</Button>}<button type="button" className="cx-text-btn" onClick={() => update(it.key, { state: "skipped" })}>Ignorer</button></span>
         </div>; })}
@@ -209,8 +224,14 @@ export function ImportPdf({ by, onBack, onOpen }: { by: string; onBack: () => vo
       <p>Les fichiers déposés et les factures lues mais pas encore enregistrées quittent cette page{reading ? ", et la lecture en cours s’arrête" : ""}. Rien n’est ajouté à l’application.</p>
       {saved.length > 0 && <p>{saved.length === 1 ? "La facture déjà enregistrée reste" : `Les ${saved.length} factures déjà enregistrées restent`} dans l’application.</p>}
     </Confirm>}
-    {bulk && <Confirm title={ready.length === 1 ? "Enregistrer la facture prête ?" : `Enregistrer les ${ready.length} factures prêtes ?`} confirm="Enregistrer" cancel="Pas encore" onClose={() => setBulk(false)} onConfirm={() => { setBulk(false); saveReady(ready.map(r => r.it)); }}>
-      <p>Seules les factures « Prête » (rien à regarder, client déjà dans l’application) sont enregistrées telles qu’elles ont été lues : numéro, date, articles et total identiques au fichier. Les autres restent à vérifier une par une.</p>
-    </Confirm>}
+    {bulk && <Modal title={`Enregistrer ${(withRemarks ? savable.length : plain.length) === 1 ? "1 facture" : `${withRemarks ? savable.length : plain.length} factures`} ?`} subtitle="Telles qu’elles ont été lues : numéro, date, client, articles et total du fichier." onClose={() => setBulk(false)}
+      actions={<><Button kind="quiet" onClick={() => setBulk(false)}>Pas encore</Button><Button kind="primary" disabled={!(withRemarks ? savable.length : plain.length)} onClick={() => { setBulk(false); saveAll(open.map(r => r.it), withRemarks); }}>Enregistrer</Button></>}>
+      <ul className="cx-bulk-summary">
+        <li><strong>{plain.length}</strong> facture{plain.length > 1 ? "s" : ""} sans remarque.</li>
+        {unknown.size > 0 && <li><strong>{unknown.size}</strong> nouveau{unknown.size > 1 ? "x" : ""} client{unknown.size > 1 ? "s" : ""} créé{unknown.size > 1 ? "s" : ""} avec les coordonnées lues : {[...unknown.values()].map(u => u.client.name).join(", ")}.</li>}
+        {blocked > 0 && <li><strong>{blocked}</strong> facture{blocked > 1 ? "s" : ""} bloquée{blocked > 1 ? "s" : ""} (numéro déjà utilisé, mois clôturé, numéro ou date introuvable…) : elle{blocked > 1 ? "s" : ""} reste{blocked > 1 ? "nt" : ""} à vérifier une par une.</li>}
+      </ul>
+      {remarks > 0 && <label className="cx-confirm"><input type="checkbox" checked={withRemarks} onChange={e => setWithRemarks(e.target.checked)} /> Enregistrer aussi les {remarks} facture{remarks > 1 ? "s" : ""} avec une remarque (en orange dans la liste). À corriger ensuite si besoin, avec « Modifier la facture ».</label>}
+    </Modal>}
   </div>;
 }

@@ -9,7 +9,7 @@ import { DEFAULT_TERM, METHODS, addDays, balance, commit, termOf, dateFr, dateVa
 import type { Client, Invoice, Line } from "./store";
 import { words } from "./words";
 
-export type Draft = { number: string; clientId: string; date: string; lines: Line[]; taxRate: number; taxMode: TaxMode; discountRate: number; advance: number; payment: string; note: string; purchaseOrder: string; reference: string; paymentTerm: number; measure: Measure; columns: InvoiceColumns; weightUnit: WeightUnit };
+export type Draft = { number: string; clientId: string; date: string; lines: Line[]; taxRate: number; taxMode: TaxMode; discountRate: number; advance: number; payment: string; note: string; purchaseOrder: string; reference: string; paymentTerm: number; taxRounding?: "down"; measure: Measure; columns: InvoiceColumns; weightUnit: WeightUnit };
 const STEPS = ["Client et facture", "Articles et prestations", "Remise, TVA et règlement", "Vérifier et émettre"];
 type Habits = Pick<Draft, "measure" | "columns" | "weightUnit">;
 const BASIC: Habits = { measure: "quantite", columns: { destination: true }, weightUnit: "kg" };
@@ -29,7 +29,7 @@ function cleanLines({ lines, columns: c }: Draft): Line[] {
 /** A new invoice record, as the composer saves it (also used to save old invoices read from their PDF). */
 export function newInvoiceRecord(cur: ReturnType<typeof getData>, draft: Draft, client: Client, by: string, extra: Partial<Invoice>): Invoice {
   const lines = cleanLines(draft);
-  return { measure: draft.measure, columns: { ...draft.columns }, weightUnit: draft.weightUnit, date: draft.date, client: { ...client }, company: { ...cur.company, logo: "" }, lines, taxRate: draft.taxRate, taxMode: draft.taxMode, discountRate: draft.discountRate, purchaseOrder: draft.purchaseOrder.trim(), ...(draft.reference.trim() ? { reference: draft.reference.trim() } : {}), advance: draft.advance, payment: draft.payment, note: draft.note, paymentTerm: draft.paymentTerm, template: { document: fixedModel(cur.format) }, id: uid(), number: draft.number.trim(), createdBy: by, ...extra };
+  return { measure: draft.measure, columns: { ...draft.columns }, weightUnit: draft.weightUnit, ...(draft.taxRounding ? { taxRounding: draft.taxRounding } : {}), date: draft.date, client: { ...client }, company: { ...cur.company, logo: "" }, lines, taxRate: draft.taxRate, taxMode: draft.taxMode, discountRate: draft.discountRate, purchaseOrder: draft.purchaseOrder.trim(), ...(draft.reference.trim() ? { reference: draft.reference.trim() } : {}), advance: draft.advance, payment: draft.payment, note: draft.note, paymentTerm: draft.paymentTerm, template: { document: fixedModel(cur.format) }, id: uid(), number: draft.number.trim(), createdBy: by, ...extra };
 }
 /** A number already used, by an invoice or by one the Direction deleted (deleted numbers are never given again). */
 export function numberTaken(d: ReturnType<typeof getData>, n: string) {
@@ -41,7 +41,7 @@ export const emptyDraft = (legacy = false): Draft => ({ number: "", clientId: ""
 /** `initial`, `readClient`, `source`: an old invoice read from a PDF, to check before saving. */
 export default function Composer({ editId, clientId, requestId, by, validated, legacy: newLegacy, initial, readClient, source, startStep, onDone, onCancel }: { editId?: string; clientId?: string; requestId?: string; by: string; validated?: boolean; legacy?: boolean; initial?: Partial<Draft>; readClient?: Partial<Client>; source?: { file: string; warnings: string[] }; startStep?: number; onDone: (invoiceId: string) => void; onCancel: () => void }) {
   const d = useData(), editing = d.invoices.find(i => i.id === editId), legacy = editing ? !!editing.legacy : !!newLegacy;
-  const [draft, setDraft] = useState<Draft>(() => editing ? { number: editing.number, clientId: editing.client.id, date: editing.date, lines: editing.lines.map(l => ({ ...l })), taxRate: editing.taxRate, taxMode: invoiceTotals(editing).taxMode, discountRate: editing.discountRate || 0, advance: editing.advance, payment: normalizePayment(editing.payment), note: editing.note, purchaseOrder: editing.purchaseOrder || "", reference: editing.reference || "", paymentTerm: termOf(editing), measure: editing.measure ?? "quantite", columns: editing.columns ?? { contract: editing.lines.some(l => l.contract.trim()), destination: true }, weightUnit: editing.weightUnit ?? "kg" }
+  const [draft, setDraft] = useState<Draft>(() => editing ? { number: editing.number, clientId: editing.client.id, date: editing.date, lines: editing.lines.map(l => ({ ...l })), taxRate: editing.taxRate, taxMode: invoiceTotals(editing).taxMode, discountRate: editing.discountRate || 0, advance: editing.advance, payment: normalizePayment(editing.payment), note: editing.note, purchaseOrder: editing.purchaseOrder || "", reference: editing.reference || "", paymentTerm: termOf(editing), taxRounding: editing.taxRounding, measure: editing.measure ?? "quantite", columns: editing.columns ?? { contract: editing.lines.some(l => l.contract.trim()), destination: true }, weightUnit: editing.weightUnit ?? "kg" }
     : { ...emptyDraft(legacy), ...habitsOf(clientId ?? getData().requests.find(r => r.id === requestId)?.clientId ?? ""), clientId: clientId ?? getData().requests.find(r => r.id === requestId)?.clientId ?? "", ...initial });
   // A draft read from a file already says how it counts and which columns it has: the client's habits do not override it.
   const [step, setStep] = useState(startStep ?? 0), [error, setError] = useState(""), [q, setQ] = useState(readClient?.name ?? ""), [form, setForm] = useState<Client | null>(null), [touched, setTouched] = useState(!!initial?.columns);
@@ -50,7 +50,9 @@ export default function Composer({ editId, clientId, requestId, by, validated, l
   const habit = (p: Partial<Habits>) => { setTouched(true); set(p); };
   // Choosing the client of a new invoice brings back how its last invoice was made, until something is chosen by hand.
   const pickClient = (id: string) => set(editing || touched || !id ? { clientId: id } : { clientId: id, ...habitsOf(id) });
-  const volume = draft.measure === "volume", cols = draft.columns, unitOf = (u: WeightUnit) => u === "t" ? "t" : "kg";
+  const volume = draft.measure === "volume", byWeight = draft.measure === "poids", cols = draft.columns, unitOf = (u: WeightUnit) => u === "t" ? "t" : "kg";
+  // What a line counts, as shown next to its number: « m³ », « t » or « kg », nothing for a quantity.
+  const unitShown = volume ? "m³" : byWeight ? unitOf(draft.weightUnit) : "";
   const chosen = d.clients.find(c => c.id === draft.clientId), totals = invoiceTotals(draft), period = draft.date.slice(0, 7);
   const number = editing?.number ?? (legacy ? draft.number.trim() || "—" : dateValid(draft.date) ? nextInvoiceNumber(d, period) : "—");
   const request = d.requests.find(r => r.id === requestId);
@@ -72,10 +74,10 @@ export default function Composer({ editId, clientId, requestId, by, validated, l
     if (upTo < 1) return null;
     const lines = draft.lines.filter(l => l.designation.trim());
     if (!lines.length || draft.lines.some(l => !l.designation.trim() && l.unitPrice > 0)) return [1, "Chaque article doit avoir une désignation."];
-    const what = volume ? "un volume" : "une quantité";
+    const what = volume ? "un volume" : byWeight ? "un poids" : "une quantité";
     if (lines.some(l => !(l.quantity > 0) || !threeDecimals(l.quantity))) return [1, `Chaque article doit avoir ${what} supérieur à zéro, avec 3 chiffres après la virgule au plus (ex. 19,245).`];
     if (lines.some(l => !Number.isSafeInteger(l.unitPrice) || l.unitPrice < 0)) return [1, "Le prix unitaire est un nombre entier de francs CFA."];
-    if (cols.weight && lines.some(l => l.weight !== undefined && (l.weight < 0 || !threeDecimals(l.weight)))) return [1, "Le poids a 3 chiffres après la virgule au plus."];
+    if (cols.weight && !byWeight && lines.some(l => l.weight !== undefined && (l.weight < 0 || !threeDecimals(l.weight)))) return [1, "Le poids a 3 chiffres après la virgule au plus."];
     if (upTo < 2) return null;
     if (!Number.isFinite(draft.taxRate) || draft.taxRate < 0 || draft.taxRate > 100 || !Number.isFinite(draft.discountRate) || draft.discountRate < 0 || draft.discountRate > 100) return [2, "La TVA et la remise doivent être comprises entre 0 et 100 %."];
     // An old invoice whose document shows no payment mode: chosen here, never « Espèces » by default.
@@ -94,7 +96,7 @@ export default function Composer({ editId, clientId, requestId, by, validated, l
   function save() {
     const e = check(3); if (e) { setStep(e[0]); setError(e[1]); return; }
     const cur = getData(), lines = cleanLines(draft);
-    const data = { date: draft.date, client: { ...chosen! }, company: editing?.company ?? { ...cur.company, logo: "" }, lines, taxRate: draft.taxMode === "ttc" ? draft.taxRate : editing?.taxRate ?? draft.taxRate, taxMode: draft.taxMode, discountRate: draft.discountRate, purchaseOrder: draft.purchaseOrder.trim(), reference: draft.reference.trim() || undefined, advance: draft.advance, payment: draft.payment, note: draft.note, paymentTerm: draft.paymentTerm, measure: draft.measure, columns: { ...cols }, weightUnit: draft.weightUnit, template: editing?.template ?? { document: fixedModel(cur.format) } };
+    const data = { date: draft.date, client: { ...chosen! }, company: editing?.company ?? { ...cur.company, logo: "" }, lines, taxRate: draft.taxMode === "ttc" ? draft.taxRate : editing?.taxRate ?? draft.taxRate, taxMode: draft.taxMode, discountRate: draft.discountRate, purchaseOrder: draft.purchaseOrder.trim(), reference: draft.reference.trim() || undefined, advance: draft.advance, payment: draft.payment, note: draft.note, paymentTerm: draft.paymentTerm, measure: draft.measure, columns: { ...cols }, weightUnit: draft.weightUnit, ...(draft.taxRounding ? { taxRounding: draft.taxRounding } : {}), template: editing?.template ?? { document: fixedModel(cur.format) } };
     let invoice: Invoice;
     if (editing) {
       const { history, ...previous } = editing; const stamp = nowIso();
@@ -152,16 +154,17 @@ export default function Composer({ editId, clientId, requestId, by, validated, l
             </div>
             <Field label="Type de facture" required><Choice value={draft.taxMode} onChange={v => set({ taxMode: v, taxRate: v === "ttc" && !draft.taxRate ? 19.25 : draft.taxRate })} options={[{ value: "ht", label: "Facture hors taxe", sub: "Sans TVA" }, { value: "ttc", label: "Facture TTC", sub: "La TVA s’ajoute après la remise" }]} /></Field>
             {draft.taxMode === "ttc" && <p className="cx-hint">Les prix sont saisis hors taxe. Le taux de TVA se règle à l’étape 3.</p>}
-            <Field label="Le montant se calcule avec" required hint="Une facture compte soit des quantités, soit des volumes, jamais les deux."><Choice value={draft.measure} onChange={v => habit({ measure: v })} options={[{ value: "quantite", label: "Quantité × prix unitaire", sub: "Nombre de colis, de conteneurs…" }, { value: "volume", label: "Volume × prix unitaire", sub: "En mètres cubes (m³)" }]} /></Field>
+            <Field label="Le montant se calcule avec" required hint="Une facture compte une seule de ces mesures."><Choice columns={3} value={draft.measure} onChange={v => habit({ measure: v, ...(v === "poids" ? { columns: { ...cols, weight: false } } : {}) })} options={[{ value: "quantite", label: "Quantité × prix unitaire", sub: "Nombre de colis, de conteneurs…" }, { value: "volume", label: "Volume × prix unitaire", sub: "En mètres cubes (m³)" }, { value: "poids", label: "Poids × prix unitaire", sub: "En tonnes ou en kg" }]} /></Field>
+            {byWeight && <Field label="Poids en"><span className="cx-toggles">{(["t", "kg"] as WeightUnit[]).map(u => <button type="button" key={u} aria-pressed={draft.weightUnit === u} className={`cx-toggle${draft.weightUnit === u ? " cx-on" : ""}`} onClick={() => habit({ weightUnit: u })}>{u === "t" ? "tonnes (t)" : "kilos (kg)"}</button>)}</span></Field>}
           </div>
         </>}
         {step === 1 && <div className="cx-card">
           <div className="cx-section-title"><h2>Articles et prestations</h2><span className="cx-muted">{chosen?.name}</span></div>
           <div className="cx-columns-pick">
             <h3>Colonnes de la facture</h3>
-            <div className="cx-toggles">{OPTIONAL.map(([k, label]) => <button type="button" key={k} aria-pressed={!!cols[k]} className={`cx-toggle${cols[k] ? " cx-on" : ""}`} onClick={() => habit({ columns: { ...cols, [k]: !cols[k] } })}>{cols[k] ? <Check size={15} strokeWidth={3} aria-hidden="true" /> : <Plus size={15} aria-hidden="true" />}{label}</button>)}
-              {cols.weight && <span className="cx-unit-pick">en {(["kg", "t"] as WeightUnit[]).map(u => <button type="button" key={u} aria-pressed={draft.weightUnit === u} className={`cx-toggle cx-toggle-sm${draft.weightUnit === u ? " cx-on" : ""}`} onClick={() => habit({ weightUnit: u })}>{u === "t" ? "tonnes" : "kg"}</button>)}</span>}</div>
-            <p className="cx-hint">Désignation, {volume ? "volume (m³)" : "quantité"}, prix unitaire et montant sont toujours imprimés. Une colonne non choisie, ou laissée vide, n’apparaît pas sur la facture.</p>
+            <div className="cx-toggles">{OPTIONAL.filter(([k]) => !(byWeight && k === "weight")).map(([k, label]) => <button type="button" key={k} aria-pressed={!!cols[k]} className={`cx-toggle${cols[k] ? " cx-on" : ""}`} onClick={() => habit({ columns: { ...cols, [k]: !cols[k] } })}>{cols[k] ? <Check size={15} strokeWidth={3} aria-hidden="true" /> : <Plus size={15} aria-hidden="true" />}{label}</button>)}
+              {cols.weight && !byWeight && <span className="cx-unit-pick">en {(["kg", "t"] as WeightUnit[]).map(u => <button type="button" key={u} aria-pressed={draft.weightUnit === u} className={`cx-toggle cx-toggle-sm${draft.weightUnit === u ? " cx-on" : ""}`} onClick={() => habit({ weightUnit: u })}>{u === "t" ? "tonnes" : "kg"}</button>)}</span>}</div>
+            <p className="cx-hint">Désignation, {volume ? "volume (m³)" : byWeight ? `poids (${unitOf(draft.weightUnit)})` : "quantité"}, prix unitaire et montant sont toujours imprimés. Une colonne non choisie, ou laissée vide, n’apparaît pas sur la facture.</p>
           </div>
           {draft.lines.map((l, k) => <fieldset key={l.id} className="cx-line">
             <legend>Article {k + 1}</legend>
@@ -169,14 +172,14 @@ export default function Composer({ editId, clientId, requestId, by, validated, l
               {cols.contract && <Field label="N° de contrat" optional wide><TextInput value={l.contract} onChange={v => setLine(l.id, { contract: v })} placeholder="Ex. D091/26 ; FAD 13971 TAL P2" /></Field>}
               <Field label="Désignation" required hint="Plusieurs lignes possibles (ex. numéros de conteneurs)."><TextArea rows={3} value={l.designation} onChange={v => setLine(l.id, { designation: v })} placeholder={"Traitement phytosanitaire\nConteneur MSNU 923173-6"} /></Field>
               {cols.destination && <Field label="Destination" optional><TextArea rows={3} value={l.destination} onChange={v => setLine(l.id, { destination: v })} placeholder={"Kolkata\nNorfolk"} /></Field>}
-              <Field label={measureName(draft.measure)} required hint="Décimales possibles : 19,245"><NumberInput decimals value={l.quantity} onChange={v => setLine(l.id, { quantity: v })} placeholder={volume ? "0,000" : "1"} unit={volume ? "m³" : undefined} /></Field>
-              <Field label={volume ? "Prix unitaire HT, par m³" : "Prix unitaire hors taxe"} required><MoneyInput value={l.unitPrice} onChange={v => setLine(l.id, { unitPrice: v })} /></Field>
+              <Field label={measureName(draft.measure, draft.weightUnit)} required hint="Décimales possibles : 19,245"><NumberInput decimals value={l.quantity} onChange={v => setLine(l.id, { quantity: v })} placeholder={volume || byWeight ? "0,000" : "1"} unit={unitShown || undefined} /></Field>
+              <Field label={unitShown ? `Prix unitaire HT, par ${unitShown === "t" ? "tonne" : unitShown}` : "Prix unitaire hors taxe"} required><MoneyInput value={l.unitPrice} onChange={v => setLine(l.id, { unitPrice: v })} /></Field>
               {cols.lot && <Field label="N° de lot" optional><TextInput value={l.lot ?? ""} onChange={v => setLine(l.id, { lot: v })} placeholder="Ex. LOT 24-118" /></Field>}
-              {cols.weight && <Field label={`Poids (${unitOf(draft.weightUnit)})`} optional hint="Décimales possibles"><NumberInput decimals value={l.weight ?? 0} onChange={v => setLine(l.id, { weight: v || undefined })} unit={unitOf(draft.weightUnit)} /></Field>}
+              {cols.weight && !byWeight && <Field label={`Poids (${unitOf(draft.weightUnit)})`} optional hint="Décimales possibles"><NumberInput decimals value={l.weight ?? 0} onChange={v => setLine(l.id, { weight: v || undefined })} unit={unitOf(draft.weightUnit)} /></Field>}
             </div>
             <div className="cx-line-foot">
               <div>{draft.lines.length > 1 && <button type="button" className="cx-btn cx-btn-link cx-inline cx-quiet-link" onClick={() => set({ lines: draft.lines.filter(x => x.id !== l.id) })}><Trash2 size={14} /> Retirer cet article</button>}</div>
-              <span>{decimalLabel(l.quantity)}{volume ? " m³" : ""} × {money(l.unitPrice)} = <strong>{money(lineAmount(l))}</strong></span>
+              <span>{decimalLabel(l.quantity)}{unitShown ? ` ${unitShown}` : ""} × {money(l.unitPrice)} = <strong>{money(lineAmount(l))}</strong></span>
             </div>
           </fieldset>)}
           <Button icon={<Plus size={18} />} onClick={() => set({ lines: [...draft.lines, emptyLine()] })}>Ajouter un article</Button>
@@ -202,7 +205,7 @@ export default function Composer({ editId, clientId, requestId, by, validated, l
             {draft.reference.trim() && <p><span>Référence</span><strong>{draft.reference.trim()}</strong></p>}
             {draft.purchaseOrder && <p><span>Bon de commande</span><strong>{draft.purchaseOrder}</strong></p>}
             <p><span>Type</span><strong>{draft.taxMode === "ttc" ? `TTC, TVA ${String(draft.taxRate).replace(".", ",")} %` : "Hors taxe"}</strong></p>
-            <p><span>Calcul</span><strong>{volume ? "Volume (m³) × prix unitaire" : "Quantité × prix unitaire"}</strong></p>
+            <p><span>Calcul</span><strong>{measureName(draft.measure, draft.weightUnit)} × prix unitaire</strong></p>
             <p><span>Articles</span><strong>{draft.lines.filter(l => l.designation.trim()).length}</strong></p>
             {draft.discountRate > 0 && <p><span>Remise</span><strong>{String(draft.discountRate).replace(".", ",")} %, soit − {money(totals.discount)}</strong></p>}
             {draft.advance > 0 && <p><span>Avance reçue</span><strong>{money(draft.advance)}</strong></p>}
@@ -211,7 +214,7 @@ export default function Composer({ editId, clientId, requestId, by, validated, l
             <div className="cx-summary-total"><span>{draft.advance > 0 ? "Reste à payer" : totals.totalLabel}</span><strong>{money(totals.due)}</strong></div>
             {editing && balance(editing, d.payments, d.credits).received > 0 && <p className="cx-muted">Paiements déjà reçus sur cette facture : {money(balance(editing, d.payments, d.credits).received)}.</p>}
           </div>
-          <Paper invoice={{ ...(editing ?? {} as Invoice), id: editing?.id ?? "draft", number, date: draft.date, client: chosen, company: editing?.company ?? d.company, lines: draft.lines.filter(l => l.designation.trim()), taxRate: draft.taxRate, taxMode: draft.taxMode, discountRate: draft.discountRate, advance: draft.advance, payment: draft.payment, note: draft.note, purchaseOrder: draft.purchaseOrder, reference: draft.reference.trim() || undefined, measure: draft.measure, columns: cols, weightUnit: draft.weightUnit }} title="Aperçu avant émission" />
+          <Paper invoice={{ ...(editing ?? {} as Invoice), id: editing?.id ?? "draft", number, date: draft.date, client: chosen, company: editing?.company ?? d.company, lines: draft.lines.filter(l => l.designation.trim()), taxRate: draft.taxRate, taxMode: draft.taxMode, discountRate: draft.discountRate, advance: draft.advance, payment: draft.payment, note: draft.note, purchaseOrder: draft.purchaseOrder, reference: draft.reference.trim() || undefined, measure: draft.measure, columns: cols, weightUnit: draft.weightUnit, taxRounding: draft.taxRounding }} title="Aperçu avant émission" />
         </div>}
       </div>
       {step < 3 && summary}

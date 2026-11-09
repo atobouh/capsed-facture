@@ -14,7 +14,7 @@ function columnsOf(i:any):Col[] {
   p.contract&&{key:"contract",head:"N° contrat",w:14,left:true,cell:l=>l.contract},
   {key:"designation",head:"Désignation",w:30,left:true,cell:l=>l.designation},
   p.destination&&{key:"destination",head:"Destination",w:14,cell:l=>l.destination},
-  {key:"measure",head:measureName(i.measure),w:11,cell:l=>decimalLabel(l.quantity)},
+  {key:"measure",head:measureName(i.measure,i.weightUnit),w:11,cell:l=>decimalLabel(l.quantity)},
   p.lot&&{key:"lot",head:"N° de lot",w:12,cell:l=>l.lot},
   p.weight&&{key:"weight",head:`Poids (${i.weightUnit==="t"?"t":"kg"})`,w:11,cell:l=>Number(l.weight)>0?decimalLabel(l.weight):""},
   {key:"pu",head:"P. U.",w:12,cell:l=>money(l.unitPrice)},

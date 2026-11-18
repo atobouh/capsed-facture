@@ -1,0 +1,9 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  // The short address: https://capsed-facture.pages.dev
+  "name": "capsed-facture",
+  "pages_build_output_dir": "../../dist-pages",
+  "compatibility_date": "2025-09-15",
+  // The API runs in the "capsed" Worker (cloud/wrangler.jsonc).
+  "services": [{ "binding": "APP", "service": "capsed" }]
+}

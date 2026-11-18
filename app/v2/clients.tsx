@@ -2,6 +2,9 @@ import { useState } from "react";
 import { FilePlus2, Lock, Pencil, Plus, UserPlus } from "lucide-react";
 import { Button, Confirm, Empty, Field, Modal, MoreMenu, Monogram, PageHead, Row, SearchBox, Stamp, StatusChip, TextInput, matches, toast, useWide } from "./ui";
 import { CancelPayment, CreditModal, PaymentModal } from "./payments";
+import { ImportClients } from "./import-clients";
+import { DeleteDialog, useCanDelete } from "./corbeille";
+import type { BinTarget } from "./corbeille";
 import { accountName, methodName, accountTotals, balance, canBill, canCash, commit, dateFr, getData, overdueDays, money, nowIso, uid, useData } from "./store";
 import type { Client, Role } from "./store";
 
@@ -36,7 +39,7 @@ export function ClientForm({ client, by, requestId, onClose, onSaved }: { client
 }
 
 export function ClientsDirectory({ role, by, nav }: { role: Role; by: string; nav: Nav }) {
-  const d = useData(), wide = useWide(), [q, setQ] = useState(""), [form, setForm] = useState<Client | null>(null), [sel, setSel] = useState<string | null>(null);
+  const d = useData(), wide = useWide(), [q, setQ] = useState(""), [form, setForm] = useState<Client | null>(null), [sel, setSel] = useState<string | null>(null), [importing, setImporting] = useState(false);
   const rows = d.clients.map(c => { const items = d.invoices.filter(i => i.client.id === c.id), open = items.filter(i => balance(i, d.payments, d.credits).due > 0); return { c, items, open, late: open.length ? Math.max(...open.map(overdueDays)) : 0, a: accountTotals(items, d.payments, d.credits) }; })
     .filter(r => matches(q, r.c.name, r.c.phone, r.c.contact, r.c.niu)).sort((a, b) => b.a.due - a.a.due || a.c.name.localeCompare(b.c.name));
   const owing = rows.filter(r => !r.c.archived && (r.a.due > 0 || r.a.refund > 0)), settled = rows.filter(r => !r.c.archived && !r.a.due && !r.a.refund), archived = rows.filter(r => r.c.archived);
@@ -53,7 +56,8 @@ export function ClientsDirectory({ role, by, nav }: { role: Role; by: string; na
   </>;
   return <div className={`cx-page${wide ? " cx-page-split" : ""}`}>
     <PageHead title={canCash(role) ? "Clients et paiements" : "Clients"} tools={<SearchBox value={q} onChange={setQ} placeholder="Chercher un client" />}
-      actions={canBill(role) ? <Button kind="primary" icon={<UserPlus size={16} aria-hidden="true" />} onClick={() => setForm({ id: "", name: "", contact: "", address: "", phone: "", email: "", niu: "", rc: "" })}>Ajouter un client</Button> : undefined} />
+      actions={canBill(role) ? <><MoreMenu iconOnly label="Autres actions" items={[{ label: "Importer des clients", hint: "Depuis un fichier Excel ou CSV", onClick: () => setImporting(true) }]} /><Button kind="primary" icon={<UserPlus size={16} aria-hidden="true" />} onClick={() => setForm({ id: "", name: "", contact: "", address: "", phone: "", email: "", niu: "", rc: "" })}>Ajouter un client</Button></> : undefined} />
+    {importing && <ImportClients by={by} onClose={() => setImporting(false)} />}
     {wide ? <div className="cx-split cx-split-list"><section className="cx-card cx-card-flush cx-scroll" aria-label="Clients">{list}</section><section className="cx-scroll cx-detail-col" aria-label="Compte du client">{current ? <ClientAccount key={current} id={current} role={role} by={by} nav={nav} pane /> : <Empty title="Choisissez un client dans la liste." />}</section></div>
       : <section className="cx-card cx-card-flush">{list}</section>}
     {form && <ClientForm client={form} by={by} onClose={() => setForm(null)} onSaved={c => { setForm(null); open(c.id); }} />}
@@ -63,6 +67,7 @@ export function ClientsDirectory({ role, by, nav }: { role: Role; by: string; na
 export function ClientAccount({ id, role, by, nav, pane }: { id: string; role: Role; by: string; nav: Nav; pane?: boolean }) {
   const d = useData(), client = d.clients.find(c => c.id === id);
   const [edit, setEdit] = useState(false), [archive, setArchive] = useState(false), [pay, setPay] = useState<{ invoiceId: string; paymentId?: string } | null>(null), [cancel, setCancel] = useState<string | null>(null), [credit, setCredit] = useState<string | null>(null);
+  const canDelete = useCanDelete(), [del, setDel] = useState<BinTarget | null>(null);
   if (!client) return <Empty title="Client introuvable." action={<Button onClick={() => nav({ name: "clients" })}>Tous les clients</Button>} />;
   const items = d.invoices.filter(i => i.client.id === client.id).sort((a, b) => b.date.localeCompare(a.date) || b.number.localeCompare(a.number));
   const a = accountTotals(items, d.payments, d.credits), unpaid = items.filter(i => balance(i, d.payments, d.credits).due > 0);
@@ -78,6 +83,7 @@ export function ClientAccount({ id, role, by, nav, pane }: { id: string; role: R
       actions={<>
         {biller && <MoreMenu label="Autres actions" items={[
           ...(cashier ? [{ label: "Modifier les coordonnées", onClick: () => setEdit(true) }, { label: "Relevé du client", onClick: () => nav({ name: "situation", id: client.id }) }] : []),
+          ...(canDelete ? [{ label: "Supprimer le client", hint: "Restaurable sur le site de la Direction", onClick: () => setDel({ collection: "clients", id: client.id }) }] : []),
           client.archived ? { label: "Réactiver le client", onClick: () => { commit(by, x => ({ clients: x.clients.map(c => c.id === client.id ? { ...c, archived: false, archivedAt: undefined } : c) }), { text: `Client ${client.name} réactivé`, clientId: client.id }); toast("Client réactivé."); } } : { label: "Archiver le client", hint: "Il quitte la liste. Rien n’est supprimé.", onClick: () => setArchive(true) }]} />}
         {biller && !cashier && <Button icon={<Pencil size={17} aria-hidden="true" />} onClick={() => setEdit(true)}>Modifier</Button>}
         {cashier && !biller && <Button onClick={() => nav({ name: "situation", id: client.id })}>Relevé du client</Button>}
@@ -106,7 +112,8 @@ export function ClientAccount({ id, role, by, nav, pane }: { id: string; role: R
           : p.cancelledAt ? <Stamp tone="bad">Annulé</Stamp>
           : p.lockedAt ? <Stamp tone="good"><Lock size={12} aria-hidden="true" />Validé par la Direction</Stamp>
           : cashier ? <><span className="cx-chip">À valider par la Direction</span><button type="button" className="cx-text-btn" onClick={() => setPay({ invoiceId: p.invoiceId, paymentId: p.id })}>Corriger</button><button type="button" className="cx-text-btn cx-text-bad" onClick={() => setCancel(p.id)}>Annuler</button></>
-          : <span className="cx-chip">À valider par la Direction</span>}</span>
+          : <span className="cx-chip">À valider par la Direction</span>}
+          {canDelete && !p.advance && <button type="button" className="cx-text-btn cx-text-bad" onClick={() => setDel({ collection: "payments", id: p.id })}>Supprimer</button>}</span>
       </div>)}{!entries.length && <Empty title="Aucun paiement reçu pour l’instant." />}</div>
     </section>
     {edit && <ClientForm client={client} by={by} onClose={() => setEdit(false)} onSaved={() => setEdit(false)} />}
@@ -115,5 +122,6 @@ export function ClientAccount({ id, role, by, nav, pane }: { id: string; role: R
     {pay && <PaymentModal invoiceId={pay.invoiceId} paymentId={pay.paymentId} by={by} onClose={() => setPay(null)} />}
     {cancel && <CancelPayment payment={d.payments.find(p => p.id === cancel)!} by={by} onClose={() => setCancel(null)} />}
     {credit && <CreditModal invoiceId={credit} by={by} onClose={() => setCredit(null)} onIssued={cid => { setCredit(null); nav({ name: "credit", id: cid }); }} />}
+    {del && <DeleteDialog target={del} by={by} onClose={() => setDel(null)} onDone={del.collection === "clients" ? () => nav({ name: "clients" }) : undefined} />}
   </div>;
 }

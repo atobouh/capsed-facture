@@ -15,3 +15,14 @@ export function periodTotals(invoices:any[],payments:any[],credits:any[],p:State
  const opening=bills.filter(i=>i.date<p.from).reduce((n,i)=>n+invoiceTotals(i).ttc-i.advance,0)-paid.filter(i=>i.date<p.from).reduce((n,i)=>n+i.amount,0)-notes.filter(i=>i.date<p.from).reduce((n,i)=>n+i.amount,0);
  return {total,ht,tax:total-ht,advance,received,credited,...closing,opening,closing:opening+total-credited-received};
 }
+
+/** Which invoices a statement covers: all of them, only those fully paid, or those with something still owed (partly paid included).
+ *  Judged at the end of the period, with the payments and credit notes known by then. */
+export type StatementFilter="toutes"|"payees"|"impayees";
+export const FILTER_LABEL:Record<StatementFilter,string>={toutes:"Toutes les factures",payees:"Factures payées",impayees:"Factures non payées"};
+export function filterInvoices(invoices:any[],payments:any[],credits:any[],period:StatementPeriod,filter:StatementFilter="toutes"){
+ if(filter==="toutes")return invoices;
+ const {paid,notes}=periodData(invoices,payments,credits,period);
+ return invoices.filter(i=>i.date<=period.to&&(balance(i,paid,notes).due>0)===(filter==="impayees"));
+}
+export const statementTitle=(p:StatementPeriod,filter:StatementFilter="toutes")=>periodTitle(p)+(filter==="toutes"?"":" · "+FILTER_LABEL[filter]);

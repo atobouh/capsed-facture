@@ -30,9 +30,11 @@ const dayTitle = (day: string) => { const t = new Date(day + "T12:00:00").toLoca
 export function TeamReport() {
   const d = useData(), today = todayIso(), [period, setPeriod] = useState({ from: today.slice(0, 8) + "01", to: today }), [who, setWho] = useState(""), [shown, setShown] = useState(60);
   const valid = dateValid(period.from) && dateValid(period.to) && period.from <= period.to;
-  const team = d.accounts.filter(a => a.role !== "responsable");
+  const everyone = d.accounts.filter(a => a.role !== "responsable");
   const inPeriod = (e: Event) => { const day = localDay(e.at); return day >= period.from && day <= period.to; };
-  const events = valid ? d.events.filter(e => team.some(a => a.id === e.by) && inPeriod(e)) : [];
+  const events = valid ? d.events.filter(e => everyone.some(a => a.id === e.by) && inPeriod(e)) : [];
+  // Someone removed from the team still appears for the periods where they did something.
+  const team = everyone.filter(a => !a.deletedAt || events.some(e => e.by === a.id));
   const journal = events.filter(e => !who || e.by === who);
   const lines = (a: Account) => {
     const mine = events.filter(e => e.by === a.id), counts = KINDS.map(k => ({ ...k, n: mine.filter(e => k.test.test(e.text)).length })).filter(k => k.n);
@@ -56,7 +58,7 @@ export function TeamReport() {
     </div>
     {!valid ? <Notice tone="bad">La date de début doit être avant la date de fin.</Notice> : <>
       <div className="cx-team-grid">{team.map(a => { const r = lines(a); return <section key={a.id} className={`cx-card cx-team-card${who === a.id ? " cx-on" : ""}`} aria-label={a.name}>
-        <header><Monogram name={a.name} /><div><strong>{a.name}{!a.active && <span className="cx-chip">Désactivé</span>}</strong><small>{ROLE_LABEL[a.role]} · {r.last ? `dernière action ${ago(r.last.at)}` : "aucune action"}</small></div></header>
+        <header><Monogram name={a.name} /><div><strong>{a.name}{!a.active && <span className="cx-chip">{a.deletedAt ? "Supprimé" : "Désactivé"}</span>}</strong><small>{ROLE_LABEL[a.role]} · {r.last ? `dernière action ${ago(r.last.at)}` : "aucune action"}</small></div></header>
         {r.mine.length ? <dl className="cx-sum-kv">
           {r.counts.map(k => <div key={k.key}><dt>{k.n > 1 ? k.many.charAt(0).toUpperCase() + k.many.slice(1) : k.one.charAt(0).toUpperCase() + k.one.slice(1)}</dt><dd>{k.n}{k.key === "emise" && r.billed ? ` · ${money(r.billed)}` : k.key === "paiement" && r.cashed ? ` · ${money(r.cashed)}` : ""}</dd></div>)}
         </dl> : <p className="cx-team-none">Aucune action sur la période.</p>}

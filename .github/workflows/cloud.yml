@@ -1,0 +1,109 @@
+name: Deploy the cloud (Direction site, office app at /bureau/, API)
+
+# Uses the repository secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID (a variable also works for the account id),
+# and RECOVERY_KEY for the Direction's recovery link /secours/<key> when it is set.
+on:
+  push:
+    branches: [main, claude/eloquent-feynman-lgb5tr]
+    paths:
+      - "cloud/**"
+      - "app/**"
+      - "static-src/**"
+      - "public/**"
+      - "scripts/build-static.mjs"
+      - "scripts/build-pages.mjs"
+      - "scripts/build-guide.mjs"
+      - "guide/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/cloud.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloud-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || vars.CLOUDFLARE_ACCOUNT_ID }}
+      WRANGLER_SEND_METRICS: "false"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Secrets present
+        run: |
+          [ -n "$CLOUDFLARE_API_TOKEN" ] || { echo "::error::Add the repository secret CLOUDFLARE_API_TOKEN (Settings > Secrets and variables > Actions > Secrets)."; exit 1; }
+          [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || { echo "::error::Add CLOUDFLARE_ACCOUNT_ID as a repository secret or variable."; exit 1; }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm run install:ci
+
+      - name: Type check
+        run: npx tsc --noEmit -p .
+
+      - name: Build the Direction site and the office app
+        run: npm run build:cloud
+
+      - name: Cloud database (created the first time)
+        working-directory: cloud
+        run: |
+          find_id() { npx wrangler d1 list --json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const d=JSON.parse(s).find(x=>x.name==="capsed");process.stdout.write(d?d.uuid:"")})'; }
+          ID=$(find_id)
+          if [ -z "$ID" ]; then npx wrangler d1 create capsed; ID=$(find_id); fi
+          [ -n "$ID" ] || { echo "::error::Could not find or create the D1 database. Check that the token has D1 Edit."; exit 1; }
+          sed -i "s/00000000-0000-4000-8000-000000000000/$ID/" wrangler.jsonc
+          npx wrangler d1 migrations apply DB --remote
+
+      - name: Deploy
+        id: deploy
+        working-directory: cloud
+        run: |
+          npx wrangler deploy | tee deploy.log
+          URL=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' deploy.log | head -1)
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+      - name: Recovery key
+        working-directory: cloud
+        env:
+          RECOVERY_KEY: ${{ secrets.RECOVERY_KEY }}
+        run: |
+          if [ -n "$RECOVERY_KEY" ]; then printf '%s' "$RECOVERY_KEY" | npx wrangler secret put RECOVERY_KEY; else echo "::warning::No RECOVERY_KEY secret: the recovery link stays off until you add one."; fi
+
+      - name: Check the live site
+        run: |
+          URL="${{ steps.deploy.outputs.url }}"
+          [ -n "$URL" ] || { echo "::warning::Deployed, but the address was not found in the log."; exit 0; }
+          for i in 1 2 3 4 5; do curl -fsS "$URL/api/setup" && break; sleep 5; done
+          curl -fsS -o /dev/null "$URL/" && curl -fsS -o /dev/null "$URL/bureau/"
+          echo "### Live at $URL" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Short address (capsed-facture.pages.dev)
+        run: |
+          npm run build:pages
+          cd cloud/pages
+          if ! npx wrangler pages project list 2>/dev/null | grep -q "capsed-facture"; then
+            npx wrangler pages project create capsed-facture --production-branch main || { echo "::error::Could not create the Pages project capsed-facture. The Cloudflare token needs the permission « Cloudflare Pages : Edit »."; exit 1; }
+          fi
+          npx wrangler pages deploy --branch main --commit-dirty=true
+          npx wrangler pages project list | grep "capsed-facture" | tee -a "$GITHUB_STEP_SUMMARY"
+          for i in 1 2 3 4 5 6 7 8 9 10; do curl -fsS https://capsed-facture.pages.dev/api/setup && exit 0; sleep 10; done
+          echo "::error::capsed-facture.pages.dev does not answer /api/setup yet."; exit 1
+
+      - name: User manual (guide.capsed-facture.pages.dev)
+        run: |
+          npm run build:guide
+          cd dist-guide
+          npx wrangler pages deploy . --project-name capsed-facture --branch guide --commit-dirty=true
+          for i in 1 2 3 4 5 6; do curl -fsS -o /dev/null https://guide.capsed-facture.pages.dev/ && { echo "### Manuel : https://guide.capsed-facture.pages.dev" >> "$GITHUB_STEP_SUMMARY"; exit 0; }; sleep 10; done
+          echo "::warning::guide.capsed-facture.pages.dev does not answer yet."

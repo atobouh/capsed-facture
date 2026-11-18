@@ -360,14 +360,22 @@ button.cx-list-row:hover,label.cx-list-row:hover{background:var(--hover)}
 .cx-overlay{position:fixed;inset:0;z-index:60;background:rgba(27,24,32,.32);display:grid;place-items:center;padding:16px;overscroll-behavior:contain;animation:cx-fade .15s ease-out}
 .cx-modal{width:min(480px,100%);max-height:calc(100dvh - 32px);display:flex;flex-direction:column;background:var(--surface);border-radius:10px;box-shadow:0 24px 60px rgba(27,24,32,.25)}
 .cx-modal-wide{width:min(640px,100%)}
-.cx-modal header{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:16px 18px 12px;border-bottom:1px solid var(--line)}
+.cx-modal header{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:16px 18px 12px;border-bottom:1px solid var(--line);flex:none}
 .cx-modal h2{font-size:16px;font-weight:600;line-height:1.3}
 .cx-modal header p{color:var(--ink-2);font-size:13px;margin-top:2px}
-.cx-modal-body{padding:16px 18px;overflow:auto;overscroll-behavior:contain;font-size:14px}
+.cx-modal-body{padding:16px 18px;min-height:0;flex:1 1 auto;overflow:auto;overscroll-behavior:contain;font-size:14px}
+.cx-modal-body{scrollbar-gutter:stable;scrollbar-width:thin;scrollbar-color:#BDB5C5 transparent}
+.cx-modal-body::-webkit-scrollbar{width:8px}
+.cx-modal-body::-webkit-scrollbar-track{background:transparent}
+.cx-modal-body::-webkit-scrollbar-thumb{background:#BDB5C5;border:2px solid var(--surface);border-radius:8px}
+.cx-payment-invoices{max-height:min(220px,30dvh);overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;scrollbar-width:thin;scrollbar-color:#BDB5C5 transparent;padding:1px 7px 1px 1px}
+.cx-payment-invoices::-webkit-scrollbar{width:8px}
+.cx-payment-invoices::-webkit-scrollbar-track{background:transparent}
+.cx-payment-invoices::-webkit-scrollbar-thumb{background:#BDB5C5;border:2px solid var(--surface);border-radius:8px}
 .cx-modal-body>p+p{margin-top:8px}
-.cx-modal footer{display:flex;justify-content:flex-end;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 18px;border-top:1px solid var(--line)}
+.cx-modal footer{display:flex;justify-content:flex-end;align-items:center;gap:8px;flex:none;flex-wrap:wrap;padding:12px 18px;border-top:1px solid var(--line)}
 .cx-overlay-side{place-items:stretch end;padding:0}
-.cx-modal-side{width:min(460px,100%);height:100%;max-height:none;border-radius:0;animation:cx-slide .2s cubic-bezier(.16,1,.3,1)}
+.cx-modal-side{width:min(460px,100%);height:100dvh;max-height:100dvh;border-radius:0;animation:cx-slide .2s cubic-bezier(.16,1,.3,1)}
 .cx-modal-side.cx-modal-wide{width:min(600px,100%)}
 @keyframes cx-fade{from{opacity:0}to{opacity:1}}
 @keyframes cx-slide{from{transform:translateX(24px);opacity:.6}to{transform:none;opacity:1}}

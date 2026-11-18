@@ -39,7 +39,7 @@ export function PaymentModal({ invoiceId, paymentId, requestId, by, onClose }: {
     actions={<><Button kind="quiet" onClick={onClose}>Annuler</Button><Button kind="primary" onClick={save}>{previous ? "Enregistrer la correction" : amount ? `Enregistrer le paiement de ${money(amount)}` : "Enregistrer le paiement"}</Button></>}>
     <form onSubmit={e => { e.preventDefault(); save(); }}>
       {req && <Notice title="Demande du responsable">{req.message || "Paiement signalé."} Les champs reprennent ce qu’il a signalé : vérifiez-les avec le relevé.</Notice>}
-      {!previous && available.length > 1 && <Field label="Pour quelle facture ?"><Choice columns={2} value={invId} onChange={v => { setInvId(v); setError(""); }} options={available.map(i => ({ value: i.id, label: i.number, sub: `reste ${money(balance(i, d.payments, d.credits).due)}` }))} /></Field>}
+      {!previous && available.length > 1 && <Field label="Pour quelle facture ?"><div className="cx-payment-invoices"><Choice columns={2} value={invId} onChange={v => { setInvId(v); setError(""); }} options={available.map(i => ({ value: i.id, label: i.number, sub: `reste ${money(balance(i, d.payments, d.credits).due)}` }))} /></div></Field>}
       <div className="cx-due-box"><span>{previous ? "Montant maximum pour ce paiement" : "Il reste à payer"}</span><strong>{money(limit)}</strong></div>
       {previous && <p className="cx-hint">Le nouveau montant remplacera l’ancien. La correction est conservée dans l’historique.</p>}
       <Field label={previous ? "Montant corrigé" : "Combien avez-vous reçu ?"} required><MoneyInput value={amount} onChange={v => { setAmount(v); setError(""); }} autoFocus /></Field>
